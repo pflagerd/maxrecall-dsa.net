@@ -11,10 +11,13 @@ const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
 const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
+const modalOverlay = document.getElementById('language-switch-modal');
+const modalCancelBtn = document.getElementById('modal-cancel-btn');
+const modalDiscardBtn = document.getElementById('modal-discard-btn');
 
 let problem = null;
 let editor = null;
-const codeByLanguage = {};
+let currentLanguage = null;
 
 const CM_MODE = { javascript: 'javascript', python: 'python' };
 
@@ -40,13 +43,9 @@ function renderProblem() {
   constraintsEl.innerHTML = (problem.constraints || []).map((c) => `<li><code>${c}</code></li>`).join('');
 }
 
-function setLanguage(language) {
-  if (editor) {
-    codeByLanguage[languageSelect.value] = editor.getValue();
-  }
-  languageSelect.value = language;
-  const code = codeByLanguage[language] ?? problem.starterCode[language] ?? '';
-  codeByLanguage[language] = code;
+// Loads a language's starter template into the editor, discarding whatever was there.
+function loadLanguage(language) {
+  const code = problem.starterCode[language] ?? '';
 
   if (!editor) {
     editor = CodeMirror(document.getElementById('editor-host'), {
@@ -61,6 +60,46 @@ function setLanguage(language) {
     editor.setOption('mode', CM_MODE[language]);
     editor.setValue(code);
   }
+  currentLanguage = language;
+}
+
+// Shows the discard-changes modal and resolves true/false with the user's choice.
+function confirmDiscard() {
+  return new Promise((resolve) => {
+    function settle(discard) {
+      modalOverlay.classList.add('hidden');
+      modalCancelBtn.removeEventListener('click', onCancel);
+      modalDiscardBtn.removeEventListener('click', onDiscardClick);
+      modalOverlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKeydown);
+      resolve(discard);
+    }
+    function onCancel() { settle(false); }
+    function onDiscardClick() { settle(true); }
+    function onOverlayClick(e) { if (e.target === modalOverlay) settle(false); }
+    function onKeydown(e) { if (e.key === 'Escape') settle(false); }
+
+    modalCancelBtn.addEventListener('click', onCancel);
+    modalDiscardBtn.addEventListener('click', onDiscardClick);
+    modalOverlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKeydown);
+    modalOverlay.classList.remove('hidden');
+  });
+}
+
+async function handleLanguageChange() {
+  const newLanguage = languageSelect.value;
+  if (newLanguage === currentLanguage) return;
+
+  const isUnmodified = editor.getValue() === problem.starterCode[currentLanguage];
+  if (!isUnmodified) {
+    const discard = await confirmDiscard();
+    if (!discard) {
+      languageSelect.value = currentLanguage;
+      return;
+    }
+  }
+  loadLanguage(newLanguage);
 }
 
 function formatValue(v) {
@@ -139,9 +178,9 @@ async function init() {
   }
 
   renderProblem();
-  setLanguage('javascript');
+  loadLanguage('javascript');
 
-  languageSelect.addEventListener('change', () => setLanguage(languageSelect.value));
+  languageSelect.addEventListener('change', handleLanguageChange);
   runBtn.addEventListener('click', () => execute('run', runBtn));
   submitBtn.addEventListener('click', () => execute('submit', submitBtn));
 }
