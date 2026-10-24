@@ -1,0 +1,29 @@
+{
+  "slug": "climbing-stairs",
+  "title": "Climbing Stairs",
+  "difficulty": "Easy",
+  "tags": ["Dynamic Programming", "Math"],
+  "description": "<p>You are climbing a staircase. It takes <code>n</code> steps to reach the top.</p><p>Each time you can either climb <code>1</code> or <code>2</code> steps. In how many distinct ways can you climb to the top?</p>",
+  "examples": [
+    { "input": "n = 2", "output": "2", "explanation": "There are two ways to climb to the top: 1+1 or 2." },
+    { "input": "n = 3", "output": "3", "explanation": "There are three ways: 1+1+1, 1+2, or 2+1." }
+  ],
+  "constraints": [
+    "1 <= n <= 45"
+  ],
+  "functionName": {
+    "javascript": "climbStairs",
+    "python": "climb_stairs"
+  },
+  "starterCode": {
+    "javascript": "/**\n * @param {number} n\n * @return {number}\n */\nfunction climbStairs(n) {\n    \n}\n",
+    "python": "def climb_stairs(n):\n    pass\n"
+  },
+  "testCases": [
+    { "args": [2], "expected": 2, "hidden": false },
+    { "args": [3], "expected": 3, "hidden": false },
+    { "args": [1], "expected": 1, "hidden": true },
+    { "args": [4], "expected": 5, "hidden": true },
+    { "args": [5], "expected": 8, "hidden": true }
+  ]
+}
