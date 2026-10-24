@@ -43,19 +43,6 @@ main {
   padding: 2rem 1rem;
 }
 
-.card {
-  background: var(--surface);
-  border-radius: 0.75rem;
-  padding: 1.5rem 2rem;
-  max-width: 480px;
-  width: 100%;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-}
-
-.card h2 {
-  margin-top: 0;
-}
-
 button {
   background: var(--accent-dark);
   color: white;
@@ -76,4 +63,243 @@ footer {
   padding: 1rem;
   color: #64748b;
   font-size: 0.85rem;
+}
+
+code {
+  background: rgba(148, 163, 184, 0.15);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+/* --- Problem list --------------------------------------------------- */
+
+.list-wrap {
+  width: 100%;
+  max-width: 800px;
+}
+
+.problem-list {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.problem-list th {
+  text-align: left;
+  padding: 0.9rem 1.25rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.problem-list td {
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.problem-row {
+  cursor: pointer;
+}
+
+.problem-row:hover {
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.problem-title {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.problem-tags {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.difficulty-easy {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.difficulty-medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+}
+
+.difficulty-hard {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+/* --- Problem page ----------------------------------------------------- */
+
+.problem-body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.problem-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  text-align: left;
+}
+
+.problem-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.back-link {
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.back-link:hover {
+  color: var(--accent);
+}
+
+main.problem-main {
+  flex: 1;
+  display: flex;
+  justify-content: stretch;
+  align-items: stretch;
+  padding: 0 1.5rem 1.5rem;
+  gap: 1rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane {
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.description-pane {
+  flex: 1;
+  padding: 1.5rem 1.75rem;
+}
+
+.description-pane h3 {
+  color: var(--accent);
+  margin-top: 1.5rem;
+}
+
+.problem-tags {
+  margin-bottom: 1rem;
+}
+
+.example pre {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  white-space: pre-wrap;
+}
+
+.editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.editor-toolbar select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #0f172a;
+}
+
+button.primary:hover {
+  background: #7dd3fc;
+}
+
+#editor-host {
+  flex: 1;
+  min-height: 180px;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+#editor-host .CodeMirror {
+  height: 100%;
+  font-size: 0.95rem;
+}
+
+.console-panel {
+  margin-top: 0.75rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  max-height: 35%;
+  overflow-y: auto;
+}
+
+.console-header {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.status-pass {
+  color: #4ade80;
+}
+
+.status-fail {
+  color: #f87171;
+}
+
+.test-case {
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.9rem;
+}
+
+.test-case:first-child {
+  border-top: none;
+}
+
+.test-case.fail strong {
+  color: #f87171;
+}
+
+.test-case.pass strong {
+  color: #4ade80;
+}
+
+.error-block {
+  white-space: pre-wrap;
+  color: #f87171;
 }

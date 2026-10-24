@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Problem — MaxRecall DSA</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+</head>
+<body class="problem-body">
+  <header class="site-header problem-header">
+    <a class="back-link" href="/">&larr; All problems</a>
+    <h1 id="problem-title">Loading...</h1>
+    <span id="problem-difficulty" class="badge"></span>
+  </header>
+
+  <main class="problem-main">
+    <section class="pane description-pane">
+      <div id="problem-tags" class="problem-tags"></div>
+      <div id="problem-description" class="problem-description"></div>
+
+      <h3>Examples</h3>
+      <div id="problem-examples"></div>
+
+      <h3>Constraints</h3>
+      <ul id="problem-constraints"></ul>
+    </section>
+
+    <section class="pane editor-pane">
+      <div class="editor-toolbar">
+        <select id="language-select">
+          <option value="javascript">JavaScript</option>
+          <option value="python">Python</option>
+        </select>
+        <button id="run-btn">Run</button>
+        <button id="submit-btn" class="primary">Submit</button>
+      </div>
+
+      <div id="editor-host"></div>
+
+      <div class="console-panel">
+        <div class="console-header">
+          <span id="console-status">Run your code to see results.</span>
+        </div>
+        <div id="console-results"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+  <script src="problem-page.js"></script>
+</body>
+</html>

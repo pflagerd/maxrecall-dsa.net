@@ -3,20 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MaxRecall DSA</title>
+  <title>MaxRecall DSA — Problems</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="site-header">
     <h1>MaxRecall DSA</h1>
-    <p class="tagline">HTML / CSS / JS front end, served by Express</p>
+    <p class="tagline">Practice data structures &amp; algorithms problems</p>
   </header>
 
   <main>
-    <section class="card">
-      <h2>Backend check</h2>
-      <p id="status">Click the button to ping the server.</p>
-      <button id="ping-btn">Ping server</button>
+    <section class="list-wrap">
+      <table class="problem-list">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Tags</th>
+            <th>Difficulty</th>
+          </tr>
+        </thead>
+        <tbody id="problem-rows">
+          <tr><td colspan="3">Loading problems...</td></tr>
+        </tbody>
+      </table>
     </section>
   </main>
 
@@ -24,6 +33,6 @@
     <p>&copy; <span id="year"></span> MaxRecall DSA</p>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="problems-list.js"></script>
 </body>
 </html>
