@@ -1,0 +1,17 @@
+{
+  "name": "maxrecall-dsa-net",
+  "version": "1.0.0",
+  "description": "HTML/CSS/JS front end served by an Express backend.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "license": "UNLICENSED"
+}
