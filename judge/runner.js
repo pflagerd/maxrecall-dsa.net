@@ -47,7 +47,14 @@ for __judge_tc in __judge_cases:
         __judge_results.append({'actual': ${functionName}(*__judge_tc['args'])})
     except Exception as __judge_err:
         __judge_results.append({'error': str(__judge_err)})
-sys.stdout.write(json.dumps(__judge_results))
+def __judge_default(o):
+    # Lets submissions return custom objects (e.g. a linked list node) by
+    # serializing their attributes, recursively, instead of requiring JSON-native types.
+    if hasattr(o, '__dict__'):
+        return o.__dict__
+    return str(o)
+
+sys.stdout.write(json.dumps(__judge_results, default=__judge_default))
 `;
 }
 
