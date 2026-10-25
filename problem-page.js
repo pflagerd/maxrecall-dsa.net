@@ -21,14 +21,20 @@ let currentLanguage = null;
 
 const CM_MODE = { javascript: 'javascript', python: 'python' };
 
-function renderProblem() {
+// Language-independent header: title, difficulty, tags. Rendered once.
+function renderHeader() {
   titleEl.textContent = problem.title;
   difficultyEl.textContent = problem.difficulty;
   difficultyEl.className = `badge difficulty-${String(problem.difficulty || '').toLowerCase()}`;
   tagsEl.textContent = (problem.tags || []).join(' · ');
-  descriptionEl.innerHTML = problem.description;
+}
 
-  examplesEl.innerHTML = (problem.examples || [])
+// Description/examples/constraints are per-language (like starterCode), so this
+// re-renders whenever the language changes, same as the editor's starter code.
+function renderLanguageContent(language) {
+  descriptionEl.innerHTML = problem.description[language] ?? '';
+
+  examplesEl.innerHTML = (problem.examples[language] || [])
     .map(
       (ex, i) => `
       <div class="example">
@@ -40,10 +46,11 @@ function renderProblem() {
     )
     .join('');
 
-  constraintsEl.innerHTML = (problem.constraints || []).map((c) => `<li><code>${c}</code></li>`).join('');
+  constraintsEl.innerHTML = (problem.constraints[language] || []).map((c) => `<li><code>${c}</code></li>`).join('');
 }
 
-// Loads a language's starter template into the editor, discarding whatever was there.
+// Loads a language's starter template into the editor, discarding whatever was there,
+// and swaps the description/examples/constraints to match.
 function loadLanguage(language) {
   const code = problem.starterCode[language] ?? '';
 
@@ -61,6 +68,7 @@ function loadLanguage(language) {
     editor.setValue(code);
   }
   currentLanguage = language;
+  renderLanguageContent(language);
 }
 
 // Shows the discard-changes modal and resolves true/false with the user's choice.
@@ -177,7 +185,7 @@ async function init() {
     return;
   }
 
-  renderProblem();
+  renderHeader();
   loadLanguage('javascript');
 
   languageSelect.addEventListener('change', handleLanguageChange);

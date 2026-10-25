@@ -3,16 +3,32 @@
   "title": "Valid Parentheses",
   "difficulty": "Easy",
   "tags": ["String", "Stack"],
-  "description": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>",
-  "examples": [
-    { "input": "s = \"()\"", "output": "true" },
-    { "input": "s = \"()[]{}\"", "output": "true" },
-    { "input": "s = \"(]\"", "output": "false" }
-  ],
-  "constraints": [
-    "1 <= s.length <= 10^4",
-    "s consists only of parentheses characters '()[]{}'."
-  ],
+  "description": {
+    "javascript": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>",
+    "python": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>"
+  },
+  "examples": {
+    "javascript": [
+      { "input": "s = \"()\"", "output": "true" },
+      { "input": "s = \"()[]{}\"", "output": "true" },
+      { "input": "s = \"(]\"", "output": "false" }
+    ],
+    "python": [
+      { "input": "s = \"()\"", "output": "True" },
+      { "input": "s = \"()[]{}\"", "output": "True" },
+      { "input": "s = \"(]\"", "output": "False" }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "1 <= s.length <= 10^4",
+      "s consists only of parentheses characters '()[]{}'."
+    ],
+    "python": [
+      "1 <= len(s) <= 10^4",
+      "s consists only of parentheses characters '()[]{}'."
+    ]
+  },
   "functionName": {
     "javascript": "isValid",
     "python": "is_valid"

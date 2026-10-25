@@ -2,20 +2,39 @@
   "slug": "singly-linked-list-hello-world",
   "title": "Singly Linked List: Hello World",
   "difficulty": "Easy",
-  "tags": ["Linked List"],
-  "description": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>null</code> (<code>None</code> in Python), marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a value and an optional <code>next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",
-  "examples": [
-    {
-      "input": "(no input)",
-      "output": "Hello -> World! -> null",
-      "explanation": "The list has two nodes: the first holds \"Hello\", the second holds \"World!\", and the second node's next pointer is null."
-    }
-  ],
-  "constraints": [
-    "Build the list using only the given SinglyLinkedListNode class.",
-    "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
-    "The last node's next pointer must be null (None in Python)."
-  ],
+  "tags": ["Linked List", "Singly Linked List"],
+  "description": {
+    "javascript": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>null</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",
+    "python": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>None</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>"
+  },
+  "examples": {
+    "javascript": [
+      {
+        "input": "(no input)",
+        "output": "Hello -> World! -> null",
+        "explanation": "The list has two nodes: the first holds \"Hello\", the second holds \"World!\", and the second node's <code>.next</code> pointer is null."
+      }
+    ],
+    "python": [
+      {
+        "input": "(no input)",
+        "output": "Hello -> World! -> None",
+        "explanation": "The list has two nodes: the first holds \"Hello\", the second holds \"World!\", and the second node's <code>.next</code> pointer is None."
+      }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "Build the list using only the given SinglyLinkedListNode class.",
+      "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
+      "The last node's <code>.next</code> pointer must be null."
+    ],
+    "python": [
+      "Build the list using only the given SinglyLinkedListNode class.",
+      "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
+      "The last node's <code>.next</code> pointer must be None."
+    ]
+  },
   "functionName": {
     "javascript": "buildHelloWorldList",
     "python": "build_hello_world_list"
