@@ -248,7 +248,7 @@ main.problem-main {
   /* Inset top/bottom by .pane's own corner radius, so the bar's rounded
      caps start where .description-pane's corners finish curving, instead
      of leaving a little cove where two different radii collide. */
-  margin: 0.75rem 1rem 0.75rem 0; /* flush against .description-pane; breathing room stays on the editor-pane side */
+  margin: 0.75rem 0; /* flush against both panes */
   border-radius: 999px;
   background-color: rgba(148, 163, 184, 0.4);
   /* A small, subtle two-ridge knurl mark, centered on the bar. Explicit
