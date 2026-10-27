@@ -465,6 +465,7 @@ function loadLanguage(language) {
   }
   currentLanguage = language;
   languageSelect.value = language;
+  languageSelect.title = `Current language: ${LANGUAGE_LABELS[language]}`;
   renderLanguageContent(language);
   clearConsoleOutput();
 }
