@@ -176,8 +176,14 @@ code {
   color: var(--accent);
 }
 
-.icon-btn {
+.header-actions {
   margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.icon-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -221,8 +227,24 @@ main.problem-main {
 }
 
 .description-pane {
-  flex: 1;
+  flex: 0 0 50%;
+  min-width: 20%;
   padding: 1.5rem 1.75rem;
+}
+
+.pane-resizer {
+  flex: 0 0 6px;
+  align-self: stretch;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  cursor: col-resize;
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+
+.pane-resizer:hover,
+.pane-resizer.dragging {
+  background: var(--accent);
 }
 
 .description-pane h3 {
@@ -243,6 +265,7 @@ main.problem-main {
 
 .editor-pane {
   flex: 1;
+  min-width: 20%;
   display: flex;
   flex-direction: column;
   padding: 1rem;

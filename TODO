@@ -8,8 +8,6 @@ The problem list should have the problems which were the hardest for the program
 As each problem is correctly answered it is moved down the list by some number of problems. The easier the problem for the programmer, the further down the list it goes.
 The harder the problem, the nearer down the list it goes.
 
-Add a Skip button after Submit to allow the user to answer the problem incorrectly immediately.
+Implement Skip button logic.
 
-Full Screen / Restore Down icon.
-
-
+Very small Language Drop down next to full screen icon which determines which language will be used for the default (rather than just assuming javascript).  Any problem not having language support for that default should revert to javascript as the default.

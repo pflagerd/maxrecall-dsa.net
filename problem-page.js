@@ -17,6 +17,88 @@ const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalDiscardBtn = document.getElementById('modal-discard-btn');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
 const fullscreenIcon = document.getElementById('fullscreen-icon');
+const resetSplitBtn = document.getElementById('reset-split-btn');
+const paneResizer = document.getElementById('pane-resizer');
+const descriptionPaneEl = document.querySelector('.description-pane');
+const editorPaneEl = document.querySelector('.editor-pane');
+
+// Drag-to-resize the description/editor split. Pointer capture keeps the
+// drag tracking even if the cursor moves off the thin resizer bar. The
+// chosen width is remembered across reloads via localStorage. Neither pane
+// may go below 20% of the split's total width (also enforced in CSS via
+// min-width: 20%, which additionally protects against the window itself
+// being resized smaller after a drag).
+const MIN_PANE_FRACTION = 0.2;
+const PANE_WIDTH_STORAGE_KEY = 'maxrecall-dsa:description-pane-width';
+
+// Resizer width + both flex gaps, measured rather than hardcoded so this
+// doesn't need to track the CSS gap/padding values separately.
+function getPaneWidthBounds() {
+  const paneLeft = descriptionPaneEl.getBoundingClientRect().left;
+  const editorRight = editorPaneEl.getBoundingClientRect().right;
+  const span = editorRight - paneLeft;
+  const fixedOverhead = span - descriptionPaneEl.getBoundingClientRect().width - editorPaneEl.getBoundingClientRect().width;
+  const minWidth = span * MIN_PANE_FRACTION;
+  return { paneLeft, span, minWidth, maxWidth: span - fixedOverhead - minWidth };
+}
+
+function setDescriptionPaneWidth(width, bounds) {
+  const { minWidth, maxWidth } = bounds || getPaneWidthBounds();
+  const clamped = Math.max(minWidth, Math.min(width, maxWidth));
+  descriptionPaneEl.style.flex = `0 0 ${clamped}px`;
+}
+
+function savePaneWidth() {
+  try {
+    localStorage.setItem(PANE_WIDTH_STORAGE_KEY, String(descriptionPaneEl.getBoundingClientRect().width));
+  } catch {
+    // Ignore (private browsing, storage disabled, etc.) — just won't persist.
+  }
+}
+
+(function restorePaneWidth() {
+  let saved;
+  try {
+    saved = localStorage.getItem(PANE_WIDTH_STORAGE_KEY);
+  } catch {
+    return;
+  }
+  const width = Number(saved);
+  if (Number.isFinite(width) && width > 0) setDescriptionPaneWidth(width);
+})();
+
+resetSplitBtn.addEventListener('click', () => {
+  const bounds = getPaneWidthBounds();
+  setDescriptionPaneWidth(bounds.span / 2, bounds);
+  savePaneWidth();
+});
+
+paneResizer.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  paneResizer.setPointerCapture(e.pointerId);
+  paneResizer.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+
+  const bounds = getPaneWidthBounds();
+
+  function onMove(moveEvent) {
+    setDescriptionPaneWidth(moveEvent.clientX - bounds.paneLeft, bounds);
+  }
+
+  function onUp(upEvent) {
+    paneResizer.releasePointerCapture(upEvent.pointerId);
+    paneResizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    paneResizer.removeEventListener('pointermove', onMove);
+    paneResizer.removeEventListener('pointerup', onUp);
+    savePaneWidth();
+  }
+
+  paneResizer.addEventListener('pointermove', onMove);
+  paneResizer.addEventListener('pointerup', onUp);
+});
 
 // Icon paths swapped on the same button depending on fullscreen state.
 const EXPAND_ICON_PATHS = '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>';
