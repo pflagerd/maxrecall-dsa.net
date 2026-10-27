@@ -6,6 +6,7 @@ const tagsEl = document.getElementById('problem-tags');
 const descriptionEl = document.getElementById('problem-description');
 const examplesEl = document.getElementById('problem-examples');
 const constraintsEl = document.getElementById('problem-constraints');
+const learningEl = document.getElementById('tab-learning');
 const languageSelect = document.getElementById('language-select');
 const languageFilterBtn = document.getElementById('language-filter-btn');
 const languageFilterMenu = document.getElementById('language-filter-menu');
@@ -447,6 +448,15 @@ function renderLanguageContent(language) {
 
   constraintsEl.innerHTML = (problem.constraints[language] || []).map((c) => `<li>${c}</li>`).join('');
   renderMath(constraintsEl);
+
+  // Learning content is optional per problem — most don't have it yet, so
+  // fall back to the "Coming Soon!" placeholder already in the HTML.
+  if (problem.learning && problem.learning[language]) {
+    learningEl.innerHTML = problem.learning[language];
+    renderMath(learningEl);
+  } else {
+    learningEl.innerHTML = '<p class="coming-soon">Coming Soon!</p>';
+  }
 }
 
 // Loads a language's starter template into the editor, discarding whatever was there,
