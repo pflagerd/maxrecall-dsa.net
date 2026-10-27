@@ -4,4 +4,8 @@ I'm using Claude Code to help me write this in html/css/javascript.
 
 I want to decompose the learning into
     1) Language syntax, built-in types, data structures and the operations allowed on them.
+        a) Levels of "syntactic sugar".  Start with While True: and if statements. Graduate to While <condition>:, for, etc.
+                                         Similar with things like List Comprehensions.
     2) Details of types and data structures and algorithms operating on them (typically not directly supported by language) .
+    3) Classes of problems. Not sure how to classify them. One way is by the "best" technique to solve them.
+        a) Levels of solutions.  Even "Brute Force" should get some practice early on to help reinforce concepts.W

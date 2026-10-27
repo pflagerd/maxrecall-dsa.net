@@ -528,6 +528,35 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
+// Renders one test-case entry. showErrorIfHidden is only set true for the
+// full-crash path below — a compile/timeout error isn't test-specific (it
+// doesn't depend on which input was used), so it's safe to show even for a
+// hidden case, unlike a per-test exception message which might incidentally
+// reveal something about that hidden case's input.
+function renderTestCase(r, { showErrorIfHidden = false } = {}) {
+  if (r.hidden) {
+    const errorLine = showErrorIfHidden && r.error
+      ? `<br/><span class="test-case-error">Error: <code>${escapeHtml(r.error)}</code></span>`
+      : '';
+    return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
+      <strong>Hidden test case ${r.index + 1}:</strong> ${r.passed ? 'Passed' : 'Failed'}${errorLine}
+    </div>`;
+  }
+  // Expected only makes sense to show next to an actual result to compare
+  // against — once the case has thrown, there's nothing to compare, so
+  // skip straight to the error instead.
+  return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
+    <strong>Test case ${r.index + 1}:</strong> ${r.passed ? 'Passed' : 'Failed'}<br/>
+    <span>Input: <code>${formatValue(r.input)}</code></span><br/>
+    ${
+      r.error
+        ? `<span class="test-case-error">Error: <code>${escapeHtml(r.error)}</code></span>`
+        : `<span>Expected: <code>${formatValue(r.expected)}</code></span><br/>
+    <span>Actual: <code>${formatValue(r.actual)}</code></span>`
+    }
+  </div>`;
+}
+
 function renderResults(result) {
   consoleStatusEl.textContent = `${result.status}${
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
@@ -538,30 +567,19 @@ function renderResults(result) {
   consoleStdoutEl.textContent = result.stdout || '';
   consoleStderrEl.textContent = result.stderr || '';
 
+  const results = result.results || [];
+
   if (result.error) {
-    consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(result.error)}</pre>`;
+    // Full-crash scenario (compile error / timeout / no valid output): every
+    // test case fails identically, so show just the first one and stop,
+    // rather than repeating the same error for every case.
+    consoleResultsListEl.innerHTML = results.length
+      ? renderTestCase(results[0], { showErrorIfHidden: true })
+      : `<pre class="error-block">${escapeHtml(result.error)}</pre>`;
     return;
   }
 
-  consoleResultsListEl.innerHTML = (result.results || [])
-    .map((r) => {
-      if (r.hidden) {
-        return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
-          <strong>Hidden test case ${r.index + 1}:</strong> ${r.passed ? 'Passed' : 'Failed'}
-        </div>`;
-      }
-      return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
-        <strong>Test case ${r.index + 1}:</strong> ${r.passed ? 'Passed' : 'Failed'}<br/>
-        <span>Input: <code>${formatValue(r.input)}</code></span><br/>
-        <span>Expected: <code>${formatValue(r.expected)}</code></span><br/>
-        ${
-          r.error
-            ? `<span>Error: <code>${escapeHtml(r.error)}</code></span>`
-            : `<span>Actual: <code>${formatValue(r.actual)}</code></span>`
-        }
-      </div>`;
-    })
-    .join('');
+  consoleResultsListEl.innerHTML = results.map((r) => renderTestCase(r)).join('');
 }
 
 async function execute(endpoint, button) {

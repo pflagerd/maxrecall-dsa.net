@@ -164,6 +164,23 @@ function compileCpp(sourceFile, binaryFile) {
   });
 }
 
+// For a submission that fails before/without producing any usable output at
+// all (compile error, timeout, no valid JSON produced): every test case
+// fails identically, so only the first gets input/error attached — the
+// client only displays that first entry and stops, rather than repeating
+// the same error for every case. Error text isn't test-specific (it doesn't
+// depend on which input was used), so it's attached even if the first case
+// happens to be hidden; input itself still follows the usual hidden-case
+// privacy rule.
+function buildFailureResults(testCases, errorText) {
+  return testCases.map((tc, index) => {
+    if (index !== 0) return { index, hidden: tc.hidden, passed: false };
+    return tc.hidden
+      ? { index, hidden: true, passed: false, error: errorText }
+      : { index, hidden: false, passed: false, input: tc.args, error: errorText };
+  });
+}
+
 function deepEqual(a, b) {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
@@ -250,18 +267,19 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     if (language === 'cpp') {
       const compileResult = await compileCpp(tmpFile, tmpBinary);
       if (!compileResult.success) {
+        const errorText = (compileResult.timedOut
+          ? 'Compilation timed out.'
+          : compileResult.stderr || 'Compilation failed.'
+        ).slice(0, 2000);
         return {
           status: 'Compile Error',
           passed: 0,
           total: testCases.length,
           runtimeMs: Date.now() - started,
-          error: (compileResult.timedOut
-            ? 'Compilation timed out.'
-            : compileResult.stderr || 'Compilation failed.'
-          ).slice(0, 2000),
+          error: errorText,
           stdout: '',
           stderr: compileResult.stderr,
-          results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+          results: buildFailureResults(testCases, errorText),
         };
       }
       // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
@@ -275,14 +293,16 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     const runtimeMs = Date.now() - started;
 
     if (outcome.timedOut) {
+      const errorText = 'Time limit exceeded.';
       return {
         status: 'Time Limit Exceeded',
         passed: 0,
         total: testCases.length,
         runtimeMs,
+        error: errorText,
         stdout: outcome.stdout,
         stderr: outcome.stderr,
-        results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+        results: buildFailureResults(testCases, errorText),
       };
     }
 
@@ -299,15 +319,16 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     try {
       parsed = JSON.parse(resultText);
     } catch {
+      const errorText = (outcome.stderr || 'The submission did not produce valid output.').slice(0, 2000);
       return {
         status: 'Runtime Error',
         passed: 0,
         total: testCases.length,
         runtimeMs,
-        error: (outcome.stderr || 'The submission did not produce valid output.').slice(0, 2000),
+        error: errorText,
         stdout: userStdout,
         stderr: outcome.stderr,
-        results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+        results: buildFailureResults(testCases, errorText),
       };
     }
 
