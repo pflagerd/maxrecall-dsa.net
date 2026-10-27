@@ -14,6 +14,35 @@ const consoleResultsEl = document.getElementById('console-results');
 const modalOverlay = document.getElementById('language-switch-modal');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalDiscardBtn = document.getElementById('modal-discard-btn');
+const fullscreenBtn = document.getElementById('fullscreen-btn');
+const fullscreenIcon = document.getElementById('fullscreen-icon');
+
+// Icon paths swapped on the same button depending on fullscreen state.
+const EXPAND_ICON_PATHS = '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>';
+const COMPRESS_ICON_PATHS = '<path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/>';
+
+function updateFullscreenButton() {
+  const isFullscreen = Boolean(document.fullscreenElement);
+  fullscreenIcon.innerHTML = isFullscreen ? COMPRESS_ICON_PATHS : EXPAND_ICON_PATHS;
+  const label = isFullscreen ? 'Exit full screen' : 'Enter full screen';
+  fullscreenBtn.title = label;
+  fullscreenBtn.setAttribute('aria-label', label);
+}
+
+if (fullscreenBtn && document.documentElement.requestFullscreen) {
+  fullscreenBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  });
+  // Keeps the icon in sync if fullscreen is exited another way (Escape, browser UI).
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
+  updateFullscreenButton();
+} else if (fullscreenBtn) {
+  fullscreenBtn.hidden = true; // Fullscreen API not supported in this browser.
+}
 
 let problem = null;
 let editor = null;
