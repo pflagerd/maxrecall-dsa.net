@@ -12,10 +12,6 @@ Implement Skip button logic.
 
 Put the console-tabs into a console-toolbar analogous to the editor-toolbar
 
-Add tabs on the left pane too:  Learning | Applying | Submissions (include run-time stats)
-
 Display something that shows where spaces vs tabs are being used.
-
-Make the default left-right pane allocation be 35% 65%
 
 Add a hover for the problem's current language.

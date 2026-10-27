@@ -39,6 +39,9 @@ const editorPaneEl = document.querySelector('.editor-pane');
 // min-width: 20%, which additionally protects against the window itself
 // being resized smaller after a drag).
 const MIN_PANE_FRACTION = 0.2;
+// 1 - 1/φ (golden ratio), rounded to 3 decimals. Kept in sync with
+// .description-pane's flex-basis (38.2%) in style.css.
+const DEFAULT_PANE_FRACTION = 0.382;
 const PANE_WIDTH_STORAGE_KEY = 'maxrecall-dsa:description-pane-width';
 
 // Resizer width + both flex gaps, measured rather than hardcoded so this
@@ -79,7 +82,7 @@ function savePaneWidth() {
 
 resetSplitBtn.addEventListener('click', () => {
   const bounds = getPaneWidthBounds();
-  setDescriptionPaneWidth(bounds.span / 2, bounds);
+  setDescriptionPaneWidth(bounds.span * DEFAULT_PANE_FRACTION, bounds);
   savePaneWidth();
 });
 

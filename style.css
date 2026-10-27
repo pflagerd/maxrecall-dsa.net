@@ -238,7 +238,7 @@ main.problem-main {
 }
 
 .description-pane {
-  flex: 0 0 50%;
+  flex: 0 0 38.2%; /* 1 - 1/φ, rounded to 3 decimals; kept in sync with DEFAULT_PANE_FRACTION in problem-page.js */
   min-width: 20%;
   padding: 1.5rem 1.75rem;
 }
