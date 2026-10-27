@@ -9,6 +9,7 @@ const constraintsEl = document.getElementById('problem-constraints');
 const languageSelect = document.getElementById('language-select');
 const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
+const skipBtn = document.getElementById('skip-btn');
 const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
 const modalOverlay = document.getElementById('language-switch-modal');
@@ -224,6 +225,8 @@ async function init() {
   languageSelect.addEventListener('change', handleLanguageChange);
   runBtn.addEventListener('click', () => execute('run', runBtn));
   submitBtn.addEventListener('click', () => execute('submit', submitBtn));
+  // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
+  skipBtn.addEventListener('click', () => alert('Skip button pressed'));
 }
 
 init();
