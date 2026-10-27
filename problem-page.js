@@ -439,6 +439,16 @@ function renderLanguageContent(language) {
 
 // Loads a language's starter template into the editor, discarding whatever was there,
 // and swaps the description/examples/constraints to match.
+// Results/stdout/stderr belong to whatever code was last run — once the
+// language (and so the code in the editor) changes, they're stale.
+function clearConsoleOutput() {
+  consoleStatusEl.textContent = 'Run your code to see results.';
+  consoleStatusEl.className = '';
+  consoleResultsListEl.innerHTML = '';
+  consoleStdoutEl.textContent = '';
+  consoleStderrEl.textContent = '';
+}
+
 function loadLanguage(language) {
   const code = problem.starterCode[language] ?? '';
 
@@ -456,6 +466,7 @@ function loadLanguage(language) {
   currentLanguage = language;
   languageSelect.value = language;
   renderLanguageContent(language);
+  clearConsoleOutput();
 }
 
 // Shows the discard-changes modal and resolves true/false with the user's choice.
