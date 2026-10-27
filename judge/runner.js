@@ -9,6 +9,15 @@ const NODE_MEMORY_MB = 128;
 const PYTHON_MEMORY_MB = 256;
 const CPP_MEMORY_MB = 128;
 const CPP_COMPILE_TIMEOUT_MS = 10000;
+// Caps how much stdout/stderr get buffered, both to bound this server's own
+// memory if a submission spams output and to keep the response payload sane.
+const MAX_CAPTURED_OUTPUT = 200_000;
+
+// Printed on its own line right before the harness's JSON result, so a
+// submission's own stdout debugging (console.log/print/cout) can be told
+// apart from the harness's own output: everything before the last
+// occurrence of this marker is the user's stdout, everything after is ours.
+const RESULT_MARKER = '###JUDGE_RESULT###';
 
 const CPP_JSON_HELPER = fs.readFileSync(path.join(__dirname, 'cpp', 'judge_json.hpp'), 'utf8');
 
@@ -38,7 +47,7 @@ process.stdin.on('end', () => {
       return { error: (err && err.message) || String(err) };
     }
   });
-  process.stdout.write(JSON.stringify(__judge_results));
+  process.stdout.write('\\n${RESULT_MARKER}\\n' + JSON.stringify(__judge_results));
 });
 `;
 }
@@ -67,7 +76,7 @@ def __judge_default(o):
         return o.__dict__
     return str(o)
 
-sys.stdout.write(json.dumps(__judge_results, default=__judge_default))
+sys.stdout.write('\\n${RESULT_MARKER}\\n' + json.dumps(__judge_results, default=__judge_default))
 `;
 }
 
@@ -123,7 +132,7 @@ int main() {
         }
         __judge_results.push_back(__judge_entry);
     }
-    cout << __judge_results.dump();
+    cout << "\\n${RESULT_MARKER}\\n" << __judge_results.dump();
     return 0;
 }
 `;
@@ -142,7 +151,9 @@ function compileCpp(sourceFile, binaryFile) {
     let stderr = '';
     let timedOut = false;
 
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
     child.on('error', (err) => {
       resolve({ success: false, stderr: String(err.message || err), timedOut });
     });
@@ -180,8 +191,12 @@ function spawnJudged(command, args, stdinPayload) {
     let stderr = '';
     let timedOut = false;
 
-    child.stdout.on('data', (chunk) => { stdout += chunk; });
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.stdout.on('data', (chunk) => {
+      if (stdout.length < MAX_CAPTURED_OUTPUT) stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
 
     child.on('error', (err) => {
       resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null });
@@ -244,6 +259,8 @@ async function runSubmission({ language, code, functionName, testCases, signatur
             ? 'Compilation timed out.'
             : compileResult.stderr || 'Compilation failed.'
           ).slice(0, 2000),
+          stdout: '',
+          stderr: compileResult.stderr,
           results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
         };
       }
@@ -263,13 +280,24 @@ async function runSubmission({ language, code, functionName, testCases, signatur
         passed: 0,
         total: testCases.length,
         runtimeMs,
+        stdout: outcome.stdout,
+        stderr: outcome.stderr,
         results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
       };
     }
 
+    // Everything before the marker is the submission's own stdout (e.g.
+    // console.log/print/cout debugging); everything after is the harness's
+    // own JSON result, which the submission's output can't corrupt even if
+    // it prints something that happens to look like JSON itself.
+    const markerLine = `\n${RESULT_MARKER}\n`;
+    const markerIndex = outcome.stdout.lastIndexOf(markerLine);
+    const userStdout = markerIndex === -1 ? outcome.stdout : outcome.stdout.slice(0, markerIndex);
+    const resultText = markerIndex === -1 ? '' : outcome.stdout.slice(markerIndex + markerLine.length);
+
     let parsed;
     try {
-      parsed = JSON.parse(outcome.stdout);
+      parsed = JSON.parse(resultText);
     } catch {
       return {
         status: 'Runtime Error',
@@ -277,6 +305,8 @@ async function runSubmission({ language, code, functionName, testCases, signatur
         total: testCases.length,
         runtimeMs,
         error: (outcome.stderr || 'The submission did not produce valid output.').slice(0, 2000),
+        stdout: userStdout,
+        stderr: outcome.stderr,
         results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
       };
     }
@@ -303,7 +333,15 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     else if (hadError) status = 'Runtime Error';
     else status = 'Wrong Answer';
 
-    return { status, passed: passedCount, total: testCases.length, runtimeMs, results };
+    return {
+      status,
+      passed: passedCount,
+      total: testCases.length,
+      runtimeMs,
+      stdout: userStdout,
+      stderr: outcome.stderr,
+      results,
+    };
   } finally {
     fs.unlink(tmpFile, () => {});
     if (tmpBinary) fs.unlink(tmpBinary, () => {});

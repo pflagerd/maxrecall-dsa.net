@@ -10,4 +10,4 @@ The harder the problem, the nearer down the list it goes.
 
 Implement Skip button logic.
 
-Very small Language DropDown next to full screen icon which determines which language will be used for the default (rather than just assuming javascript).  Any problem not having language support for that default should revert to javascript as the default.
+Add a horizontal resize-bar to resize

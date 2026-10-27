@@ -67,7 +67,14 @@
         <div class="console-header">
           <span id="console-status">Run your code to see results.</span>
         </div>
-        <div id="console-results"></div>
+        <div class="console-tabs" role="tablist">
+          <button class="console-tab active" type="button" role="tab" aria-selected="true" data-tab="results">Results</button>
+          <button class="console-tab" type="button" role="tab" aria-selected="false" data-tab="stdout">stdout</button>
+          <button class="console-tab" type="button" role="tab" aria-selected="false" data-tab="stderr">stderr</button>
+        </div>
+        <div id="console-results" class="console-tab-panel" role="tabpanel"></div>
+        <pre id="console-stdout" class="console-tab-panel" role="tabpanel" hidden></pre>
+        <pre id="console-stderr" class="console-tab-panel" role="tabpanel" hidden></pre>
       </div>
     </section>
   </main>

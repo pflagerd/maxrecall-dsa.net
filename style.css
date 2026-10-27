@@ -358,6 +358,55 @@ button.primary:hover {
   margin-bottom: 0.5rem;
 }
 
+.console-tabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  margin-bottom: 0.5rem;
+}
+
+.console-tab {
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.35rem 0.1rem;
+  margin-bottom: -1px;
+  font-size: 0.85rem;
+}
+
+.console-tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.console-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.console-tab-panel[hidden] {
+  display: none;
+}
+
+#console-stdout,
+#console-stderr {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+#console-stdout:empty::before,
+#console-stderr:empty::before {
+  content: '(empty)';
+  color: #64748b;
+  font-style: italic;
+}
+
 .status-pass {
   color: #4ade80;
 }

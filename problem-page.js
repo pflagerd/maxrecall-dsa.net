@@ -13,6 +13,10 @@ const submitBtn = document.getElementById('submit-btn');
 const skipBtn = document.getElementById('skip-btn');
 const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
+const consoleStdoutEl = document.getElementById('console-stdout');
+const consoleStderrEl = document.getElementById('console-stderr');
+const consoleTabs = document.querySelectorAll('.console-tab');
+const consoleTabPanels = { results: consoleResultsEl, stdout: consoleStdoutEl, stderr: consoleStderrEl };
 const modalOverlay = document.getElementById('language-switch-modal');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalDiscardBtn = document.getElementById('modal-discard-btn');
@@ -127,6 +131,23 @@ if (fullscreenBtn && document.documentElement.requestFullscreen) {
 } else if (fullscreenBtn) {
   fullscreenBtn.hidden = true; // Fullscreen API not supported in this browser.
 }
+
+// Console panel tabs: Results / stdout / stderr. Switching tabs only changes
+// which panel is visible — all three stay populated from the latest run.
+function setActiveConsoleTab(tabName) {
+  consoleTabs.forEach((tab) => {
+    const isActive = tab.dataset.tab === tabName;
+    tab.classList.toggle('active', isActive);
+    tab.setAttribute('aria-selected', String(isActive));
+  });
+  Object.entries(consoleTabPanels).forEach(([name, panel]) => {
+    panel.hidden = name !== tabName;
+  });
+}
+
+consoleTabs.forEach((tab) => {
+  tab.addEventListener('click', () => setActiveConsoleTab(tab.dataset.tab));
+});
 
 let problem = null;
 let editor = null;
@@ -265,6 +286,10 @@ function renderResults(result) {
   }${typeof result.runtimeMs === 'number' ? ` (${result.runtimeMs} ms)` : ''}`;
   consoleStatusEl.className = result.status === 'Accepted' ? 'status-pass' : 'status-fail';
 
+  // textContent, not innerHTML — this is raw program output, not markup.
+  consoleStdoutEl.textContent = result.stdout || '';
+  consoleStderrEl.textContent = result.stderr || '';
+
   if (result.error) {
     consoleResultsEl.innerHTML = `<pre class="error-block">${result.error}</pre>`;
     return;
@@ -296,6 +321,8 @@ async function execute(endpoint, button) {
   consoleStatusEl.textContent = 'Running...';
   consoleStatusEl.className = '';
   consoleResultsEl.innerHTML = '';
+  consoleStdoutEl.textContent = '';
+  consoleStderrEl.textContent = '';
 
   try {
     const res = await fetch(`/api/problems/${slug}/${endpoint}`, {
