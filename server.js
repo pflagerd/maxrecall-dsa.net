@@ -7,7 +7,7 @@ const { runSubmission } = require('./judge/runner');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PROBLEMS_DIR = path.join(__dirname, 'problems');
-const SUPPORTED_LANGUAGES = ['javascript', 'python'];
+const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp'];
 
 app.use(express.json());
 
@@ -68,11 +68,16 @@ async function handleExecution(req, res, { onlyVisible }) {
     return res.status(400).json({ error: 'code is required' });
   }
 
-  const testCases = onlyVisible ? problem.testCases.filter((tc) => !tc.hidden) : problem.testCases;
   const functionName = problem.functionName[language];
+  if (!functionName) {
+    return res.status(400).json({ error: `This problem doesn't support ${language}.` });
+  }
+
+  const testCases = onlyVisible ? problem.testCases.filter((tc) => !tc.hidden) : problem.testCases;
+  const signature = problem.signature && problem.signature[language];
 
   try {
-    const result = await runSubmission({ language, code, functionName, testCases });
+    const result = await runSubmission({ language, code, functionName, testCases, signature });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Execution failed' });

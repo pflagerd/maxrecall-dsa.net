@@ -252,11 +252,36 @@ button.primary:hover {
   min-height: 180px;
   border-radius: 0.5rem;
   overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+/* No theme CDN is loaded (syntax highlighting is intentionally off, so
+   there are no tokens to color) — these rules supply the dark-mode base
+   colors a CodeMirror theme would otherwise provide. */
 #editor-host .CodeMirror {
   height: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
   font-size: 0.95rem;
+}
+
+#editor-host .CodeMirror-gutters {
+  background: transparent;
+  border-right: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+#editor-host .CodeMirror-linenumber {
+  color: #64748b;
+}
+
+#editor-host .CodeMirror-cursor {
+  border-left-color: var(--text);
+}
+
+#editor-host .CodeMirror-selected,
+#editor-host .CodeMirror-focused .CodeMirror-selected {
+  background: rgba(56, 189, 248, 0.25);
 }
 
 .console-panel {

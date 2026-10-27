@@ -4,8 +4,15 @@ Help me write a procedure for creating a new problem by hand AND I'll follow the
 When Submit button is hit, switch to the next problem in order in the list.
 
 The problem list should have the problems which were the hardest for the programmer to answer coming up more frequently than problems the programmer found easier.
-
+Singly
 As each problem is correctly answered it is moved down the list by some number of problems. The easier the problem for the programmer, the further down the list it goes.
 The harder the problem, the nearer down the list it goes.
 
 Add a Skip button after Submit to allow the user to answer the problem incorrectly immediately.
+
+TextEditor: Let lines wrap off-screen.  Add a horizontal and vertical scroll-bar as necessary.
+
+Full Screen / Restore Down icon.
+
+Suppress weird Ctrl-Sequence behaviors (like Ctrl-S bring up a Save As dialog)
+

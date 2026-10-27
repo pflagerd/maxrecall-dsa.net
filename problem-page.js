@@ -19,7 +19,13 @@ let problem = null;
 let editor = null;
 let currentLanguage = null;
 
-const CM_MODE = { javascript: 'javascript', python: 'python' };
+// Browser-chrome shortcuts CodeMirror doesn't bind itself (Tab, Ctrl-Z/Y,
+// Ctrl-A are already in its default keymap and need no help). Bound to a
+// no-op so CodeMirror treats them as handled, which blocks the browser
+// action. Note: some shortcuts (Ctrl/Cmd+W, +T, +N, +Shift+T, ...) are
+// intentionally unblockable by browsers for security/UX reasons regardless.
+const BLOCKED_KEYS = ['S', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'O', 'P', 'U', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+const EXTRA_KEYS = Object.fromEntries(BLOCKED_KEYS.map((k) => [`Mod-${k}`, () => {}]));
 
 // Language-independent header: title, difficulty, tags. Rendered once.
 function renderHeader() {
@@ -57,14 +63,12 @@ function loadLanguage(language) {
   if (!editor) {
     editor = CodeMirror(document.getElementById('editor-host'), {
       value: code,
-      mode: CM_MODE[language],
-      theme: 'dracula',
       lineNumbers: true,
       indentUnit: 4,
       tabSize: 4,
+      extraKeys: EXTRA_KEYS,
     });
   } else {
-    editor.setOption('mode', CM_MODE[language]);
     editor.setValue(code);
   }
   currentLanguage = language;

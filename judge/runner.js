@@ -7,6 +7,19 @@ const crypto = require('crypto');
 const TIMEOUT_MS = 5000;
 const NODE_MEMORY_MB = 128;
 const PYTHON_MEMORY_MB = 256;
+const CPP_MEMORY_MB = 128;
+const CPP_COMPILE_TIMEOUT_MS = 10000;
+
+const CPP_JSON_HELPER = fs.readFileSync(path.join(__dirname, 'cpp', 'judge_json.hpp'), 'utf8');
+
+// Maps a C++ parameter type (as written in a problem's signature.cpp.params)
+// to the judge_json.hpp helper that extracts it from a JsonValue.
+const CPP_PARAM_EXTRACTORS = {
+  int: 'extractInt',
+  bool: 'extractBool',
+  string: 'extractString',
+  'vector<int>': 'extractIntVector',
+};
 
 // Harness code appended after the user's submitted function definition.
 // Test case args (never the expected answers) are piped in over stdin,
@@ -58,6 +71,88 @@ sys.stdout.write(json.dumps(__judge_results, default=__judge_default))
 `;
 }
 
+// C++ is statically typed, so (unlike the JS/Python harnesses) the generated
+// main() needs to know each parameter's type to extract it, and the return
+// type resolves by overload (buildJson is overloaded per type in
+// judge_json.hpp, plus an optional problem-specific overload for custom
+// structs spliced in via signature.customSerializer).
+function buildCppSource(userCode, functionName, signature) {
+  const params = signature.params || [];
+  const argExprs = params
+    .map((type, i) => {
+      const extractor = CPP_PARAM_EXTRACTORS[type];
+      if (!extractor) throw new Error(`Unsupported C++ param type: ${type}`);
+      return `${extractor}(args[${i}])`;
+    })
+    .join(', ');
+
+  return `${CPP_JSON_HELPER}
+#include <iostream>
+#include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
+#include <map>
+#include <set>
+#include <stack>
+#include <queue>
+#include <deque>
+#include <numeric>
+#include <climits>
+#include <cmath>
+using namespace std;
+
+${userCode}
+
+${signature.customSerializer || ''}
+int main() {
+    string __judge_input((istreambuf_iterator<char>(cin)), istreambuf_iterator<char>());
+    JsonValue __judge_cases = parseJson(__judge_input);
+    JsonValue __judge_results = JsonValue::array();
+    for (size_t __judge_i = 0; __judge_i < __judge_cases.size(); ++__judge_i) {
+        const JsonValue& args = __judge_cases[__judge_i].at("args");
+        JsonValue __judge_entry = JsonValue::object();
+        try {
+            auto __judge_result = ${functionName}(${argExprs});
+            __judge_entry["actual"] = buildJson(__judge_result);
+        } catch (const std::exception& e) {
+            __judge_entry = JsonValue::object();
+            __judge_entry["error"] = JsonValue(string(e.what()));
+        } catch (...) {
+            __judge_entry = JsonValue::object();
+            __judge_entry["error"] = JsonValue(string("Unknown error"));
+        }
+        __judge_results.push_back(__judge_entry);
+    }
+    cout << __judge_results.dump();
+    return 0;
+}
+`;
+}
+
+// Compiles a .cpp file to a binary with its own timeout, separate from the
+// run timeout below (compilation can legitimately take longer than running
+// trivial test cases, especially for templates).
+function compileCpp(sourceFile, binaryFile) {
+  return new Promise((resolve) => {
+    const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile], {
+      timeout: CPP_COMPILE_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
+
+    let stderr = '';
+    let timedOut = false;
+
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (err) => {
+      resolve({ success: false, stderr: String(err.message || err), timedOut });
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
+      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+    });
+  });
+}
+
 function deepEqual(a, b) {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
@@ -104,7 +199,9 @@ function spawnJudged(command, args, stdinPayload) {
 
 // Runs `code` (in `language`) against `testCases` for `functionName`.
 // Comparison against `expected` happens here, outside the sandboxed process.
-async function runSubmission({ language, code, functionName, testCases }) {
+// `signature` is only used by compiled/statically-typed languages (cpp) that
+// need to know argument/return types to generate a harness that compiles.
+async function runSubmission({ language, code, functionName, testCases, signature }) {
   const id = crypto.randomUUID();
   const started = Date.now();
 
@@ -112,6 +209,7 @@ async function runSubmission({ language, code, functionName, testCases }) {
   let command;
   let args;
   let tmpFile;
+  let tmpBinary;
 
   if (language === 'javascript') {
     source = buildJavascriptSource(code, functionName);
@@ -123,69 +221,93 @@ async function runSubmission({ language, code, functionName, testCases }) {
     tmpFile = path.join(os.tmpdir(), `judge-${id}.py`);
     command = 'python3';
     args = [tmpFile];
+  } else if (language === 'cpp') {
+    source = buildCppSource(code, functionName, signature || {});
+    tmpFile = path.join(os.tmpdir(), `judge-${id}.cpp`);
+    tmpBinary = path.join(os.tmpdir(), `judge-${id}`);
   } else {
     throw new Error(`Unsupported language: ${language}`);
   }
 
   fs.writeFileSync(tmpFile, source);
 
-  let outcome;
   try {
+    if (language === 'cpp') {
+      const compileResult = await compileCpp(tmpFile, tmpBinary);
+      if (!compileResult.success) {
+        return {
+          status: 'Compile Error',
+          passed: 0,
+          total: testCases.length,
+          runtimeMs: Date.now() - started,
+          error: (compileResult.timedOut
+            ? 'Compilation timed out.'
+            : compileResult.stderr || 'Compilation failed.'
+          ).slice(0, 2000),
+          results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+        };
+      }
+      // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
+      // way the Python harness caps its own interpreter via resource.setrlimit.
+      command = 'bash';
+      args = ['-c', `ulimit -v ${CPP_MEMORY_MB * 1024}; exec "$0"`, tmpBinary];
+    }
+
     const stdinPayload = JSON.stringify(testCases.map((tc) => ({ args: tc.args })));
-    outcome = await spawnJudged(command, args, stdinPayload);
+    const outcome = await spawnJudged(command, args, stdinPayload);
+    const runtimeMs = Date.now() - started;
+
+    if (outcome.timedOut) {
+      return {
+        status: 'Time Limit Exceeded',
+        passed: 0,
+        total: testCases.length,
+        runtimeMs,
+        results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+      };
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(outcome.stdout);
+    } catch {
+      return {
+        status: 'Runtime Error',
+        passed: 0,
+        total: testCases.length,
+        runtimeMs,
+        error: (outcome.stderr || 'The submission did not produce valid output.').slice(0, 2000),
+        results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
+      };
+    }
+
+    let passedCount = 0;
+    let hadError = false;
+    const results = testCases.map((tc, index) => {
+      const entry = parsed[index] || { error: 'No result produced for this test case.' };
+      if (entry.error) {
+        hadError = true;
+        return tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.args, expected: tc.expected, error: entry.error };
+      }
+      const passed = deepEqual(entry.actual, tc.expected);
+      if (passed) passedCount += 1;
+      return tc.hidden
+        ? { index, hidden: true, passed }
+        : { index, hidden: false, passed, input: tc.args, expected: tc.expected, actual: entry.actual };
+    });
+
+    let status;
+    if (passedCount === testCases.length) status = 'Accepted';
+    else if (hadError) status = 'Runtime Error';
+    else status = 'Wrong Answer';
+
+    return { status, passed: passedCount, total: testCases.length, runtimeMs, results };
   } finally {
     fs.unlink(tmpFile, () => {});
+    if (tmpBinary) fs.unlink(tmpBinary, () => {});
   }
-
-  const runtimeMs = Date.now() - started;
-
-  if (outcome.timedOut) {
-    return {
-      status: 'Time Limit Exceeded',
-      passed: 0,
-      total: testCases.length,
-      runtimeMs,
-      results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
-    };
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(outcome.stdout);
-  } catch {
-    return {
-      status: 'Runtime Error',
-      passed: 0,
-      total: testCases.length,
-      runtimeMs,
-      error: (outcome.stderr || 'The submission did not produce valid output.').slice(0, 2000),
-      results: testCases.map((tc, index) => ({ index, hidden: tc.hidden, passed: false })),
-    };
-  }
-
-  let passedCount = 0;
-  let hadError = false;
-  const results = testCases.map((tc, index) => {
-    const entry = parsed[index] || { error: 'No result produced for this test case.' };
-    if (entry.error) {
-      hadError = true;
-      return tc.hidden
-        ? { index, hidden: true, passed: false }
-        : { index, hidden: false, passed: false, input: tc.args, expected: tc.expected, error: entry.error };
-    }
-    const passed = deepEqual(entry.actual, tc.expected);
-    if (passed) passedCount += 1;
-    return tc.hidden
-      ? { index, hidden: true, passed }
-      : { index, hidden: false, passed, input: tc.args, expected: tc.expected, actual: entry.actual };
-  });
-
-  let status;
-  if (passedCount === testCases.length) status = 'Accepted';
-  else if (hadError) status = 'Runtime Error';
-  else status = 'Wrong Answer';
-
-  return { status, passed: passedCount, total: testCases.length, runtimeMs, results };
 }
 
 module.exports = { runSubmission };
