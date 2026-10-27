@@ -225,7 +225,6 @@ main.problem-main {
   justify-content: stretch;
   align-items: stretch;
   padding: 0 1.5rem 1.5rem;
-  gap: 1rem;
   min-height: 0;
   overflow: hidden;
 }
@@ -246,16 +245,69 @@ main.problem-main {
 .pane-resizer {
   flex: 0 0 6px;
   align-self: stretch;
+  /* Inset top/bottom by .pane's own corner radius, so the bar's rounded
+     caps start where .description-pane's corners finish curving, instead
+     of leaving a little cove where two different radii collide. */
+  margin: 0.75rem 1rem 0.75rem 0; /* flush against .description-pane; breathing room stays on the editor-pane side */
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.15);
+  background-color: rgba(148, 163, 184, 0.4);
+  /* A small, subtle two-ridge knurl mark, centered on the bar. Explicit
+     (non-repeating) stops so the pair is symmetric: 1px margin, 1px ridge,
+     2px gap, 1px ridge, 1px margin — a *repeating* gradient here would put
+     one ridge flush against the edge instead of centering the pair. */
+  background-image: linear-gradient(
+    to right,
+    transparent 0 1px,
+    rgba(255, 255, 255, 0.3) 1px 2px,
+    transparent 2px 4px,
+    rgba(255, 255, 255, 0.3) 4px 5px,
+    transparent 5px 6px
+  );
+  background-size: 6px 60px;
+  background-repeat: no-repeat;
+  background-position: center;
   cursor: col-resize;
   touch-action: none;
-  transition: background 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 .pane-resizer:hover,
 .pane-resizer.dragging {
-  background: var(--accent);
+  background-color: var(--accent);
+}
+
+.row-resizer {
+  flex: 0 0 6px;
+  align-self: stretch;
+  /* Inset left/right by #editor-host/.console-panel's own corner radius,
+     for the same reason as .pane-resizer's top/bottom inset. */
+  margin: 0 0.5rem;
+  border-radius: 999px;
+  background-color: rgba(148, 163, 184, 0.4);
+  /* A small, subtle two-ridge knurl mark, centered on the bar, running
+     horizontally — i.e. along this bar's own length, same as the vertical
+     bar's ridges run along its length. Explicit (non-repeating) stops so
+     the pair is symmetric: 1px margin, 1px ridge, 2px gap, 1px ridge,
+     1px margin. */
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0 1px,
+    rgba(255, 255, 255, 0.3) 1px 2px,
+    transparent 2px 4px,
+    rgba(255, 255, 255, 0.3) 4px 5px,
+    transparent 5px 6px
+  );
+  background-size: 60px 6px;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: row-resize;
+  touch-action: none;
+  transition: background-color 0.15s ease;
+}
+
+.row-resizer:hover,
+.row-resizer.dragging {
+  background-color: var(--accent);
 }
 
 .description-pane h3 {

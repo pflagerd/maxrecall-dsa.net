@@ -32,6 +32,9 @@ const resetSplitBtn = document.getElementById('reset-split-btn');
 const paneResizer = document.getElementById('pane-resizer');
 const descriptionPaneEl = document.querySelector('.description-pane');
 const editorPaneEl = document.querySelector('.editor-pane');
+const rowResizer = document.getElementById('row-resizer');
+const editorHostEl = document.getElementById('editor-host');
+const consolePanelEl = document.querySelector('.console-panel');
 
 // Drag-to-resize the description/editor split. Pointer capture keeps the
 // drag tracking even if the cursor moves off the thin resizer bar. The
@@ -112,6 +115,52 @@ paneResizer.addEventListener('pointerdown', (e) => {
 
   paneResizer.addEventListener('pointermove', onMove);
   paneResizer.addEventListener('pointerup', onUp);
+});
+
+// Drag-to-resize the editor/console split, same approach as the pane
+// resizer above but on the vertical axis. #editor-host defaults to flex: 1
+// (fills whatever's left) and .console-panel defaults to max-height: 35%
+// (CSS alone) until the first drag, at which point both switch to explicit
+// inline sizing driven by the pointer position.
+const MIN_EDITOR_HEIGHT = 180; // matches #editor-host's CSS min-height
+const MIN_CONSOLE_HEIGHT = 80;
+
+rowResizer.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  rowResizer.setPointerCapture(e.pointerId);
+  rowResizer.classList.add('dragging');
+  document.body.style.cursor = 'row-resize';
+  document.body.style.userSelect = 'none';
+
+  const editorTop = editorHostEl.getBoundingClientRect().top;
+  const consoleBottom = consolePanelEl.getBoundingClientRect().bottom;
+  const span = consoleBottom - editorTop;
+  // row-resizer height + the fixed-height console-toolbar between them,
+  // measured rather than hardcoded for the same reason as the pane resizer.
+  const fixedOverhead = span - editorHostEl.getBoundingClientRect().height - consolePanelEl.getBoundingClientRect().height;
+  const maxEditorHeight = span - fixedOverhead - MIN_CONSOLE_HEIGHT;
+
+  // Once a drag happens, .console-panel switches from its CSS max-height
+  // cap to filling whatever #editor-host doesn't take.
+  consolePanelEl.style.flex = '1 1 auto';
+  consolePanelEl.style.maxHeight = 'none';
+
+  function onMove(moveEvent) {
+    const newEditorHeight = Math.max(MIN_EDITOR_HEIGHT, Math.min(moveEvent.clientY - editorTop, maxEditorHeight));
+    editorHostEl.style.flex = `0 0 ${newEditorHeight}px`;
+  }
+
+  function onUp(upEvent) {
+    rowResizer.releasePointerCapture(upEvent.pointerId);
+    rowResizer.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    rowResizer.removeEventListener('pointermove', onMove);
+    rowResizer.removeEventListener('pointerup', onUp);
+  }
+
+  rowResizer.addEventListener('pointermove', onMove);
+  rowResizer.addEventListener('pointerup', onUp);
 });
 
 // Icon paths swapped on the same button depending on fullscreen state.
