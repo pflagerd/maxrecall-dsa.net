@@ -507,6 +507,13 @@ button.primary:hover {
   font-style: italic;
 }
 
+.learning-cta {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  color: var(--accent);
+}
+
 #console-stdout,
 #console-stderr {
   margin: 0;

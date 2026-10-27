@@ -216,10 +216,11 @@ function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
     tab.addEventListener('click', () => setActive(tab.dataset.tab));
   });
   setActive(defaultTab);
+  return setActive;
 }
 
 setupTabGroup('.console-tabs', consoleTabPanels, 'results');
-setupTabGroup('.description-tabs', descriptionTabPanels, 'applying');
+const setDescriptionTab = setupTabGroup('.description-tabs', descriptionTabPanels, 'applying');
 
 let problem = null;
 let editor = null;
@@ -450,9 +451,11 @@ function renderLanguageContent(language) {
   renderMath(constraintsEl);
 
   // Learning content is optional per problem — most don't have it yet, so
-  // fall back to the "Coming Soon!" placeholder already in the HTML.
+  // fall back to the "Coming Soon!" placeholder already in the HTML. The
+  // call-to-action is appended here (not per-problem content) so any future
+  // problem with learning content gets it automatically, with no duplication.
   if (problem.learning && problem.learning[language]) {
-    learningEl.innerHTML = problem.learning[language];
+    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <strong>Applying</strong> tab to try it yourself.</p>`;
     renderMath(learningEl);
   } else {
     learningEl.innerHTML = '<p class="coming-soon">Coming Soon!</p>';
@@ -659,6 +662,13 @@ async function init() {
 
   renderHeader();
   loadLanguage(pickInitialLanguage(problem));
+
+  // Default to the Learning tab on first load only, when it has real content
+  // for this language — switching languages afterward keeps whatever tab
+  // the user is already on rather than jumping back to Learning each time.
+  if (problem.learning && problem.learning[currentLanguage]) {
+    setDescriptionTab('learning');
+  }
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
