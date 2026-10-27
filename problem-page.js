@@ -7,6 +7,7 @@ const descriptionEl = document.getElementById('problem-description');
 const examplesEl = document.getElementById('problem-examples');
 const constraintsEl = document.getElementById('problem-constraints');
 const languageSelect = document.getElementById('language-select');
+const defaultLanguageSelect = document.getElementById('default-language-select');
 const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
 const skipBtn = document.getElementById('skip-btn');
@@ -131,6 +132,31 @@ let problem = null;
 let editor = null;
 let currentLanguage = null;
 
+// Default language used to open problems, remembered across problems/reloads
+// via localStorage. Changing either language dropdown updates this default
+// (not just the editor-toolbar one) — picking a language is "what I want to
+// use from now on", not just a one-off for the current problem.
+const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp'];
+const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
+
+function getStoredDefaultLanguage() {
+  let saved;
+  try {
+    saved = localStorage.getItem(DEFAULT_LANGUAGE_STORAGE_KEY);
+  } catch {
+    return 'javascript';
+  }
+  return KNOWN_LANGUAGES.includes(saved) ? saved : 'javascript';
+}
+
+function setStoredDefaultLanguage(language) {
+  try {
+    localStorage.setItem(DEFAULT_LANGUAGE_STORAGE_KEY, language);
+  } catch {
+    // Ignore (private browsing, storage disabled, etc.) — just won't persist.
+  }
+}
+
 // Browser-chrome shortcuts CodeMirror doesn't bind itself (Tab, Ctrl-Z/Y,
 // Ctrl-A are already in its default keymap and need no help). Bound to a
 // no-op so CodeMirror treats them as handled, which blocks the browser
@@ -184,6 +210,8 @@ function loadLanguage(language) {
     editor.setValue(code);
   }
   currentLanguage = language;
+  languageSelect.value = language;
+  defaultLanguageSelect.value = language;
   renderLanguageContent(language);
 }
 
@@ -211,19 +239,20 @@ function confirmDiscard() {
   });
 }
 
-async function handleLanguageChange() {
-  const newLanguage = languageSelect.value;
+async function handleLanguageChange(selectEl) {
+  const newLanguage = selectEl.value;
   if (newLanguage === currentLanguage) return;
 
   const isUnmodified = editor.getValue() === problem.starterCode[currentLanguage];
   if (!isUnmodified) {
     const discard = await confirmDiscard();
     if (!discard) {
-      languageSelect.value = currentLanguage;
+      selectEl.value = currentLanguage;
       return;
     }
   }
   loadLanguage(newLanguage);
+  setStoredDefaultLanguage(newLanguage);
 }
 
 function formatValue(v) {
@@ -302,9 +331,14 @@ async function init() {
   }
 
   renderHeader();
-  loadLanguage('javascript');
+  // A problem that doesn't have starter code for the stored default falls
+  // back to JavaScript for this load; the stored preference itself is left
+  // untouched so a later problem that does support it still honors it.
+  const preferred = getStoredDefaultLanguage();
+  loadLanguage(problem.starterCode[preferred] ? preferred : 'javascript');
 
-  languageSelect.addEventListener('change', handleLanguageChange);
+  languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
+  defaultLanguageSelect.addEventListener('change', () => handleLanguageChange(defaultLanguageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
   submitBtn.addEventListener('click', () => execute('submit', submitBtn));
   // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
