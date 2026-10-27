@@ -15,8 +15,13 @@ const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
 const consoleStdoutEl = document.getElementById('console-stdout');
 const consoleStderrEl = document.getElementById('console-stderr');
-const consoleTabs = document.querySelectorAll('.console-tab');
 const consoleTabPanels = { results: consoleResultsEl, stdout: consoleStdoutEl, stderr: consoleStderrEl };
+const descriptionTabPanels = {
+  learning: document.getElementById('tab-learning'),
+  applying: document.getElementById('tab-applying'),
+  submissions: document.getElementById('tab-submissions'),
+  insights: document.getElementById('tab-insights'),
+};
 const modalOverlay = document.getElementById('language-switch-modal');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 const modalDiscardBtn = document.getElementById('modal-discard-btn');
@@ -132,22 +137,32 @@ if (fullscreenBtn && document.documentElement.requestFullscreen) {
   fullscreenBtn.hidden = true; // Fullscreen API not supported in this browser.
 }
 
-// Console panel tabs: Results / stdout / stderr. Switching tabs only changes
-// which panel is visible — all three stay populated from the latest run.
-function setActiveConsoleTab(tabName) {
-  consoleTabs.forEach((tab) => {
-    const isActive = tab.dataset.tab === tabName;
-    tab.classList.toggle('active', isActive);
-    tab.setAttribute('aria-selected', String(isActive));
+// Generic tab-group wiring, shared by the console panel (Results/stdout/stderr)
+// and the description pane (Learning/Applying/Submissions/Insights). Switching
+// tabs only changes which panel is visible — every panel stays populated/alive
+// underneath, nothing is torn down or re-fetched on tab switch.
+function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
+  const tabs = document.querySelectorAll(`${tabsContainerSelector} .tab-button`);
+
+  function setActive(tabName) {
+    tabs.forEach((tab) => {
+      const isActive = tab.dataset.tab === tabName;
+      tab.classList.toggle('active', isActive);
+      tab.setAttribute('aria-selected', String(isActive));
+    });
+    Object.entries(panels).forEach(([name, panel]) => {
+      panel.hidden = name !== tabName;
+    });
+  }
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => setActive(tab.dataset.tab));
   });
-  Object.entries(consoleTabPanels).forEach(([name, panel]) => {
-    panel.hidden = name !== tabName;
-  });
+  setActive(defaultTab);
 }
 
-consoleTabs.forEach((tab) => {
-  tab.addEventListener('click', () => setActiveConsoleTab(tab.dataset.tab));
-});
+setupTabGroup('.console-tabs', consoleTabPanels, 'results');
+setupTabGroup('.description-tabs', descriptionTabPanels, 'applying');
 
 let problem = null;
 let editor = null;

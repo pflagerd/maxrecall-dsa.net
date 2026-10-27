@@ -358,14 +358,19 @@ button.primary:hover {
   margin-bottom: 0.5rem;
 }
 
-.console-tabs {
+.console-tabs,
+.description-tabs {
   display: flex;
   gap: 1rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.15);
   margin-bottom: 0.5rem;
 }
 
-.console-tab {
+.description-tabs {
+  margin-bottom: 1.25rem;
+}
+
+.tab-button {
   background: transparent;
   color: #94a3b8;
   border: none;
@@ -376,18 +381,23 @@ button.primary:hover {
   font-size: 0.85rem;
 }
 
-.console-tab:hover {
+.tab-button:hover {
   background: transparent;
   color: var(--text);
 }
 
-.console-tab.active {
+.tab-button.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
 
-.console-tab-panel[hidden] {
+.tab-panel[hidden] {
   display: none;
+}
+
+.coming-soon {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 #console-stdout,

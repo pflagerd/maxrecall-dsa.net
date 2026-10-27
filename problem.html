@@ -37,14 +37,35 @@
 
   <main class="problem-main">
     <section class="pane description-pane">
-      <div id="problem-tags" class="problem-tags"></div>
-      <div id="problem-description" class="problem-description"></div>
+      <div class="description-tabs" role="tablist">
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="learning">Learning</button>
+        <button class="tab-button active" type="button" role="tab" aria-selected="true" data-tab="applying">Applying</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="submissions">Submissions</button>
+        <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="insights">Insights</button>
+      </div>
 
-      <h3>Examples</h3>
-      <div id="problem-examples"></div>
+      <div id="tab-learning" class="tab-panel" role="tabpanel" hidden>
+        <p class="coming-soon">Coming Soon!</p>
+      </div>
 
-      <h3>Constraints</h3>
-      <ul id="problem-constraints"></ul>
+      <div id="tab-applying" class="tab-panel" role="tabpanel">
+        <div id="problem-tags" class="problem-tags"></div>
+        <div id="problem-description" class="problem-description"></div>
+
+        <h3>Examples</h3>
+        <div id="problem-examples"></div>
+
+        <h3>Constraints</h3>
+        <ul id="problem-constraints"></ul>
+      </div>
+
+      <div id="tab-submissions" class="tab-panel" role="tabpanel" hidden>
+        <p class="coming-soon">Coming Soon!</p>
+      </div>
+
+      <div id="tab-insights" class="tab-panel" role="tabpanel" hidden>
+        <p class="coming-soon">Coming Soon!</p>
+      </div>
     </section>
 
     <div id="pane-resizer" class="pane-resizer" role="separator" aria-orientation="vertical" aria-label="Resize panels"></div>
@@ -68,13 +89,13 @@
           <span id="console-status">Run your code to see results.</span>
         </div>
         <div class="console-tabs" role="tablist">
-          <button class="console-tab active" type="button" role="tab" aria-selected="true" data-tab="results">Results</button>
-          <button class="console-tab" type="button" role="tab" aria-selected="false" data-tab="stdout">stdout</button>
-          <button class="console-tab" type="button" role="tab" aria-selected="false" data-tab="stderr">stderr</button>
+          <button class="tab-button active" type="button" role="tab" aria-selected="true" data-tab="results">Results</button>
+          <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="stdout">stdout</button>
+          <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="stderr">stderr</button>
         </div>
-        <div id="console-results" class="console-tab-panel" role="tabpanel"></div>
-        <pre id="console-stdout" class="console-tab-panel" role="tabpanel" hidden></pre>
-        <pre id="console-stderr" class="console-tab-panel" role="tabpanel" hidden></pre>
+        <div id="console-results" class="tab-panel" role="tabpanel"></div>
+        <pre id="console-stdout" class="tab-panel" role="tabpanel" hidden></pre>
+        <pre id="console-stderr" class="tab-panel" role="tabpanel" hidden></pre>
       </div>
     </section>
   </main>
