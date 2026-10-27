@@ -17,3 +17,5 @@ Add tabs on the left pane too:  Problem | Editorial | Submissions (include run-t
 Display something that shows where spaces vs tabs are being used.
 
 Make the default left-right pane allocation be 35% 65%
+
+Add a hover for the problem's current language.
