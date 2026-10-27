@@ -1,1 +1,7 @@
-I'm working on software which takes the best from sites like leetcode, hackerrank.  The goal is to create something pedagogical rather than focused on the "problem".  I'm using Claude Code to help me write this in html/css/javascript.
+I'm working on software which takes the best from sites like leetcode, hackerrank.
+The goal is to create something pedagogical rather than focused on the "problem".
+I'm using Claude Code to help me write this in html/css/javascript.
+
+I want to decompose the learning into
+    1) Language syntax, built-in types, data structures and the operations allowed on them.
+    2) Details of types and data structures and algorithms operating on them (typically not directly supported by language) .

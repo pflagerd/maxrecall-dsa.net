@@ -7,7 +7,10 @@ const descriptionEl = document.getElementById('problem-description');
 const examplesEl = document.getElementById('problem-examples');
 const constraintsEl = document.getElementById('problem-constraints');
 const languageSelect = document.getElementById('language-select');
-const defaultLanguageSelect = document.getElementById('default-language-select');
+const languageFilterBtn = document.getElementById('language-filter-btn');
+const languageFilterMenu = document.getElementById('language-filter-menu');
+const languageCheckboxes = Array.from(languageFilterMenu.querySelectorAll('input[type="checkbox"]'));
+const languageFilterNames = Array.from(languageFilterMenu.querySelectorAll('.language-filter-name'));
 const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
 const skipBtn = document.getElementById('skip-btn');
@@ -226,6 +229,7 @@ let currentLanguage = null;
 // (not just the editor-toolbar one) — picking a language is "what I want to
 // use from now on", not just a one-off for the current problem.
 const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp'];
+const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++' };
 const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
 
 function getStoredDefaultLanguage() {
@@ -245,6 +249,157 @@ function setStoredDefaultLanguage(language) {
     // Ignore (private browsing, storage disabled, etc.) — just won't persist.
   }
 }
+
+// Which languages are offered at all (checkboxes in the header's language
+// filter menu), separate from which one is the default. Unchecking a
+// language here removes it as an option from language-select everywhere.
+const AVAILABLE_LANGUAGES_STORAGE_KEY = 'maxrecall-dsa:available-languages';
+
+function getAvailableLanguages() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(AVAILABLE_LANGUAGES_STORAGE_KEY));
+  } catch {
+    return new Set(KNOWN_LANGUAGES);
+  }
+  const filtered = Array.isArray(saved) ? saved.filter((l) => KNOWN_LANGUAGES.includes(l)) : [];
+  return new Set(filtered.length ? filtered : KNOWN_LANGUAGES);
+}
+
+function setAvailableLanguages(languageSet) {
+  try {
+    localStorage.setItem(AVAILABLE_LANGUAGES_STORAGE_KEY, JSON.stringify(Array.from(languageSet)));
+  } catch {
+    // Ignore (private browsing, storage disabled, etc.) — just won't persist.
+  }
+}
+
+// Rebuilds language-select's <option> list from the available set, keeping
+// the current selection if it's still available.
+function renderLanguageSelectOptions(available) {
+  const previousValue = languageSelect.value;
+  languageSelect.innerHTML = KNOWN_LANGUAGES.filter((l) => available.has(l))
+    .map((l) => `<option value="${l}">${LANGUAGE_LABELS[l]}</option>`)
+    .join('');
+  if (available.has(previousValue)) languageSelect.value = previousValue;
+}
+
+// Picks which language a problem should open with: the stored default if
+// it's both globally available and supported by this problem, otherwise the
+// first known language that satisfies both. The stored preference itself is
+// never touched here — a problem/availability mismatch is a one-off
+// fallback for this load, not a change to what the user actually wants.
+function pickInitialLanguage(problem) {
+  const preferred = getStoredDefaultLanguage();
+  const available = getAvailableLanguages();
+  const candidates = [preferred, ...KNOWN_LANGUAGES];
+  return candidates.find((l) => available.has(l) && problem.starterCode[l]) || KNOWN_LANGUAGES[0];
+}
+
+// A checkbox for the only remaining checked language can't be unchecked —
+// language-select must never end up with zero options.
+function updateCheckboxDisabledStates() {
+  const checkedCount = languageCheckboxes.filter((cb) => cb.checked).length;
+  languageCheckboxes.forEach((cb) => {
+    cb.disabled = checkedCount === 1 && cb.checked;
+  });
+}
+
+function closeLanguageFilterMenu() {
+  languageFilterMenu.hidden = true;
+  languageFilterBtn.setAttribute('aria-expanded', 'false');
+}
+
+// Marks whichever language name is the current default — independent of
+// the checkboxes, which only control availability.
+function updateDefaultLanguageHighlight() {
+  const defaultLanguage = getStoredDefaultLanguage();
+  languageFilterNames.forEach((el) => {
+    el.classList.toggle('is-default', el.dataset.lang === defaultLanguage);
+  });
+}
+
+languageFilterBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const isOpen = !languageFilterMenu.hidden;
+  if (isOpen) {
+    closeLanguageFilterMenu();
+  } else {
+    languageFilterMenu.hidden = false;
+    languageFilterBtn.setAttribute('aria-expanded', 'true');
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!languageFilterMenu.hidden && !e.target.closest('.language-filter')) closeLanguageFilterMenu();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !languageFilterMenu.hidden) closeLanguageFilterMenu();
+});
+
+languageCheckboxes.forEach((checkbox) => {
+  checkbox.addEventListener('change', async () => {
+    const lang = checkbox.dataset.lang;
+
+    // Unchecking the language currently active in the editor: switch to
+    // another available language this problem supports first (same
+    // discard-confirm as a normal language switch), or revert the checkbox
+    // if there's no such language, or if the user cancels discarding.
+    if (!checkbox.checked && problem && lang === currentLanguage) {
+      const fallback = KNOWN_LANGUAGES.find((l) =>
+        l !== lang
+        && problem.starterCode[l]
+        && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
+      );
+      if (!fallback || !(await switchLanguage(fallback))) {
+        checkbox.checked = true;
+        return;
+      }
+    }
+
+    const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => cb.dataset.lang));
+    setAvailableLanguages(available);
+    renderLanguageSelectOptions(available);
+    updateCheckboxDisabledStates();
+  });
+});
+
+// Clicking a language's name sets it as the default and switches the editor
+// to it (independent of its checkbox — clicking the checkbox only toggles
+// availability, never the default). Setting a language as default also
+// makes it available, since a default that isn't selectable in
+// language-select wouldn't make sense.
+languageFilterNames.forEach((nameEl) => {
+  nameEl.addEventListener('click', async () => {
+    const lang = nameEl.dataset.lang;
+    const checkbox = languageCheckboxes.find((cb) => cb.dataset.lang === lang);
+    const wasChecked = checkbox.checked;
+    checkbox.checked = true;
+
+    const switched = await switchLanguage(lang);
+    if (!switched) {
+      checkbox.checked = wasChecked;
+      return;
+    }
+
+    if (!wasChecked) {
+      const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => cb.dataset.lang));
+      setAvailableLanguages(available);
+      renderLanguageSelectOptions(available);
+      updateCheckboxDisabledStates();
+    }
+    closeLanguageFilterMenu();
+  });
+});
+
+(function initLanguageFilter() {
+  const available = getAvailableLanguages();
+  languageCheckboxes.forEach((cb) => { cb.checked = available.has(cb.dataset.lang); });
+  updateCheckboxDisabledStates();
+  renderLanguageSelectOptions(available);
+  updateDefaultLanguageHighlight();
+})();
 
 // Browser-chrome shortcuts CodeMirror doesn't bind itself (Tab, Ctrl-Z/Y,
 // Ctrl-A are already in its default keymap and need no help). Bound to a
@@ -300,7 +455,6 @@ function loadLanguage(language) {
   }
   currentLanguage = language;
   languageSelect.value = language;
-  defaultLanguageSelect.value = language;
   renderLanguageContent(language);
 }
 
@@ -328,20 +482,36 @@ function confirmDiscard() {
   });
 }
 
+// Switches the active editor language (with the same discard-confirm as
+// always) and persists it as the new default. Shared by language-select,
+// the language-filter menu's name-click, and its checkbox-uncheck fallback
+// — every path that changes "what language is this" goes through here, so
+// the discard-confirm and default-persisting logic only lives in one place.
+// Resolves true if the switch happened, false if the caller should revert
+// whatever UI control triggered it (user cancelled discarding).
+async function switchLanguage(newLanguage) {
+  if (!problem) {
+    setStoredDefaultLanguage(newLanguage);
+    updateDefaultLanguageHighlight();
+    return true;
+  }
+  if (newLanguage !== currentLanguage) {
+    const isUnmodified = editor.getValue() === problem.starterCode[currentLanguage];
+    if (!isUnmodified) {
+      const discard = await confirmDiscard();
+      if (!discard) return false;
+    }
+    loadLanguage(newLanguage);
+  }
+  setStoredDefaultLanguage(newLanguage);
+  updateDefaultLanguageHighlight();
+  return true;
+}
+
 async function handleLanguageChange(selectEl) {
   const newLanguage = selectEl.value;
-  if (newLanguage === currentLanguage) return;
-
-  const isUnmodified = editor.getValue() === problem.starterCode[currentLanguage];
-  if (!isUnmodified) {
-    const discard = await confirmDiscard();
-    if (!discard) {
-      selectEl.value = currentLanguage;
-      return;
-    }
-  }
-  loadLanguage(newLanguage);
-  setStoredDefaultLanguage(newLanguage);
+  const switched = await switchLanguage(newLanguage);
+  if (!switched) selectEl.value = currentLanguage;
 }
 
 function formatValue(v) {
@@ -436,14 +606,9 @@ async function init() {
   }
 
   renderHeader();
-  // A problem that doesn't have starter code for the stored default falls
-  // back to JavaScript for this load; the stored preference itself is left
-  // untouched so a later problem that does support it still honors it.
-  const preferred = getStoredDefaultLanguage();
-  loadLanguage(problem.starterCode[preferred] ? preferred : 'javascript');
+  loadLanguage(pickInitialLanguage(problem));
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
-  defaultLanguageSelect.addEventListener('change', () => handleLanguageChange(defaultLanguageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
   submitBtn.addEventListener('click', () => execute('submit', submitBtn));
   // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
