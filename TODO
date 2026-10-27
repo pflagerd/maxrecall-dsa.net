@@ -10,8 +10,8 @@ The harder the problem, the nearer down the list it goes.
 
 Implement Skip button logic.
 
-Put the console-tabs into a console-toolbar analogous to the editor-toolbar
-
 Display something that shows where spaces vs tabs are being used.
 
 Add a hover for the problem's current language.
+
+Add katex support
