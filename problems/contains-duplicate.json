@@ -27,16 +27,16 @@
   },
   "constraints": {
     "javascript": [
-      "1 <= nums.length <= 10^5",
-      "-10^9 <= nums[i] <= 10^9"
+      "$1 \\le \\texttt{nums.length} \\le 10^5$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$"
     ],
     "python": [
-      "1 <= len(nums) <= 10^5",
-      "-10^9 <= nums[i] <= 10^9"
+      "$1 \\le \\texttt{len(nums)} \\le 10^5$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$"
     ],
     "cpp": [
-      "1 <= nums.size() <= 10^5",
-      "-10^9 <= nums[i] <= 10^9"
+      "$1 \\le \\texttt{nums.size()} \\le 10^5$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$"
     ]
   },
   "functionName": {

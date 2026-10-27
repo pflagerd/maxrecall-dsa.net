@@ -35,17 +35,17 @@
     "javascript": [
       "Build the list using only the given SinglyLinkedListNode class.",
       "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
-      "The last node's <code>.next</code> pointer must be null."
+      "The last node's $\\texttt{.next}$ pointer must be null."
     ],
     "python": [
       "Build the list using only the given SinglyLinkedListNode class.",
       "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
-      "The last node's <code>.next</code> pointer must be None."
+      "The last node's $\\texttt{.next}$ pointer must be None."
     ],
     "cpp": [
       "Build the list using only the given SinglyLinkedListNode struct.",
       "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
-      "The last node's <code>.next</code> pointer must be nullptr."
+      "The last node's $\\texttt{.next}$ pointer must be nullptr."
     ]
   },
   "functionName": {

@@ -361,6 +361,10 @@ main.problem-main {
   margin-top: 1.5rem;
 }
 
+#problem-constraints li {
+  margin-bottom: 0.4rem;
+}
+
 .problem-tags {
   margin-bottom: 1rem;
 }

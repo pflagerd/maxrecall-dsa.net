@@ -27,19 +27,19 @@
   },
   "constraints": {
     "javascript": [
-      "2 <= nums.length <= 10^4",
-      "-10^9 <= nums[i] <= 10^9",
-      "nums contains at least two distinct values."
+      "$2 \\le \\texttt{nums.length} \\le 10^4$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$",
+      "$\\texttt{nums}$ contains at least two distinct values."
     ],
     "python": [
-      "2 <= len(nums) <= 10^4",
-      "-10^9 <= nums[i] <= 10^9",
-      "nums contains at least two distinct values."
+      "$2 \\le \\texttt{len(nums)} \\le 10^4$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$",
+      "$\\texttt{nums}$ contains at least two distinct values."
     ],
     "cpp": [
-      "2 <= nums.size() <= 10^4",
-      "-10^9 <= nums[i] <= 10^9",
-      "nums contains at least two distinct values."
+      "$2 \\le \\texttt{nums.size()} \\le 10^4$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$",
+      "$\\texttt{nums}$ contains at least two distinct values."
     ]
   },
   "functionName": {

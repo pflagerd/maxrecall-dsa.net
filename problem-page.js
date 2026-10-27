@@ -409,6 +409,17 @@ languageFilterNames.forEach((nameEl) => {
 const BLOCKED_KEYS = ['S', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'O', 'P', 'U', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const EXTRA_KEYS = Object.fromEntries(BLOCKED_KEYS.map((k) => [`Mod-${k}`, () => {}]));
 
+// Renders $...$ math (powers, inequalities, etc.) within an element's
+// existing content in place; throwOnError: false means a typo in the
+// source LaTeX degrades to showing the raw text instead of breaking the page.
+function renderMath(el) {
+  if (typeof renderMathInElement !== 'function') return;
+  renderMathInElement(el, {
+    delimiters: [{ left: '$', right: '$', display: false }],
+    throwOnError: false,
+  });
+}
+
 // Language-independent header: title, difficulty, tags. Rendered once.
 function renderHeader() {
   titleEl.textContent = problem.title;
@@ -434,7 +445,8 @@ function renderLanguageContent(language) {
     )
     .join('');
 
-  constraintsEl.innerHTML = (problem.constraints[language] || []).map((c) => `<li><code>${c}</code></li>`).join('');
+  constraintsEl.innerHTML = (problem.constraints[language] || []).map((c) => `<li>${c}</li>`).join('');
+  renderMath(constraintsEl);
 }
 
 // Loads a language's starter template into the editor, discarding whatever was there,

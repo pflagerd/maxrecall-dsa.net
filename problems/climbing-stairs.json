@@ -23,9 +23,9 @@
     ]
   },
   "constraints": {
-    "javascript": ["1 <= n <= 45"],
-    "python": ["1 <= n <= 45"],
-    "cpp": ["1 <= n <= 45"]
+    "javascript": ["$1 \\le n \\le 45$"],
+    "python": ["$1 \\le n \\le 45$"],
+    "cpp": ["$1 \\le n \\le 45$"]
   },
   "functionName": {
     "javascript": "climbStairs",

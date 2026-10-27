@@ -27,16 +27,16 @@
   },
   "constraints": {
     "javascript": [
-      "1 <= s.length <= 10^4",
-      "s consists only of parentheses characters '()[]{}'."
+      "$1 \\le \\texttt{s.length} \\le 10^4$",
+      "$s$ consists only of parentheses characters '()[]{}'."
     ],
     "python": [
-      "1 <= len(s) <= 10^4",
-      "s consists only of parentheses characters '()[]{}'."
+      "$1 \\le \\texttt{len(s)} \\le 10^4$",
+      "$s$ consists only of parentheses characters '()[]{}'."
     ],
     "cpp": [
-      "1 <= s.size() <= 10^4",
-      "s consists only of parentheses characters '()[]{}'."
+      "$1 \\le \\texttt{s.size()} \\le 10^4$",
+      "$s$ consists only of parentheses characters '()[]{}'."
     ]
   },
   "functionName": {
