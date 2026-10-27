@@ -5,7 +5,8 @@
   "tags": ["Linked List", "Singly Linked List"],
   "description": {
     "javascript": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>null</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",
-    "python": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>None</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>"
+    "python": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>None</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",
+    "cpp": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>nullptr</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> struct below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this struct, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>"
   },
   "examples": {
     "javascript": [
@@ -21,6 +22,13 @@
         "output": "Hello -> World! -> None",
         "explanation": "The list has two nodes: the first holds \"Hello\", the second holds \"World!\", and the second node's <code>.next</code> pointer is None."
       }
+    ],
+    "cpp": [
+      {
+        "input": "(no input)",
+        "output": "Hello -> World! -> nullptr",
+        "explanation": "The list has two nodes: the first holds \"Hello\", the second holds \"World!\", and the second node's <code>.next</code> pointer is nullptr."
+      }
     ]
   },
   "constraints": {
@@ -33,15 +41,29 @@
       "Build the list using only the given SinglyLinkedListNode class.",
       "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
       "The last node's <code>.next</code> pointer must be None."
+    ],
+    "cpp": [
+      "Build the list using only the given SinglyLinkedListNode struct.",
+      "The list must contain exactly 2 nodes, holding \"Hello\" and \"World!\" in that order.",
+      "The last node's <code>.next</code> pointer must be nullptr."
     ]
   },
   "functionName": {
     "javascript": "buildHelloWorldList",
-    "python": "build_hello_world_list"
+    "python": "build_hello_world_list",
+    "cpp": "buildHelloWorldList"
   },
   "starterCode": {
     "javascript": "/**\n * Definition for a singly linked list node.\n */\nclass SinglyLinkedListNode {\n    constructor(value, next = null) {\n        this.value = value;\n        this.next = next;\n    }\n}\n\n/**\n * Build a singly linked list containing each word of \"Hello World!\" in order.\n * @return {SinglyLinkedListNode} the head of the list\n */\nfunction buildHelloWorldList() {\n    \n}\n",
-    "python": "class SinglyLinkedListNode:\n    def __init__(self, value, next=None):\n        self.value = value\n        self.next = next\n\n\ndef build_hello_world_list():\n    pass\n"
+    "python": "class SinglyLinkedListNode:\n    def __init__(self, value, next=None):\n        self.value = value\n        self.next = next\n\n\ndef build_hello_world_list():\n    pass\n",
+    "cpp": "/**\n * Definition for a singly linked list node.\n * (The value is typed as string here, since this problem's words are strings.)\n */\nstruct SinglyLinkedListNode {\n    string value;\n    SinglyLinkedListNode* next;\n    SinglyLinkedListNode(string value, SinglyLinkedListNode* next = nullptr) : value(value), next(next) {}\n};\n\n/**\n * Build a singly linked list containing each word of \"Hello World!\" in order.\n * @return the head of the list\n */\nSinglyLinkedListNode* buildHelloWorldList() {\n    \n}\n"
+  },
+  "signature": {
+    "cpp": {
+      "params": [],
+      "returns": "SinglyLinkedListNode*",
+      "customSerializer": "JsonValue buildJson(SinglyLinkedListNode* node) {\n    if (!node) return JsonValue();\n    JsonValue obj = JsonValue::object();\n    obj[\"value\"] = buildJson(node->value);\n    obj[\"next\"] = buildJson(node->next);\n    return obj;\n}\n"
+    }
   },
   "testCases": [
     {
