@@ -22,15 +22,15 @@
         </button>
         <div id="language-filter-menu" class="language-filter-menu" role="menu" hidden>
           <div class="language-filter-row">
-            <input type="checkbox" data-lang="javascript" checked />
+            <input type="checkbox" data-lang="javascript" checked aria-label="JavaScript available" />
             <span class="language-filter-name" data-lang="javascript">JavaScript</span>
           </div>
           <div class="language-filter-row">
-            <input type="checkbox" data-lang="python" checked />
+            <input type="checkbox" data-lang="python" checked aria-label="Python available" />
             <span class="language-filter-name" data-lang="python">Python</span>
           </div>
           <div class="language-filter-row">
-            <input type="checkbox" data-lang="cpp" checked />
+            <input type="checkbox" data-lang="cpp" checked aria-label="C++ available" />
             <span class="language-filter-name" data-lang="cpp">C++</span>
           </div>
         </div>
@@ -89,7 +89,7 @@
 
     <section class="pane editor-pane">
       <div class="editor-toolbar">
-        <select id="language-select">
+        <select id="language-select" aria-label="Programming language">
           <option value="javascript">JavaScript</option>
           <option value="python">Python</option>
           <option value="cpp">C++</option>
