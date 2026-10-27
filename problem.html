@@ -84,16 +84,19 @@
 
       <div id="editor-host"></div>
 
-      <div class="console-panel">
-        <div class="console-header">
-          <span id="console-status">Run your code to see results.</span>
-        </div>
+      <div class="console-toolbar">
         <div class="console-tabs" role="tablist">
           <button class="tab-button active" type="button" role="tab" aria-selected="true" data-tab="results">Results</button>
           <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="stdout">stdout</button>
           <button class="tab-button" type="button" role="tab" aria-selected="false" data-tab="stderr">stderr</button>
         </div>
-        <div id="console-results" class="tab-panel" role="tabpanel"></div>
+      </div>
+
+      <div class="console-panel">
+        <div id="console-results" class="tab-panel" role="tabpanel">
+          <div id="console-status">Run your code to see results.</div>
+          <div id="console-results-list"></div>
+        </div>
         <pre id="console-stdout" class="tab-panel" role="tabpanel" hidden></pre>
         <pre id="console-stderr" class="tab-panel" role="tabpanel" hidden></pre>
       </div>

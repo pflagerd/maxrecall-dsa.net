@@ -13,6 +13,7 @@ const submitBtn = document.getElementById('submit-btn');
 const skipBtn = document.getElementById('skip-btn');
 const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
+const consoleResultsListEl = document.getElementById('console-results-list');
 const consoleStdoutEl = document.getElementById('console-stdout');
 const consoleStderrEl = document.getElementById('console-stderr');
 const consoleTabPanels = { results: consoleResultsEl, stdout: consoleStdoutEl, stderr: consoleStderrEl };
@@ -298,6 +299,16 @@ function formatValue(v) {
   return JSON.stringify(v);
 }
 
+// result.error/r.error come from the submission's own exception message (or
+// compiler stderr) — unlike other fields here, that's text the submission's
+// author controls, so it's escaped before going into innerHTML.
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function renderResults(result) {
   consoleStatusEl.textContent = `${result.status}${
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
@@ -309,11 +320,11 @@ function renderResults(result) {
   consoleStderrEl.textContent = result.stderr || '';
 
   if (result.error) {
-    consoleResultsEl.innerHTML = `<pre class="error-block">${result.error}</pre>`;
+    consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(result.error)}</pre>`;
     return;
   }
 
-  consoleResultsEl.innerHTML = (result.results || [])
+  consoleResultsListEl.innerHTML = (result.results || [])
     .map((r) => {
       if (r.hidden) {
         return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
@@ -326,7 +337,7 @@ function renderResults(result) {
         <span>Expected: <code>${formatValue(r.expected)}</code></span><br/>
         ${
           r.error
-            ? `<span>Error: <code>${r.error}</code></span>`
+            ? `<span>Error: <code>${escapeHtml(r.error)}</code></span>`
             : `<span>Actual: <code>${formatValue(r.actual)}</code></span>`
         }
       </div>`;
@@ -338,7 +349,7 @@ async function execute(endpoint, button) {
   button.disabled = true;
   consoleStatusEl.textContent = 'Running...';
   consoleStatusEl.className = '';
-  consoleResultsEl.innerHTML = '';
+  consoleResultsListEl.innerHTML = '';
   consoleStdoutEl.textContent = '';
   consoleStderrEl.textContent = '';
 
@@ -354,7 +365,7 @@ async function execute(endpoint, button) {
   } catch (err) {
     consoleStatusEl.textContent = 'Error';
     consoleStatusEl.className = 'status-fail';
-    consoleResultsEl.innerHTML = `<pre class="error-block">${err.message}</pre>`;
+    consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(err.message)}</pre>`;
   } finally {
     button.disabled = false;
   }
