@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaxRecall DSA — Project Facts</title>
+<!--
+  Self-contained on purpose: no external CSS/JS, so this opens straight from
+  disk (file://) without the server running. Keep it that way.
+-->
+<style>
+  :root {
+    --bg: #fdfdfc; --fg: #1d1d1f; --muted: #5f6368; --rule: #e2e2e0;
+    --code-bg: #f2f1ee; --accent: #2457c5; --warn-bg: #fff6e0; --warn-rule: #e0b84a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #18191b; --fg: #e6e6e6; --muted: #9aa0a6; --rule: #33353a;
+      --code-bg: #24262a; --accent: #8ab4f8; --warn-bg: #2d2717; --warn-rule: #8a6d1f;
+    }
+  }
+  body {
+    margin: 0 auto; padding: 24px 16px 64px; max-width: 860px;
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { margin-bottom: 0; }
+  h2 { margin-top: 2.2em; padding-bottom: .2em; border-bottom: 1px solid var(--rule); }
+  h3 { margin-top: 1.6em; }
+  .sub { color: var(--muted); margin-top: .3em; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: .9em; }
+  code { background: var(--code-bg); padding: .1em .3em; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 12px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--rule); }
+  th { white-space: nowrap; }
+  .note { background: var(--warn-bg); border-left: 4px solid var(--warn-rule); padding: 10px 14px; border-radius: 4px; }
+  .src { color: var(--muted); font-size: .85em; }
+  nav ol { columns: 2; column-gap: 32px; }
+  @media (max-width: 600px) { nav ol { columns: 1; } }
+</style>
+</head>
+<body>
+
+<h1>MaxRecall DSA — Project Facts</h1>
+<p class="sub">What this project is and how it fits together, as currently built.
+Last updated: 2026-10-28.</p>
+
+<nav>
+<ol>
+  <li><a href="#purpose">Purpose</a></li>
+  <li><a href="#run">Running it</a></li>
+  <li><a href="#layout">Repository layout</a></li>
+  <li><a href="#api">HTTP API</a></li>
+  <li><a href="#questions">Problem file format</a></li>
+  <li><a href="#judge">Judging</a></li>
+  <li><a href="#frontend">Front end</a></li>
+  <li><a href="#state">Where data lives</a></li>
+  <li><a href="#envs">Environments</a></li>
+  <li><a href="#gaps">Known gaps &amp; caveats</a></li>
+  <li><a href="#decisions">Decisions &amp; plans</a></li>
+  <li><a href="#maintaining">Maintaining this file</a></li>
+</ol>
+</nav>
+
+<h2 id="purpose">1. Purpose</h2>
+<p>A learning-first practice system for data structures and algorithms, taking the
+best from sites like LeetCode and HackerRank but focused on teaching rather than
+testing: a learner should get direct instruction (the <em>Learning</em> tab) before
+being asked to solve something. It is meant to grow into a multi-user, web-hosted
+system. <span class="src">Source: <code>THOUGHTS</code>, <code>TODO</code>.</span></p>
+
+<h2 id="run">2. Running it</h2>
+<table>
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>make install</code></td><td>Runs <code>npm install</code> if <code>node_modules</code> is older than <code>package.json</code>.</td></tr>
+  <tr><td><code>make run</code></td><td>Starts the server: <code>PORT=3000 node server.js</code>. Override the port with <code>make run PORT=8080</code>.</td></tr>
+  <tr><td><code>make dev</code></td><td>Same, but under <code>nodemon</code>, which restarts the server whenever a source file changes.</td></tr>
+  <tr><td><code>make clean</code></td><td>Deletes <code>node_modules</code>.</td></tr>
+</table>
+<p>Then open <code>http://localhost:3000/</code>. There is no compile step for the
+front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</code>,
+<code>package.json</code>.</span></p>
+<p>Make variables given on the command line (<code>PORT=8080</code>) override the
+<code>PORT ?= 3000</code> default — see the
+<a href="https://www.gnu.org/software/make/manual/html_node/Overriding.html">GNU Make manual, “Overriding Variables”</a>.</p>
+
+<h2 id="layout">3. Repository layout</h2>
+<table>
+  <tr><th>Path</th><th>Role</th></tr>
+  <tr><td><code>server.js</code></td><td>Express server: problem API, run/submit endpoints, serves the front-end files.</td></tr>
+  <tr><td><code>judge/runner.js</code></td><td>Builds a harness around submitted code, runs it in a child process, compares results.</td></tr>
+  <tr><td><code>judge/cpp/judge_json.{hpp,cpp}</code></td><td>JSON parser/serializer linked into C++ submissions. Compiled once to <code>judge_json.o</code> (gitignored) at server start.</td></tr>
+  <tr><td><code>judge/java/JudgeJson.java</code></td><td>Same role for Java. Compiled to <code>JudgeJson.class</code> (gitignored) at server start.</td></tr>
+  <tr><td><code>questions/*.json</code></td><td>One file per problem. Every <code>.json</code> here is listed automatically.</td></tr>
+  <tr><td><code>index.html</code>, <code>problems-list.js</code></td><td>Problem list page.</td></tr>
+  <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: description/learning tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
+  <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
+  <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
+  <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
+  <tr><td><code>readme.html</code></td><td>This file.</td></tr>
+</table>
+
+<h2 id="api">4. HTTP API</h2>
+<table>
+  <tr><th>Method &amp; path</th><th>Behaviour</th></tr>
+  <tr><td><code>GET /api/problems</code></td><td>List of <code>{slug, title, difficulty, tags}</code>, sorted by title.</td></tr>
+  <tr><td><code>GET /api/problems/:slug</code></td><td>The problem with hidden test cases removed: <code>visibleTestCases</code> plus a <code>hiddenCount</code>.</td></tr>
+  <tr><td><code>POST /api/problems/:slug/run</code></td><td>Body <code>{language, code}</code>. Judges against <em>visible</em> test cases only.</td></tr>
+  <tr><td><code>POST /api/problems/:slug/submit</code></td><td>Same body. Judges against <em>all</em> test cases, hidden included.</td></tr>
+  <tr><td><code>GET /&lt;file&gt;</code></td><td>Only the files in the <code>STATIC_FILES</code> list are served; anything else falls back to <code>index.html</code>.</td></tr>
+</table>
+<p class="src">Source: <code>server.js</code>.</p>
+
+<h2 id="questions">5. Problem file format (<code>questions/&lt;slug&gt;.json</code>)</h2>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>slug</code></td><td>URL id; should match the file name.</td></tr>
+  <tr><td><code>title</code>, <code>difficulty</code>, <code>tags</code></td><td>Shown in the list. <code>difficulty</code> is <code>Easy</code>/<code>Medium</code>/<code>Hard</code>.</td></tr>
+  <tr><td><code>judgeMode</code></td><td><code>"function"</code> (default if absent) or <code>"program"</code>. See <a href="#judge">Judging</a>.</td></tr>
+  <tr><td><code>learning</code></td><td>Optional. Per-language HTML for the Learning tab.</td></tr>
+  <tr><td><code>description</code>, <code>examples</code>, <code>constraints</code></td><td>Per-language (an object keyed by language), since wording differs between languages.</td></tr>
+  <tr><td><code>starterCode</code></td><td>Per-language starting code. A language missing here is rejected for this problem.</td></tr>
+  <tr><td><code>functionName</code></td><td>Function mode only. Per-language name of the function to call (e.g. <code>two_sum</code> in Python).</td></tr>
+  <tr><td><code>signature</code></td><td>Function mode, <code>cpp</code>/<code>java</code>/<code>d</code> only: <code>{params: [...], returns}</code> types, needed to generate a harness that compiles.</td></tr>
+  <tr><td><code>testCases</code></td><td>Function mode: <code>{args: [...], expected, hidden}</code>. Program mode: <code>{input: "stdin text", expected: "stdout text", hidden}</code>.</td></tr>
+</table>
+<p>Language keys: <code>javascript</code>, <code>python</code>, <code>cpp</code>,
+<code>java</code>, <code>d</code>. HTML in <code>description</code> can contain
+<code>&lt;button class="tab-ref-link" data-tab="learning"&gt;</code> to link to another
+tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/two-sum.json</code>,
+<code>questions/hello-world.json</code>, <code>server.js</code>.</span></p>
+
+<h2 id="judge">6. Judging</h2>
+<h3>Modes</h3>
+<ul>
+  <li><strong>function</strong>: the learner writes one function. The runner wraps it in
+  generated boilerplate that calls it once per test case inside one process, then
+  compares return values to <code>expected</code> with a deep-equality check.</li>
+  <li><strong>program</strong>: the learner writes a whole program that reads stdin and
+  writes stdout. Each test case is a separate process. Output is compared after
+  trimming leading/trailing whitespace.</li>
+</ul>
+<h3>Languages, toolchains and limits</h3>
+<table>
+  <tr><th>Language</th><th>Toolchain invoked</th><th>Memory cap</th><th>How the cap is applied</th></tr>
+  <tr><td>JavaScript</td><td><code>node</code></td><td>128 MB</td><td><code>--max-old-space-size</code> (V8 heap only)</td></tr>
+  <tr><td>Python</td><td><code>python3</code></td><td>256 MB</td><td><code>RLIMIT_AS</code> via <code>resource.setrlimit</code> or <code>ulimit -v</code></td></tr>
+  <tr><td>C++</td><td><code>g++ -std=c++17 -O2</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
+  <tr><td>Java</td><td><code>javac</code> / <code>java</code></td><td>256 MB</td><td><code>-Xmx</code> (heap only)</td></tr>
+  <tr><td>D</td><td><code>dmd</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
+</table>
+<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s.
+Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
+separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.
+<span class="src">Source: <code>judge/runner.js</code> (constants at the top,
+<code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>).</span></p>
+
+<h2 id="frontend">7. Front end</h2>
+<ul>
+  <li>Editor: <a href="https://codemirror.net/5/">CodeMirror 5.65.16</a>; math:
+  <a href="https://katex.org/">KaTeX 0.16.9</a>. Both are loaded from cdnjs, so the
+  problem page needs internet access to render properly.</li>
+  <li>The browser keeps each language's code and console output in memory while you
+  switch languages on one page. A reload loses them.</li>
+  <li>Preferences are kept in the browser's <code>localStorage</code> under these keys:
+  <code>maxrecall-dsa:description-pane-width</code>,
+  <code>maxrecall-dsa:default-language</code>,
+  <code>maxrecall-dsa:available-languages</code>.</li>
+  <li>The Skip button is a placeholder that only shows an alert.</li>
+</ul>
+<p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>.</p>
+
+<h2 id="state">8. Where data lives</h2>
+<p><strong>The server stores nothing about users or submissions yet.</strong> Run and
+Submit results exist only in the open browser tab. The only persistent state is the
+browser preferences above, and those belong to one browser on one machine.</p>
+<p>The planned first step is per-user results under a <code>users/</code> directory.
+See <a href="#decisions">Decisions &amp; plans</a>.</p>
+
+<h2 id="envs">9. Environments</h2>
+<p>Development happens in two places. Git is the only thing they share: push before
+switching, pull after.</p>
+<table>
+  <tr><th></th><th>Claude Code cloud session</th><th>Kubuntu 26.04 / WebStorm</th></tr>
+  <tr><td>Lifetime</td><td>Temporary container; unpushed work is lost when it's reclaimed</td><td>Persistent</td></tr>
+  <tr><td>Branch</td><td>A <code>claude/…</code> branch per session</td><td>Whatever you check out</td></tr>
+  <tr><td>Node</td><td>22.22.0</td><td><em>fill in</em></td></tr>
+  <tr><td>g++</td><td>13.3.0</td><td><em>fill in</em></td></tr>
+  <tr><td>Python</td><td>3.13.17</td><td><em>fill in</em></td></tr>
+  <tr><td>Java</td><td>installed (version not recorded)</td><td><em>fill in</em></td></tr>
+  <tr><td>D (<code>dmd</code>)</td><td><strong>not installed</strong>, so D submissions fail</td><td><em>fill in</em></td></tr>
+</table>
+<p>To fill in the Kubuntu column, run each of these and note the version:</p>
+<pre><code>node --version; g++ --version | head -1; python3 --version; java -version; dmd --version | head -1</code></pre>
+<p class="src">Cloud versions checked 2026-10-28. Docs for the cloud environment:
+<a href="https://code.claude.com/docs/en/claude-code-on-the-web">Claude Code on the web</a>.</p>
+
+<h2 id="gaps">10. Known gaps &amp; caveats</h2>
+<div class="note">
+<p><strong>Submitted code is not sandboxed.</strong> It runs as the same OS user as the
+server, with only time and memory limits. It can read and write files and reach the
+network. That's acceptable on your own machine, but it has to be solved (for example
+with containers or seccomp/namespaces) before this is hosted for other people.
+<span class="src">Source: <code>spawnJudged</code> in <code>judge/runner.js</code>.</span></p>
+</div>
+<ul>
+  <li>The path check in <code>loadProblem</code> (<code>server.js</code>) uses
+  <code>file.startsWith(QUESTIONS_DIR)</code> with no trailing separator. My guess is
+  that a crafted slug could reach a sibling directory whose name starts with
+  <code>questions</code>. This hasn't been tested; low risk today.</li>
+  <li><code>package-lock.json</code> is gitignored, so the cloud and Kubuntu can
+  install different dependency versions.
+  <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json">npm's docs</a>
+  say it's meant to be committed.</li>
+  <li>There are no automated tests yet.</li>
+  <li>No D compiler in the cloud environment (see <a href="#envs">Environments</a>).</li>
+</ul>
+
+<h2 id="decisions">11. Decisions &amp; plans</h2>
+<table>
+  <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>
+  <tr><td>2026-10-28</td><td><strong>In planning, not decided:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. Open questions: email vs opaque id as the directory name; whether <code>users/</code> is committed to git; whether to store submitted code; whether to record Run as well as Submit.</td></tr>
+</table>
+<p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
+
+<h2 id="maintaining">12. Maintaining this file</h2>
+<p>This page only helps if it's kept true. Update it in the <strong>same commit</strong>
+as the change that makes it out of date. That includes:</p>
+<ul>
+  <li>adding, removing or renaming a file or directory → <a href="#layout">Layout</a>;</li>
+  <li>adding or changing an endpoint → <a href="#api">API</a>;</li>
+  <li>a new or changed field in problem files → <a href="#questions">Problem file format</a>;</li>
+  <li>a new language, toolchain, limit or judging rule → <a href="#judge">Judging</a>;</li>
+  <li>a new <code>localStorage</code> key, CDN library or page → <a href="#frontend">Front end</a>;</li>
+  <li>anything stored on disk or in a database → <a href="#state">Where data lives</a>;</li>
+  <li>a toolchain installed or upgraded on either machine → <a href="#envs">Environments</a>;</li>
+  <li>a gap fixed or found → <a href="#gaps">Known gaps</a>;</li>
+  <li>a design decision made, or a plan started or finished → <a href="#decisions">Decisions &amp; plans</a>.</li>
+</ul>
+<p>Conventions:</p>
+<ul>
+  <li>State only what the code actually does. Where a fact comes from code, name the file
+  in a <span class="src">Source:</span> line so it can be checked.</li>
+  <li>Mark anything unverified as a guess.</li>
+  <li>Bump “Last updated” at the top.</li>
+  <li>Keep the page self-contained: no external CSS, JS or fonts.</li>
+</ul>
+
+</body>
+</html>

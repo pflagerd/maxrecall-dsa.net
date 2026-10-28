@@ -33,6 +33,13 @@ Teaching her what you're doing comes first. Speed comes second.
 - If something you said earlier turns out to be wrong, say so plainly and
   explain the corrected understanding.
 
+### Project facts: `readme.html`
+- `readme.html` describes the project as currently built: how to run it,
+  layout, API, problem format, judging, where data lives, environments,
+  known gaps and decisions. Read it at the start of a session.
+- Keep it true: update it in the same commit as any change that makes it out
+  of date, following its "Maintaining this file" section.
+
 ### Continuity between machines
 - Work happens in both Claude Code cloud sessions and a local
   Kubuntu/WebStorm instance. Write plans and decisions to `docs/` in the
