@@ -219,6 +219,12 @@ function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
 setupTabGroup('.console-tabs', consoleTabPanels, 'results');
 const setDescriptionTab = setupTabGroup('.description-tabs', descriptionTabPanels, 'applying');
 
+// Delegated (not attached per-render) since the Learning tab's content,
+// including this link, is replaced wholesale on every language switch.
+learningEl.addEventListener('click', (e) => {
+  if (e.target.closest('.learning-cta-link')) setDescriptionTab('applying');
+});
+
 let problem = null;
 let editor = null;
 let currentLanguage = null;
@@ -464,7 +470,7 @@ function renderLanguageContent(language) {
   // call-to-action is appended here (not per-problem content) so any future
   // problem with learning content gets it automatically, with no duplication.
   if (problem.learning && problem.learning[language]) {
-    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <strong>Applying</strong> tab to try it yourself.</p>`;
+    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <button type="button" class="learning-cta-link">Applying</button> tab to try it yourself.</p>`;
     renderMath(learningEl);
   } else {
     learningEl.innerHTML = '<p class="coming-soon">Coming Soon!</p>';

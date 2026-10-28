@@ -514,6 +514,25 @@ button.primary:hover {
   color: var(--accent);
 }
 
+.learning-cta-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.learning-cta-link:hover,
+.learning-cta-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
 #console-stdout,
 #console-stderr {
   margin: 0;
