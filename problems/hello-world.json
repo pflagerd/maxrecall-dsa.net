@@ -6,7 +6,7 @@
   "learning": {
     "javascript": "<p>In JavaScript, you print text using <code>console.log()</code>:</p><div class=\"example\"><pre>console.log(\"Hello World!\");</pre></div><p>This writes the text to the console, followed by a newline. It's the most common way to produce output you can see while developing or debugging.</p>",
     "python": "<p>In Python, you print text using the built-in <code>print()</code> function:</p><div class=\"example\"><pre>print(\"Hello World!\")</pre></div><p>Python adds a newline after the text automatically.</p>",
-    "cpp": "<p>In C++, you print text using <code>cout</code> together with the <code>&lt;&lt;</code> stream insertion operator (both come from the <code>&lt;iostream&gt;</code> header, already available in this judge):</p><div class=\"example\"><pre>cout &lt;&lt; \"Hello World!\" &lt;&lt; endl;</pre></div><p><code>endl</code> inserts a newline and flushes the output stream.</p>"
+    "cpp": "<p>In C++, you print text using <code>std::cout</code> together with the <code>&lt;&lt;</code> stream insertion operator (both come from the <code>&lt;iostream&gt;</code> header, already available in this judge):</p><div class=\"example\"><pre>std::cout &lt;&lt; \"Hello World!\" &lt;&lt; std::endl;</pre></div><p><code>std::endl</code> inserts a newline and flushes the output stream.</p>"
   },
   "description": {
     "javascript": "<p>Return the string <code>\"Hello World!\"</code> from the function below.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for how to actually <em>print</em> it, which is the more traditional version of this exercise.</p>",

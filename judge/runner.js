@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -19,7 +19,25 @@ const MAX_CAPTURED_OUTPUT = 200_000;
 // occurrence of this marker is the user's stdout, everything after is ours.
 const RESULT_MARKER = '###JUDGE_RESULT###';
 
-const CPP_JSON_HELPER = fs.readFileSync(path.join(__dirname, 'cpp', 'judge_json.hpp'), 'utf8');
+const CPP_DIR = path.join(__dirname, 'cpp');
+const CPP_JSON_HELPER = fs.readFileSync(path.join(CPP_DIR, 'judge_json.hpp'), 'utf8');
+const CPP_JSON_OBJECT = path.join(CPP_DIR, 'judge_json.o');
+
+// judge_json.cpp rarely changes, so its compiled form is built once (here,
+// at module load) and linked into every submission, rather than recompiled
+// from source on every single Run/Submit — that was the dominant cost in
+// C++ judging time (the submission's own code is typically tiny next to
+// ~250 lines of JSON parser/serializer). Rebuilt automatically whenever the
+// source is newer than the cached object file, so there's no separate
+// build step to remember after an edit to judge_json.cpp.
+function ensureCppJsonObjectBuilt() {
+  const sourceFile = path.join(CPP_DIR, 'judge_json.cpp');
+  const sourceMtime = fs.statSync(sourceFile).mtimeMs;
+  const objectMtime = fs.existsSync(CPP_JSON_OBJECT) ? fs.statSync(CPP_JSON_OBJECT).mtimeMs : 0;
+  if (objectMtime > sourceMtime) return;
+  execFileSync('g++', ['-std=c++17', '-O2', '-c', sourceFile, '-o', CPP_JSON_OBJECT]);
+}
+ensureCppJsonObjectBuilt();
 
 // Maps a C++ parameter type (as written in a problem's signature.cpp.params)
 // to the judge_json.hpp helper that extracts it from a JsonValue.
@@ -143,7 +161,7 @@ int main() {
 // trivial test cases, especially for templates).
 function compileCpp(sourceFile, binaryFile) {
   return new Promise((resolve) => {
-    const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile], {
+    const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile, CPP_JSON_OBJECT], {
       timeout: CPP_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
