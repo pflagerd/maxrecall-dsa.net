@@ -7,7 +7,7 @@ const { runSubmission } = require('./judge/runner');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
-const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java'];
+const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 
 app.use(express.json());
 

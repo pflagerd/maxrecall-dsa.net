@@ -14,6 +14,10 @@ const CPP_COMPILE_TIMEOUT_MS = 10000;
 // the Python interpreter's own footprint eats into RLIMIT_AS.
 const JAVA_MEMORY_MB = 256;
 const JAVA_COMPILE_TIMEOUT_MS = 10000;
+// D compiles to a native binary like C++, with no JVM-style baseline
+// overhead, so it gets the same cap as C++.
+const D_MEMORY_MB = 128;
+const D_COMPILE_TIMEOUT_MS = 10000;
 // Caps how much stdout/stderr get buffered, both to bound this server's own
 // memory if a submission spams output and to keep the response payload sane.
 const MAX_CAPTURED_OUTPUT = 200_000;
@@ -76,6 +80,17 @@ const JAVA_PARAM_EXTRACTORS = {
   boolean: 'asBoolean',
   String: 'asString',
   'int[]': 'asIntArray',
+};
+
+// Maps a D parameter type (as written in a problem's signature.d.params) to
+// the harness's own __judge_extract* helper (defined inline in
+// buildDSource — D's std.json is part of Phobos, so there's no need for a
+// precompiled JSON helper like judge_json.cpp/JudgeJson.java).
+const D_PARAM_EXTRACTORS = {
+  int: '__judge_extractInt',
+  bool: '__judge_extractBool',
+  string: '__judge_extractString',
+  'int[]': '__judge_extractIntArray',
 };
 
 // Harness code appended after the user's submitted function definition.
@@ -245,6 +260,73 @@ ${signature.customSerializer || ''}
 `;
 }
 
+// D is statically typed like C++, and (like C++, via `auto`) resolves the
+// overloaded __judge_toJson by the submission's actual declared return
+// type, so signature.returns isn't functionally needed here — it's kept in
+// each problem's signature.d purely for schema consistency with the other
+// compiled languages.
+function buildDSource(userCode, functionName, signature) {
+  const params = signature.params || [];
+  const argExprs = params
+    .map((type, i) => {
+      const extractor = D_PARAM_EXTRACTORS[type];
+      if (!extractor) throw new Error(`Unsupported D param type: ${type}`);
+      return `${extractor}(__judge_args[${i}])`;
+    })
+    .join(', ');
+
+  return `import std.json;
+import std.stdio;
+import std.algorithm;
+import std.array;
+import std.container;
+import std.conv;
+import std.math;
+import std.range;
+import std.string;
+import std.typecons;
+
+${userCode}
+
+JSONValue __judge_toJson(int v) { return JSONValue(v); }
+JSONValue __judge_toJson(bool v) { return JSONValue(v); }
+JSONValue __judge_toJson(string v) { return JSONValue(v); }
+JSONValue __judge_toJson(int[] v) {
+    JSONValue[] __judge_arr;
+    foreach (__judge_x; v) __judge_arr ~= __judge_toJson(__judge_x);
+    return JSONValue(__judge_arr);
+}
+${signature.customSerializer || ''}
+int __judge_extractInt(JSONValue v) { return cast(int) v.integer; }
+bool __judge_extractBool(JSONValue v) { return v.boolean; }
+string __judge_extractString(JSONValue v) { return v.str; }
+int[] __judge_extractIntArray(JSONValue v) {
+    int[] __judge_result;
+    foreach (__judge_x; v.array) __judge_result ~= cast(int) __judge_x.integer;
+    return __judge_result;
+}
+
+void main() {
+    string __judge_input;
+    foreach (__judge_line; stdin.byLineCopy) __judge_input ~= __judge_line ~ "\\n";
+    JSONValue __judge_cases = parseJSON(__judge_input);
+    JSONValue[] __judge_results;
+    foreach (__judge_case; __judge_cases.array) {
+        JSONValue __judge_args = __judge_case["args"];
+        JSONValue __judge_entry;
+        try {
+            auto __judge_result = ${functionName}(${argExprs});
+            __judge_entry = JSONValue(["actual": __judge_toJson(__judge_result)]);
+        } catch (Throwable __judge_err) {
+            __judge_entry = JSONValue(["error": __judge_toJson(__judge_err.msg)]);
+        }
+        __judge_results ~= __judge_entry;
+    }
+    write("\\n${RESULT_MARKER}\\n" ~ JSONValue(__judge_results).toString());
+}
+`;
+}
+
 // Compiles a .cpp file to a binary with its own timeout, separate from the
 // run timeout below (compilation can legitimately take longer than running
 // trivial test cases, especially for templates).
@@ -278,6 +360,33 @@ function compileJava(sourceFile, outDir) {
   return new Promise((resolve) => {
     const child = spawn('javac', ['-cp', JAVA_DIR, '-d', outDir, sourceFile], {
       timeout: JAVA_COMPILE_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
+
+    let stderr = '';
+    let timedOut = false;
+
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
+    child.on('error', (err) => {
+      resolve({ success: false, stderr: String(err.message || err), timedOut });
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
+      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+    });
+  });
+}
+
+// Compiles main.d to a binary in its own tmpDir (given its own directory,
+// like Java, so the stray .o object file dmd leaves alongside -of lands
+// somewhere that gets cleaned up automatically rather than littering the
+// system tmp dir).
+function compileD(sourceFile, binaryFile, outDir) {
+  return new Promise((resolve) => {
+    const child = spawn('dmd', [`-of=${binaryFile}`, `-od=${outDir}`, sourceFile], {
+      timeout: D_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
 
@@ -364,8 +473,9 @@ function spawnJudged(command, args, stdinPayload) {
 
 // Runs `code` (in `language`) against `testCases` for `functionName`.
 // Comparison against `expected` happens here, outside the sandboxed process.
-// `signature` is only used by compiled/statically-typed languages (cpp) that
-// need to know argument/return types to generate a harness that compiles.
+// `signature` is only used by compiled/statically-typed languages (cpp,
+// java, d) that need to know argument/return types to generate a harness
+// that compiles.
 async function runSubmission({ language, code, functionName, testCases, signature }) {
   const id = crypto.randomUUID();
   const started = Date.now();
@@ -399,6 +509,12 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     tmpDir = path.join(os.tmpdir(), `judge-${id}`);
     fs.mkdirSync(tmpDir);
     tmpFile = path.join(tmpDir, 'Main.java');
+  } else if (language === 'd') {
+    source = buildDSource(code, functionName, signature || {});
+    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
+    fs.mkdirSync(tmpDir);
+    tmpFile = path.join(tmpDir, 'main.d');
+    tmpBinary = path.join(tmpDir, 'main');
   } else {
     throw new Error(`Unsupported language: ${language}`);
   }
@@ -406,10 +522,12 @@ async function runSubmission({ language, code, functionName, testCases, signatur
   fs.writeFileSync(tmpFile, source);
 
   try {
-    if (language === 'cpp' || language === 'java') {
+    if (language === 'cpp' || language === 'java' || language === 'd') {
       const compileResult = language === 'cpp'
         ? await compileCpp(tmpFile, tmpBinary)
-        : await compileJava(tmpFile, tmpDir);
+        : language === 'java'
+          ? await compileJava(tmpFile, tmpDir)
+          : await compileD(tmpFile, tmpBinary, tmpDir);
       if (!compileResult.success) {
         const errorText = (compileResult.timedOut
           ? 'Compilation timed out.'
@@ -426,11 +544,12 @@ async function runSubmission({ language, code, functionName, testCases, signatur
           results: buildFailureResults(testCases, errorText),
         };
       }
-      if (language === 'cpp') {
+      if (language === 'cpp' || language === 'd') {
         // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
         // way the Python harness caps its own interpreter via resource.setrlimit.
+        const memoryMb = language === 'cpp' ? CPP_MEMORY_MB : D_MEMORY_MB;
         command = 'bash';
-        args = ['-c', `ulimit -v ${CPP_MEMORY_MB * 1024}; exec "$0"`, tmpBinary];
+        args = ['-c', `ulimit -v ${memoryMb * 1024}; exec "$0"`, tmpBinary];
       } else {
         command = 'java';
         args = [`-Xmx${JAVA_MEMORY_MB}m`, '-cp', `${tmpDir}${path.delimiter}${JAVA_DIR}`, 'Main'];
