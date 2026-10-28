@@ -32,14 +32,17 @@ function listProblems() {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// Strip expected answers/inputs for hidden test cases before sending to the client.
+// Strip expected answers/inputs for hidden test cases before sending to the
+// client. Test case shape depends on judgeMode (args/expected for
+// "function", input/expected for "program"), so this strips just `hidden`
+// rather than picking specific fields.
 function toPublicProblem(problem) {
   const { testCases, ...rest } = problem;
   return {
     ...rest,
     visibleTestCases: testCases
       .filter((tc) => !tc.hidden)
-      .map((tc) => ({ args: tc.args, expected: tc.expected })),
+      .map(({ hidden, ...tc }) => tc),
     hiddenCount: testCases.filter((tc) => tc.hidden).length,
   };
 }
@@ -68,16 +71,17 @@ async function handleExecution(req, res, { onlyVisible }) {
     return res.status(400).json({ error: 'code is required' });
   }
 
-  const functionName = problem.functionName[language];
-  if (!functionName) {
+  if (!problem.starterCode[language]) {
     return res.status(400).json({ error: `This problem doesn't support ${language}.` });
   }
 
+  const judgeMode = problem.judgeMode || 'function';
+  const functionName = judgeMode === 'function' ? problem.functionName[language] : undefined;
   const testCases = onlyVisible ? problem.testCases.filter((tc) => !tc.hidden) : problem.testCases;
   const signature = problem.signature && problem.signature[language];
 
   try {
-    const result = await runSubmission({ language, code, functionName, testCases, signature });
+    const result = await runSubmission({ language, code, functionName, testCases, signature, judgeMode });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Execution failed' });

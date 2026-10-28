@@ -414,12 +414,12 @@ function compileD(sourceFile, binaryFile, outDir) {
 // depend on which input was used), so it's attached even if the first case
 // happens to be hidden; input itself still follows the usual hidden-case
 // privacy rule.
-function buildFailureResults(testCases, errorText) {
+function buildFailureResults(testCases, errorText, getInput = (tc) => tc.args) {
   return testCases.map((tc, index) => {
     if (index !== 0) return { index, hidden: tc.hidden, passed: false };
     return tc.hidden
       ? { index, hidden: true, passed: false, error: errorText }
-      : { index, hidden: false, passed: false, input: tc.args, error: errorText };
+      : { index, hidden: false, passed: false, input: getInput(tc), error: errorText };
   });
 }
 
@@ -471,12 +471,14 @@ function spawnJudged(command, args, stdinPayload) {
   });
 }
 
-// Runs `code` (in `language`) against `testCases` for `functionName`.
-// Comparison against `expected` happens here, outside the sandboxed process.
-// `signature` is only used by compiled/statically-typed languages (cpp,
-// java, d) that need to know argument/return types to generate a harness
-// that compiles.
-async function runSubmission({ language, code, functionName, testCases, signature }) {
+// Runs `code` (in `language`) against `testCases` for `functionName`, under
+// "function" judging: the submission defines just the one function, which
+// the harness wraps with boilerplate that calls it once per test case
+// inside a single process. Comparison against `expected` happens here,
+// outside the sandboxed process. `signature` is only used by
+// compiled/statically-typed languages (cpp, java, d) that need to know
+// argument/return types to generate a harness that compiles.
+async function runFunctionSubmission({ language, code, functionName, testCases, signature }) {
   const id = crypto.randomUUID();
   const started = Date.now();
 
@@ -636,6 +638,156 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     else fs.unlink(tmpFile, () => {});
     if (tmpBinary) fs.unlink(tmpBinary, () => {});
   }
+}
+
+// Runs `code` as a complete, self-contained program ("program" judging):
+// no boilerplate is injected, so the submission is itself the whole source
+// file, responsible for reading any input it needs from stdin and writing
+// its answer to stdout. Each test case is its own process invocation —
+// unlike function judging's single run covering every case — since a
+// program's own entry point only runs through once per invocation. Output
+// is compared to `expected` after trimming leading/trailing whitespace,
+// the same tolerance most line-based full-program judges use, so a
+// trailing newline from println/cout/writeln doesn't cause a false Wrong
+// Answer.
+async function runProgramSubmission({ language, code, testCases }) {
+  const id = crypto.randomUUID();
+  const started = Date.now();
+
+  let command;
+  let args;
+  let tmpFile;
+  let tmpBinary;
+  let tmpDir;
+
+  if (language === 'javascript') {
+    tmpFile = path.join(os.tmpdir(), `judge-${id}.js`);
+    command = 'node';
+    args = [`--max-old-space-size=${NODE_MEMORY_MB}`, tmpFile];
+  } else if (language === 'python') {
+    tmpFile = path.join(os.tmpdir(), `judge-${id}.py`);
+    // Unlike function judging, there's no injected wrapper to set the
+    // memory cap via resource.setrlimit, so it's applied the same way as
+    // the compiled languages instead: wrapping the interpreter in ulimit.
+    command = 'bash';
+    args = ['-c', `ulimit -v ${PYTHON_MEMORY_MB * 1024}; exec python3 "$0"`, tmpFile];
+  } else if (language === 'cpp') {
+    tmpFile = path.join(os.tmpdir(), `judge-${id}.cpp`);
+    tmpBinary = path.join(os.tmpdir(), `judge-${id}`);
+  } else if (language === 'java') {
+    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
+    fs.mkdirSync(tmpDir);
+    // Program judging gives the submission full control of its own class,
+    // so (unlike function judging's generated Main) the submission must
+    // define `public class Main` itself.
+    tmpFile = path.join(tmpDir, 'Main.java');
+  } else if (language === 'd') {
+    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
+    fs.mkdirSync(tmpDir);
+    tmpFile = path.join(tmpDir, 'main.d');
+    tmpBinary = path.join(tmpDir, 'main');
+  } else {
+    throw new Error(`Unsupported language: ${language}`);
+  }
+
+  fs.writeFileSync(tmpFile, code);
+
+  try {
+    if (language === 'cpp' || language === 'java' || language === 'd') {
+      const compileResult = language === 'cpp'
+        ? await compileCpp(tmpFile, tmpBinary)
+        : language === 'java'
+          ? await compileJava(tmpFile, tmpDir)
+          : await compileD(tmpFile, tmpBinary, tmpDir);
+      if (!compileResult.success) {
+        const errorText = (compileResult.timedOut
+          ? 'Compilation timed out.'
+          : compileResult.stderr || 'Compilation failed.'
+        ).slice(0, 2000);
+        return {
+          status: 'Compile Error',
+          passed: 0,
+          total: testCases.length,
+          runtimeMs: Date.now() - started,
+          error: errorText,
+          stdout: '',
+          stderr: compileResult.stderr,
+          results: buildFailureResults(testCases, errorText, (tc) => tc.input),
+        };
+      }
+      if (language === 'cpp' || language === 'd') {
+        const memoryMb = language === 'cpp' ? CPP_MEMORY_MB : D_MEMORY_MB;
+        command = 'bash';
+        args = ['-c', `ulimit -v ${memoryMb * 1024}; exec "$0"`, tmpBinary];
+      } else {
+        command = 'java';
+        args = [`-Xmx${JAVA_MEMORY_MB}m`, '-cp', tmpDir, 'Main'];
+      }
+    }
+
+    let passedCount = 0;
+    let anyTimedOut = false;
+    let anyCrashed = false;
+    const results = [];
+
+    for (let index = 0; index < testCases.length; index++) {
+      const tc = testCases[index];
+      const outcome = await spawnJudged(command, args, tc.input || '');
+
+      if (outcome.timedOut) {
+        anyTimedOut = true;
+        results.push(tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.input, error: 'Time limit exceeded.' });
+        continue;
+      }
+      if (outcome.exitCode !== 0) {
+        anyCrashed = true;
+        const errorText = (outcome.stderr || 'The program exited with an error.').slice(0, 2000);
+        results.push(tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.input, expected: tc.expected, error: errorText });
+        continue;
+      }
+
+      const actual = outcome.stdout.trim();
+      const expected = String(tc.expected).trim();
+      const passed = actual === expected;
+      if (passed) passedCount += 1;
+      results.push(tc.hidden
+        ? { index, hidden: true, passed }
+        : { index, hidden: false, passed, input: tc.input, expected: tc.expected, actual });
+    }
+
+    let status;
+    if (passedCount === testCases.length) status = 'Accepted';
+    else if (anyTimedOut) status = 'Time Limit Exceeded';
+    else if (anyCrashed) status = 'Runtime Error';
+    else status = 'Wrong Answer';
+
+    return {
+      status,
+      passed: passedCount,
+      total: testCases.length,
+      runtimeMs: Date.now() - started,
+      stdout: '',
+      stderr: '',
+      results,
+    };
+  } finally {
+    if (tmpDir) fs.rm(tmpDir, { recursive: true, force: true }, () => {});
+    else fs.unlink(tmpFile, () => {});
+    if (tmpBinary) fs.unlink(tmpBinary, () => {});
+  }
+}
+
+// Dispatches to function or program judging. judgeMode defaults to
+// 'function' so existing problems (which predate this option, and so have
+// no judgeMode field at all) keep behaving exactly as before.
+function runSubmission({ language, code, functionName, testCases, signature, judgeMode }) {
+  return judgeMode === 'program'
+    ? runProgramSubmission({ language, code, testCases })
+    : runFunctionSubmission({ language, code, functionName, testCases, signature });
 }
 
 module.exports = { runSubmission };
