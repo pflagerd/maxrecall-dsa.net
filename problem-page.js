@@ -27,9 +27,6 @@ const descriptionTabPanels = {
   submissions: document.getElementById('tab-submissions'),
   insights: document.getElementById('tab-insights'),
 };
-const modalOverlay = document.getElementById('language-switch-modal');
-const modalCancelBtn = document.getElementById('modal-cancel-btn');
-const modalDiscardBtn = document.getElementById('modal-discard-btn');
 const fullscreenBtn = document.getElementById('fullscreen-btn');
 const fullscreenIcon = document.getElementById('fullscreen-icon');
 const resetSplitBtn = document.getElementById('reset-split-btn');
@@ -226,6 +223,19 @@ let problem = null;
 let editor = null;
 let currentLanguage = null;
 
+// Code the user has typed for each language on this problem, so switching
+// away and back doesn't lose it. In-memory only (scoped to this page load,
+// same as `problem`/`currentLanguage`) — a fresh page load for this
+// problem starts from starterCode again, same as before this existed.
+const codeByLanguage = {};
+
+// Last Run/Submit outcome shown for each language, so switching away and
+// back restores it too instead of clearing the console. Either
+// { kind: 'result', data } (a judge result, same shape renderResults takes)
+// or { kind: 'error', message } (a client-side failure — network/parse
+// error — before any judge result came back).
+const consoleStateByLanguage = {};
+
 // Default language used to open problems, remembered across problems/reloads
 // via localStorage. Changing either language dropdown updates this default
 // (not just the editor-toolbar one) — picking a language is "what I want to
@@ -345,9 +355,8 @@ languageCheckboxes.forEach((checkbox) => {
     const lang = checkbox.dataset.lang;
 
     // Unchecking the language currently active in the editor: switch to
-    // another available language this problem supports first (same
-    // discard-confirm as a normal language switch), or revert the checkbox
-    // if there's no such language, or if the user cancels discarding.
+    // another available language this problem supports first, or revert
+    // the checkbox if there's no such language to fall back to.
     if (!checkbox.checked && problem && lang === currentLanguage) {
       const fallback = KNOWN_LANGUAGES.find((l) =>
         l !== lang
@@ -462,10 +471,12 @@ function renderLanguageContent(language) {
   }
 }
 
-// Loads a language's starter template into the editor, discarding whatever was there,
-// and swaps the description/examples/constraints to match.
-// Results/stdout/stderr belong to whatever code was last run — once the
-// language (and so the code in the editor) changes, they're stale.
+// Loads a language's code into the editor — whatever the user last had
+// there (see codeByLanguage), or its starter template on first visit — and
+// swaps the description/examples/constraints to match.
+// Results/stdout/stderr are restored the same way (see
+// consoleStateByLanguage/restoreConsoleState) rather than cleared, so
+// switching languages and back shows exactly what was there before.
 function clearConsoleOutput() {
   consoleStatusEl.textContent = 'Run your code to see results.';
   consoleStatusEl.className = '';
@@ -474,8 +485,18 @@ function clearConsoleOutput() {
   consoleStderrEl.textContent = '';
 }
 
+// Restores whatever Run/Submit outcome was last shown for `language`
+// (see consoleStateByLanguage), or shows the "nothing run yet" state if
+// there isn't one.
+function restoreConsoleState(language) {
+  const state = consoleStateByLanguage[language];
+  if (!state) clearConsoleOutput();
+  else if (state.kind === 'error') renderClientError(state.message);
+  else renderResults(state.data);
+}
+
 function loadLanguage(language) {
-  const code = problem.starterCode[language] ?? '';
+  const code = codeByLanguage[language] ?? problem.starterCode[language] ?? '';
 
   if (!editor) {
     editor = CodeMirror(document.getElementById('editor-host'), {
@@ -492,40 +513,15 @@ function loadLanguage(language) {
   languageSelect.value = language;
   languageSelect.title = `Current language: ${LANGUAGE_LABELS[language]}`;
   renderLanguageContent(language);
-  clearConsoleOutput();
+  restoreConsoleState(language);
 }
 
-// Shows the discard-changes modal and resolves true/false with the user's choice.
-function confirmDiscard() {
-  return new Promise((resolve) => {
-    function settle(discard) {
-      modalOverlay.classList.add('hidden');
-      modalCancelBtn.removeEventListener('click', onCancel);
-      modalDiscardBtn.removeEventListener('click', onDiscardClick);
-      modalOverlay.removeEventListener('click', onOverlayClick);
-      document.removeEventListener('keydown', onKeydown);
-      resolve(discard);
-    }
-    function onCancel() { settle(false); }
-    function onDiscardClick() { settle(true); }
-    function onOverlayClick(e) { if (e.target === modalOverlay) settle(false); }
-    function onKeydown(e) { if (e.key === 'Escape') settle(false); }
-
-    modalCancelBtn.addEventListener('click', onCancel);
-    modalDiscardBtn.addEventListener('click', onDiscardClick);
-    modalOverlay.addEventListener('click', onOverlayClick);
-    document.addEventListener('keydown', onKeydown);
-    modalOverlay.classList.remove('hidden');
-  });
-}
-
-// Switches the active editor language (with the same discard-confirm as
-// always) and persists it as the new default. Shared by language-select,
-// the language-filter menu's name-click, and its checkbox-uncheck fallback
-// — every path that changes "what language is this" goes through here, so
-// the discard-confirm and default-persisting logic only lives in one place.
-// Resolves true if the switch happened, false if the caller should revert
-// whatever UI control triggered it (user cancelled discarding).
+// Switches the active editor language, saving whatever's in the editor for
+// the language being left (into codeByLanguage, so switching back restores
+// it) before loading the new one, and persists the new language as the
+// default. Shared by language-select, the language-filter menu's
+// name-click, and its checkbox-uncheck fallback — every path that changes
+// "what language is this" goes through here.
 async function switchLanguage(newLanguage) {
   if (!problem) {
     setStoredDefaultLanguage(newLanguage);
@@ -533,11 +529,7 @@ async function switchLanguage(newLanguage) {
     return true;
   }
   if (newLanguage !== currentLanguage) {
-    const isUnmodified = editor.getValue() === problem.starterCode[currentLanguage];
-    if (!isUnmodified) {
-      const discard = await confirmDiscard();
-      if (!discard) return false;
-    }
+    codeByLanguage[currentLanguage] = editor.getValue();
     loadLanguage(newLanguage);
   }
   setStoredDefaultLanguage(newLanguage);
@@ -619,6 +611,15 @@ function renderResults(result) {
   consoleResultsListEl.innerHTML = results.map((r) => renderTestCase(r)).join('');
 }
 
+// A client-side failure (network/parse error) before any judge result came
+// back — distinct from a judge result that itself reports an error (e.g.
+// Compile Error), which renderResults already handles.
+function renderClientError(message) {
+  consoleStatusEl.textContent = 'Error';
+  consoleStatusEl.className = 'status-fail';
+  consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(message)}</pre>`;
+}
+
 async function execute(endpoint, button) {
   button.disabled = true;
   consoleStatusEl.textContent = 'Running...';
@@ -636,10 +637,10 @@ async function execute(endpoint, button) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderResults(data);
+    consoleStateByLanguage[currentLanguage] = { kind: 'result', data };
   } catch (err) {
-    consoleStatusEl.textContent = 'Error';
-    consoleStatusEl.className = 'status-fail';
-    consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(err.message)}</pre>`;
+    renderClientError(err.message);
+    consoleStateByLanguage[currentLanguage] = { kind: 'error', message: err.message };
   } finally {
     button.disabled = false;
   }
