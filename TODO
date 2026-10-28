@@ -13,5 +13,30 @@ Implement Skip button logic.
 Display something that shows where spaces vs tabs are being used.
 
 Well, we kind of need both.  The focus of this system is teaching/learning rather than just testing.  The fundamental notion is that it is unfair to expect a learner know how to do something without having been given direct
- instruction beforehand.  I want students to come away able not only to code solutions to questions - definitely an "implement a function" focus - but also with the ability to write and run their own little programs.  Not
-  sure how we'd pull this off, but I think we need a way to do either - depending on the learning goals.
+ instruction beforehand.  I want students to come away able not only to code solutions to questions - definitely an "implement a function" focus - but also with the ability to write and run their own little programs.  Depending on the learning goals.
+
+Going to want to support multiple users.  Save their session results data in users/XYZ eventually (where XYZ is their userid).  For now store my data in users/daniel.pflager@gmail.com
+
+
+for second-largest-number.json:
+
+10
+5 5 5 5 5 5 5 5 5 6
+
+4
+57 57 -57 57
+
+5
+2 3 6 6 5
+
+10
+6 6 6 6 6 6 6 6 6 5
+
+5
+-7 -7 -7 -7 -6
+
+3
+50 100 50
+
+
+Variant of two-sum that can fit in an array.
