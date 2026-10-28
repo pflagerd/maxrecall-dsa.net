@@ -6,7 +6,8 @@
   "description": {
     "javascript": "<p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input has <strong>exactly one solution</strong>, and you may not use the same element twice.</p><p>You can return the answer in any order.</p>",
     "python": "<p>Given a list of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input has <strong>exactly one solution</strong>, and you may not use the same element twice.</p><p>You can return the answer in any order.</p>",
-    "cpp": "<p>Given a vector of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input has <strong>exactly one solution</strong>, and you may not use the same element twice.</p><p>You can return the answer in any order.</p>"
+    "cpp": "<p>Given a vector of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input has <strong>exactly one solution</strong>, and you may not use the same element twice.</p><p>You can return the answer in any order.</p>",
+    "java": "<p>Given an array of integers <code>nums</code> and an integer <code>target</code>, return indices of the two numbers such that they add up to <code>target</code>.</p><p>You may assume that each input has <strong>exactly one solution</strong>, and you may not use the same element twice.</p><p>You can return the answer in any order.</p>"
   },
   "examples": {
     "javascript": [
@@ -23,6 +24,11 @@
       { "input": "nums = {2,7,11,15}, target = 9", "output": "{0,1}", "explanation": "Because nums[0] + nums[1] == 9, we return {0, 1}." },
       { "input": "nums = {3,2,4}, target = 6", "output": "{1,2}" },
       { "input": "nums = {3,3}, target = 6", "output": "{0,1}" }
+    ],
+    "java": [
+      { "input": "nums = [2,7,11,15], target = 9", "output": "[0,1]", "explanation": "Because nums[0] + nums[1] == 9, we return [0, 1]." },
+      { "input": "nums = [3,2,4], target = 6", "output": "[1,2]" },
+      { "input": "nums = [3,3], target = 6", "output": "[0,1]" }
     ]
   },
   "constraints": {
@@ -43,20 +49,29 @@
       "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$",
       "$-10^9 \\le \\texttt{target} \\le 10^9$",
       "Only one valid answer exists."
+    ],
+    "java": [
+      "$2 \\le \\texttt{nums.length} \\le 10^4$",
+      "$-10^9 \\le \\texttt{nums[i]} \\le 10^9$",
+      "$-10^9 \\le \\texttt{target} \\le 10^9$",
+      "Only one valid answer exists."
     ]
   },
   "functionName": {
     "javascript": "twoSum",
     "python": "two_sum",
-    "cpp": "twoSum"
+    "cpp": "twoSum",
+    "java": "twoSum"
   },
   "starterCode": {
     "javascript": "/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nfunction twoSum(nums, target) {\n    \n}\n",
     "python": "def two_sum(nums, target):\n    pass\n",
-    "cpp": "vector<int> twoSum(vector<int> nums, int target) {\n    \n}\n"
+    "cpp": "vector<int> twoSum(vector<int> nums, int target) {\n    \n}\n",
+    "java": "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}\n"
   },
   "signature": {
-    "cpp": { "params": ["vector<int>", "int"], "returns": "vector<int>" }
+    "cpp": { "params": ["vector<int>", "int"], "returns": "vector<int>" },
+    "java": { "params": ["int[]", "int"], "returns": "int[]" }
   },
   "testCases": [
     { "args": [[2, 7, 11, 15], 9], "expected": [0, 1], "hidden": false },

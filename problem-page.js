@@ -230,8 +230,8 @@ let currentLanguage = null;
 // via localStorage. Changing either language dropdown updates this default
 // (not just the editor-toolbar one) — picking a language is "what I want to
 // use from now on", not just a one-off for the current problem.
-const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp'];
-const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++' };
+const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java'];
+const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java' };
 const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
 
 function getStoredDefaultLanguage() {

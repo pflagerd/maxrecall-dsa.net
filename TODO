@@ -17,3 +17,7 @@ Add a hover for the problem's current language.
 Well, we kind of need both.  The focus of this system is teaching/learning rather than just testing.  The fundamental notion is that it is unfair to expect a learner know how to do something without having been given direct
  instruction beforehand.  I want students to come away able not only to code solutions to questions - definitely an "implement a function" focus - but also with the ability to write and run their own little programs.  Not
   sure how we'd pull this off, but I think we need a way to do either - depending on the learning goals.  Let's hold off on a complete answer for now.
+
+Some judges use simple line-separated anonymous values to communicate with the program under test.  I'm thinking we should allow this as an option.  i.e. can specify in question.json which style of judge we're using: function only or full program
+
+In the case of full program, the user will have to be able to read input if input is required (although for a full-program hello world, no input would be required).

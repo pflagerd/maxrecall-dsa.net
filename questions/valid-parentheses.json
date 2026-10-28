@@ -6,7 +6,8 @@
   "description": {
     "javascript": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>",
     "python": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>",
-    "cpp": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>"
+    "cpp": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>",
+    "java": "<p>Given a string <code>s</code> containing just the characters <code>'('</code>, <code>')'</code>, <code>'{'</code>, <code>'}'</code>, <code>'['</code> and <code>']'</code>, determine if the input string is valid.</p><p>An input string is valid if:</p><ul><li>Open brackets must be closed by the same type of bracket.</li><li>Open brackets must be closed in the correct order.</li><li>Every close bracket has a corresponding open bracket of the same type.</li></ul>"
   },
   "examples": {
     "javascript": [
@@ -20,6 +21,11 @@
       { "input": "s = \"(]\"", "output": "False" }
     ],
     "cpp": [
+      { "input": "s = \"()\"", "output": "true" },
+      { "input": "s = \"()[]{}\"", "output": "true" },
+      { "input": "s = \"(]\"", "output": "false" }
+    ],
+    "java": [
       { "input": "s = \"()\"", "output": "true" },
       { "input": "s = \"()[]{}\"", "output": "true" },
       { "input": "s = \"(]\"", "output": "false" }
@@ -37,20 +43,27 @@
     "cpp": [
       "$1 \\le \\texttt{s.size()} \\le 10^4$",
       "$s$ consists only of parentheses characters '()[]{}'."
+    ],
+    "java": [
+      "$1 \\le \\texttt{s.length()} \\le 10^4$",
+      "$s$ consists only of parentheses characters '()[]{}'."
     ]
   },
   "functionName": {
     "javascript": "isValid",
     "python": "is_valid",
-    "cpp": "isValid"
+    "cpp": "isValid",
+    "java": "isValid"
   },
   "starterCode": {
     "javascript": "/**\n * @param {string} s\n * @return {boolean}\n */\nfunction isValid(s) {\n    \n}\n",
     "python": "def is_valid(s):\n    pass\n",
-    "cpp": "bool isValid(string s) {\n    \n}\n"
+    "cpp": "bool isValid(string s) {\n    \n}\n",
+    "java": "class Solution {\n    public boolean isValid(String s) {\n        \n    }\n}\n"
   },
   "signature": {
-    "cpp": { "params": ["string"], "returns": "bool" }
+    "cpp": { "params": ["string"], "returns": "bool" },
+    "java": { "params": ["String"], "returns": "boolean" }
   },
   "testCases": [
     { "args": ["()"], "expected": true, "hidden": false },

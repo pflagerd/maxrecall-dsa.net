@@ -6,7 +6,8 @@
   "description": {
     "javascript": "<p>You are given an array <code>prices</code> where <code>prices[i]</code> is the price of a given stock on the <code>i</code>th day.</p><p>You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return <code>0</code>.</p>",
     "python": "<p>You are given a list <code>prices</code> where <code>prices[i]</code> is the price of a given stock on the <code>i</code>th day.</p><p>You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return <code>0</code>.</p>",
-    "cpp": "<p>You are given a vector <code>prices</code> where <code>prices[i]</code> is the price of a given stock on the <code>i</code>th day.</p><p>You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return <code>0</code>.</p>"
+    "cpp": "<p>You are given a vector <code>prices</code> where <code>prices[i]</code> is the price of a given stock on the <code>i</code>th day.</p><p>You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return <code>0</code>.</p>",
+    "java": "<p>You are given an array <code>prices</code> where <code>prices[i]</code> is the price of a given stock on the <code>i</code>th day.</p><p>You want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock. Return the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return <code>0</code>.</p>"
   },
   "examples": {
     "javascript": [
@@ -20,6 +21,10 @@
     "cpp": [
       { "input": "prices = {7,1,5,3,6,4}", "output": "5", "explanation": "Buy on day 2 (price = 1) and sell on day 5 (price = 6), profit = 6-1 = 5." },
       { "input": "prices = {7,6,4,3,1}", "output": "0", "explanation": "No transactions are done and the max profit is 0." }
+    ],
+    "java": [
+      { "input": "prices = [7,1,5,3,6,4]", "output": "5", "explanation": "Buy on day 2 (price = 1) and sell on day 5 (price = 6), profit = 6-1 = 5." },
+      { "input": "prices = [7,6,4,3,1]", "output": "0", "explanation": "No transactions are done and the max profit is 0." }
     ]
   },
   "constraints": {
@@ -34,20 +39,27 @@
     "cpp": [
       "$1 \\le \\texttt{prices.size()} \\le 10^5$",
       "$0 \\le \\texttt{prices[i]} \\le 10^4$"
+    ],
+    "java": [
+      "$1 \\le \\texttt{prices.length} \\le 10^5$",
+      "$0 \\le \\texttt{prices[i]} \\le 10^4$"
     ]
   },
   "functionName": {
     "javascript": "maxProfit",
     "python": "max_profit",
-    "cpp": "maxProfit"
+    "cpp": "maxProfit",
+    "java": "maxProfit"
   },
   "starterCode": {
     "javascript": "/**\n * @param {number[]} prices\n * @return {number}\n */\nfunction maxProfit(prices) {\n    \n}\n",
     "python": "def max_profit(prices):\n    pass\n",
-    "cpp": "int maxProfit(vector<int> prices) {\n    \n}\n"
+    "cpp": "int maxProfit(vector<int> prices) {\n    \n}\n",
+    "java": "class Solution {\n    public int maxProfit(int[] prices) {\n        \n    }\n}\n"
   },
   "signature": {
-    "cpp": { "params": ["vector<int>"], "returns": "int" }
+    "cpp": { "params": ["vector<int>"], "returns": "int" },
+    "java": { "params": ["int[]"], "returns": "int" }
   },
   "testCases": [
     { "args": [[7, 1, 5, 3, 6, 4]], "expected": 5, "hidden": false },

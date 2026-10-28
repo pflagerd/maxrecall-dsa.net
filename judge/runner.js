@@ -9,6 +9,11 @@ const NODE_MEMORY_MB = 128;
 const PYTHON_MEMORY_MB = 256;
 const CPP_MEMORY_MB = 128;
 const CPP_COMPILE_TIMEOUT_MS = 10000;
+// Higher than the other languages' caps to absorb the JVM's own baseline
+// overhead (class loading, JIT, etc.), which eats into -Xmx the same way
+// the Python interpreter's own footprint eats into RLIMIT_AS.
+const JAVA_MEMORY_MB = 256;
+const JAVA_COMPILE_TIMEOUT_MS = 10000;
 // Caps how much stdout/stderr get buffered, both to bound this server's own
 // memory if a submission spams output and to keep the response payload sane.
 const MAX_CAPTURED_OUTPUT = 200_000;
@@ -39,6 +44,22 @@ function ensureCppJsonObjectBuilt() {
 }
 ensureCppJsonObjectBuilt();
 
+const JAVA_DIR = path.join(__dirname, 'java');
+
+// JudgeJson.java rarely changes, so it's compiled once (here, at module
+// load) into JudgeJson.class and put on both javac's and java's classpath
+// for every submission, rather than recompiled from source on every single
+// Run/Submit — the same role ensureCppJsonObjectBuilt() plays for C++.
+function ensureJudgeJsonClassBuilt() {
+  const sourceFile = path.join(JAVA_DIR, 'JudgeJson.java');
+  const classFile = path.join(JAVA_DIR, 'JudgeJson.class');
+  const sourceMtime = fs.statSync(sourceFile).mtimeMs;
+  const classMtime = fs.existsSync(classFile) ? fs.statSync(classFile).mtimeMs : 0;
+  if (classMtime > sourceMtime) return;
+  execFileSync('javac', ['-d', JAVA_DIR, sourceFile]);
+}
+ensureJudgeJsonClassBuilt();
+
 // Maps a C++ parameter type (as written in a problem's signature.cpp.params)
 // to the judge_json.hpp helper that extracts it from a JsonValue.
 const CPP_PARAM_EXTRACTORS = {
@@ -46,6 +67,15 @@ const CPP_PARAM_EXTRACTORS = {
   bool: 'extractBool',
   string: 'extractString',
   'vector<int>': 'extractIntVector',
+};
+
+// Maps a Java parameter type (as written in a problem's signature.java.params)
+// to the JudgeJson.Value instance method that extracts it.
+const JAVA_PARAM_EXTRACTORS = {
+  int: 'asInt',
+  boolean: 'asBoolean',
+  String: 'asString',
+  'int[]': 'asIntArray',
 };
 
 // Harness code appended after the user's submitted function definition.
@@ -156,6 +186,65 @@ int main() {
 `;
 }
 
+// Java is statically typed like C++, so the same param-type-lookup approach
+// applies, but the user's code is a method on a class (not a bare function),
+// so the harness instantiates a Solution and calls the method on it. Return
+// serialization also can't rely on overload resolution picking the right
+// buildJson the way C++ does transparently — Java resolves overloads on the
+// variable's *declared* type, so __judge_result is declared with exactly
+// signature.returns, same as the C++ harness's `auto` relies on the actual
+// return type.
+function buildJavaSource(userCode, functionName, signature) {
+  const params = signature.params || [];
+  const argExprs = params
+    .map((type, i) => {
+      const extractor = JAVA_PARAM_EXTRACTORS[type];
+      if (!extractor) throw new Error(`Unsupported Java param type: ${type}`);
+      return `__judge_args.get(${i}).${extractor}()`;
+    })
+    .join(', ');
+  const returns = signature.returns || 'void';
+
+  return `import java.util.Scanner;
+
+${userCode}
+
+public class Main {
+    static JudgeJson.Value toJson(int v) { return JudgeJson.Value.of((long) v); }
+    static JudgeJson.Value toJson(boolean v) { return JudgeJson.Value.of(v); }
+    static JudgeJson.Value toJson(String v) { return JudgeJson.Value.of(v); }
+    static JudgeJson.Value toJson(int[] v) {
+        JudgeJson.Value __judge_arr = JudgeJson.Value.array();
+        for (int __judge_x : v) __judge_arr.add(toJson(__judge_x));
+        return __judge_arr;
+    }
+${signature.customSerializer || ''}
+    public static void main(String[] __judge_cliArgs) throws Exception {
+        Scanner __judge_scanner = new Scanner(System.in);
+        StringBuilder __judge_inputBuilder = new StringBuilder();
+        while (__judge_scanner.hasNextLine()) __judge_inputBuilder.append(__judge_scanner.nextLine()).append('\\n');
+        JudgeJson.Value __judge_cases = JudgeJson.parse(__judge_inputBuilder.toString());
+        JudgeJson.Value __judge_results = JudgeJson.Value.array();
+        Solution __judge_sol = new Solution();
+        for (int __judge_i = 0; __judge_i < __judge_cases.size(); __judge_i++) {
+            JudgeJson.Value __judge_args = __judge_cases.get(__judge_i).get("args");
+            JudgeJson.Value __judge_entry = JudgeJson.Value.object();
+            try {
+                ${returns} __judge_result = __judge_sol.${functionName}(${argExprs});
+                __judge_entry.set("actual", toJson(__judge_result));
+            } catch (Throwable __judge_err) {
+                __judge_entry = JudgeJson.Value.object();
+                String __judge_msg = __judge_err.getMessage();
+                __judge_entry.set("error", JudgeJson.Value.of(__judge_msg == null ? __judge_err.toString() : __judge_msg));
+            }
+            __judge_results.add(__judge_entry);
+        }
+        System.out.print("\\n${RESULT_MARKER}\\n" + __judge_results.dump());
+    }
+}
+`;
+}
+
 // Compiles a .cpp file to a binary with its own timeout, separate from the
 // run timeout below (compilation can legitimately take longer than running
 // trivial test cases, especially for templates).
@@ -163,6 +252,32 @@ function compileCpp(sourceFile, binaryFile) {
   return new Promise((resolve) => {
     const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile, CPP_JSON_OBJECT], {
       timeout: CPP_COMPILE_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
+
+    let stderr = '';
+    let timedOut = false;
+
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
+    child.on('error', (err) => {
+      resolve({ success: false, stderr: String(err.message || err), timedOut });
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
+      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+    });
+  });
+}
+
+// Compiles Main.java to outDir/Main.class (plus Solution.class and any other
+// top-level classes spliced into the same file), with JudgeJson.class found
+// on the classpath rather than recompiled alongside it.
+function compileJava(sourceFile, outDir) {
+  return new Promise((resolve) => {
+    const child = spawn('javac', ['-cp', JAVA_DIR, '-d', outDir, sourceFile], {
+      timeout: JAVA_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
 
@@ -260,6 +375,7 @@ async function runSubmission({ language, code, functionName, testCases, signatur
   let args;
   let tmpFile;
   let tmpBinary;
+  let tmpDir;
 
   if (language === 'javascript') {
     source = buildJavascriptSource(code, functionName);
@@ -275,6 +391,14 @@ async function runSubmission({ language, code, functionName, testCases, signatur
     source = buildCppSource(code, functionName, signature || {});
     tmpFile = path.join(os.tmpdir(), `judge-${id}.cpp`);
     tmpBinary = path.join(os.tmpdir(), `judge-${id}`);
+  } else if (language === 'java') {
+    source = buildJavaSource(code, functionName, signature || {});
+    // Unlike the other languages, javac requires the file holding a public
+    // class to be named exactly after that class (Main.java), so this needs
+    // its own per-submission directory rather than a uniquely-named temp file.
+    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
+    fs.mkdirSync(tmpDir);
+    tmpFile = path.join(tmpDir, 'Main.java');
   } else {
     throw new Error(`Unsupported language: ${language}`);
   }
@@ -282,8 +406,10 @@ async function runSubmission({ language, code, functionName, testCases, signatur
   fs.writeFileSync(tmpFile, source);
 
   try {
-    if (language === 'cpp') {
-      const compileResult = await compileCpp(tmpFile, tmpBinary);
+    if (language === 'cpp' || language === 'java') {
+      const compileResult = language === 'cpp'
+        ? await compileCpp(tmpFile, tmpBinary)
+        : await compileJava(tmpFile, tmpDir);
       if (!compileResult.success) {
         const errorText = (compileResult.timedOut
           ? 'Compilation timed out.'
@@ -300,10 +426,15 @@ async function runSubmission({ language, code, functionName, testCases, signatur
           results: buildFailureResults(testCases, errorText),
         };
       }
-      // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
-      // way the Python harness caps its own interpreter via resource.setrlimit.
-      command = 'bash';
-      args = ['-c', `ulimit -v ${CPP_MEMORY_MB * 1024}; exec "$0"`, tmpBinary];
+      if (language === 'cpp') {
+        // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
+        // way the Python harness caps its own interpreter via resource.setrlimit.
+        command = 'bash';
+        args = ['-c', `ulimit -v ${CPP_MEMORY_MB * 1024}; exec "$0"`, tmpBinary];
+      } else {
+        command = 'java';
+        args = [`-Xmx${JAVA_MEMORY_MB}m`, '-cp', `${tmpDir}${path.delimiter}${JAVA_DIR}`, 'Main'];
+      }
     }
 
     const stdinPayload = JSON.stringify(testCases.map((tc) => ({ args: tc.args })));
@@ -382,7 +513,8 @@ async function runSubmission({ language, code, functionName, testCases, signatur
       results,
     };
   } finally {
-    fs.unlink(tmpFile, () => {});
+    if (tmpDir) fs.rm(tmpDir, { recursive: true, force: true }, () => {});
+    else fs.unlink(tmpFile, () => {});
     if (tmpBinary) fs.unlink(tmpBinary, () => {});
   }
 }

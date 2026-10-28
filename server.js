@@ -6,26 +6,26 @@ const { runSubmission } = require('./judge/runner');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const PROBLEMS_DIR = path.join(__dirname, 'problems');
-const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp'];
+const QUESTIONS_DIR = path.join(__dirname, 'questions');
+const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java'];
 
 app.use(express.json());
 
 // --- Problem data -----------------------------------------------------
 
 function loadProblem(slug) {
-  const file = path.join(PROBLEMS_DIR, `${slug}.json`);
-  if (!file.startsWith(PROBLEMS_DIR) || !fs.existsSync(file)) return null;
+  const file = path.join(QUESTIONS_DIR, `${slug}.json`);
+  if (!file.startsWith(QUESTIONS_DIR) || !fs.existsSync(file)) return null;
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
 function listProblems() {
   return fs
-    .readdirSync(PROBLEMS_DIR)
+    .readdirSync(QUESTIONS_DIR)
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       const { slug, title, difficulty, tags } = JSON.parse(
-        fs.readFileSync(path.join(PROBLEMS_DIR, f), 'utf8')
+        fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8')
       );
       return { slug, title, difficulty, tags };
     })
