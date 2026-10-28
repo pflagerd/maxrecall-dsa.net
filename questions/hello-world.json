@@ -12,11 +12,11 @@
     "d": "<p>In D, you print text using <code>writeln()</code>:</p><div class=\"example\"><pre>writeln(\"Hello World!\");</pre></div><p>This writes the text to standard output, followed by a newline.</p>"
   },
   "description": {
-    "javascript": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for the exact syntax this language uses to print.</p>",
-    "python": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for the exact syntax this language uses to print.</p>",
-    "cpp": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for the exact syntax this language uses to print.</p>",
-    "java": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for the exact syntax this language uses to print.</p>",
-    "d": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <strong>Learning</strong> tab for the exact syntax this language uses to print.</p>"
+    "javascript": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab for the exact syntax this language uses to print.</p>",
+    "python": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab for the exact syntax this language uses to print.</p>",
+    "cpp": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab for the exact syntax this language uses to print.</p>",
+    "java": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab for the exact syntax this language uses to print.</p>",
+    "d": "<p>Write a complete program that prints the string <code>\"Hello World!\"</code> to standard output.</p><p>This is usually the first program anyone writes in a new language &mdash; see the <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab for the exact syntax this language uses to print.</p>"
   },
   "examples": {
     "javascript": [
@@ -55,7 +55,7 @@
   "starterCode": {
     "javascript": "// Print \"Hello World!\" to stdout. No input is required for this problem.\n\n",
     "python": "# Print \"Hello World!\" to stdout. No input is required for this problem.\n\n",
-    "cpp": "#include <iostream>\nusing namespace std;\n\nint main() {\n    // Print \"Hello World!\" to stdout. No input is required for this problem.\n    \n    return 0;\n}\n",
+    "cpp": "#include <iostream>\nint main() {\n    // Print \"Hello World!\" to stdout. No input is required for this problem.\n    \n    return 0;\n}\n",
     "java": "public class Main {\n    public static void main(String[] args) {\n        // Print \"Hello World!\" to stdout. No input is required for this problem.\n        \n    }\n}\n",
     "d": "import std.stdio;\n\nvoid main() {\n    // Print \"Hello World!\" to stdout. No input is required for this problem.\n    \n}\n"
   },

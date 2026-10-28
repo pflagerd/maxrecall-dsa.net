@@ -219,10 +219,14 @@ function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
 setupTabGroup('.console-tabs', consoleTabPanels, 'results');
 const setDescriptionTab = setupTabGroup('.description-tabs', descriptionTabPanels, 'applying');
 
-// Delegated (not attached per-render) since the Learning tab's content,
-// including this link, is replaced wholesale on every language switch.
-learningEl.addEventListener('click', (e) => {
-  if (e.target.closest('.learning-cta-link')) setDescriptionTab('applying');
+// Handles any in-content link (`.tab-ref-link`, e.g. "see the Learning tab"
+// in a description, or "click the Applying tab" in the Learning CTA) that
+// cross-references another description-pane tab. Delegated on the pane
+// itself — not attached per-render — since both tabs' content gets
+// replaced wholesale on every language switch.
+descriptionPaneEl.addEventListener('click', (e) => {
+  const link = e.target.closest('.tab-ref-link');
+  if (link) setDescriptionTab(link.dataset.tab);
 });
 
 let problem = null;
@@ -470,7 +474,7 @@ function renderLanguageContent(language) {
   // call-to-action is appended here (not per-problem content) so any future
   // problem with learning content gets it automatically, with no duplication.
   if (problem.learning && problem.learning[language]) {
-    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <button type="button" class="learning-cta-link">Applying</button> tab to try it yourself.</p>`;
+    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <button type="button" class="tab-ref-link" data-tab="applying">Applying</button> tab to try it yourself.</p>`;
     renderMath(learningEl);
   } else {
     learningEl.innerHTML = '<p class="coming-soon">Coming Soon!</p>';
