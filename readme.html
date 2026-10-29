@@ -187,12 +187,15 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
 
 <h2 id="state">8. Where data lives</h2>
 <p><strong>Every Submit is saved; Run is not.</strong> Each Submit writes one file:</p>
-<pre><code>users/&lt;email&gt;/submissions/&lt;question&gt;/&lt;timestamp&gt;.json</code></pre>
+<pre><code>users/&lt;email&gt;/submissions/&lt;timestamp&gt;.json</code></pre>
+<p>All questions share that one folder; each record's <code>question</code> field says which question it was.</p>
 <p><code>&lt;email&gt;</code> is the <code>MAXRECALL_USER</code> environment variable, lower-cased
 (default <code>daniel.pflager@gmail.com</code>). The server refuses to start if it isn't a plain
 email address. <code>&lt;timestamp&gt;</code> is the UTC submit time with <code>:</code> replaced by
 <code>-</code>, e.g. <code>2026-10-29T03-27-46.194Z</code>, so files sort by time. The file is
-written under a temporary name and then renamed, so a crash never leaves half a record.</p>
+written under a temporary name and then hard-linked into place with <code>link()</code>, so a crash never leaves
+half a record. Unlike <code>rename()</code>, <code>link()</code> refuses to replace an existing file, so two Submits in the same
+millisecond (from two tabs) produce a “not saved” warning rather than one overwriting the other.</p>
 <table>
   <tr><th>Field</th><th>Meaning</th></tr>
   <tr><td><code>schemaVersion</code></td><td>1. Bump it if the format changes.</td></tr>
@@ -265,6 +268,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Decided</strong> (see the plan): one JSON file per Submit; record fields <code>schemaVersion</code>, <code>submittedAt</code>, <code>question</code>, <code>questionSha256</code>, <code>language</code>, <code>judgeMode</code>, <code>code</code>, <code>status</code>, <code>passed</code>/<code>total</code>, <code>runtimeMs</code>, per-test pass/fail, <code>stdout</code>, <code>stderr</code>; user set by <code>MAXRECALL_USER</code>; the owner commits <code>users/</code> by hand.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Fixed</strong> (plan step 0): <code>loadProblem</code> could read <code>questions-evil/x.json</code> from a sibling directory via the slug <code>..%2Fquestions-evil%2Fx</code>, because it checked <code>startsWith(QUESTIONS_DIR)</code>. It now uses <code>resolveInside</code> (<code>paths.js</code>). <span class="src">Source: <code>server.js</code>, <code>paths.js</code>.</span></td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 1): every Submit is saved under <code>users/&lt;email&gt;/submissions/</code>. Next: step 2, endpoints to read the records back.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Changed</strong> (owner's request): submissions are saved directly in <code>users/&lt;email&gt;/submissions/</code>, not in a folder per question; the record's <code>question</code> field identifies the question. Saving now uses <code>link()</code> instead of <code>rename()</code> so a same-millisecond collision can't overwrite a record.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>

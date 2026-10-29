@@ -26,6 +26,16 @@ Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 Step 1 adds one thing between 3 and 4: **write a record to disk**.
 
+## Change 2026-10-29 (owner's request, after step 1)
+
+Records are saved directly in `users/<email>/submissions/<timestamp>.json`,
+not in a folder per question. The `question` field inside each record says
+which question it was. Effect on step 2: listing one question's submissions
+means reading the folder and filtering on `question`. That's fine at this size,
+and the files are going to be replaced anyway. Saving uses `link()` instead of
+`rename()`, so a collision between two Submits in the same millisecond fails
+with a warning rather than overwriting.
+
 ## Decisions made 2026-10-29 (second round)
 
 - **D1 layout:** A, one JSON file per Submit. The owner plans to replace
@@ -144,7 +154,7 @@ sees either the whole file or no file at all
 - **If it succeeds, the response gets `submissionId`** (the timestamp part of
   the file name).
 
-Check: Submit in the browser, then `ls users/*/submissions/*/` and open the new file.
+Check: Submit in the browser, then `ls users/*/submissions/` and open the new file.
 
 **Step 2: read endpoints.**
 - `GET /api/problems/:slug/submissions` returns the current user's records,

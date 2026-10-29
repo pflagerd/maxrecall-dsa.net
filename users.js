@@ -23,23 +23,30 @@ function configuredUser() {
 
 const CURRENT_USER = configuredUser();
 
-// Save one Submit as users/<email>/submissions/<question>/<timestamp>.json.
+// Save one Submit as users/<email>/submissions/<timestamp>.json. All
+// questions share the folder; the record's "question" field says which one.
 // The timestamp is record.submittedAt with ":" replaced by "-" (Windows
 // doesn't allow ":" in file names); it doubles as the submission's id.
 //
-// Written to a temporary file first and then renamed into place: rename()
-// is atomic, so a crash mid-write leaves a stray temp file, never a
-// half-written record. Two Submits in the same millisecond would collide,
-// which the page prevents by disabling Submit while one is running.
+// Written to a temporary file first, then linked into place and the temp
+// file removed. link() is atomic like rename(), so a crash leaves at most a
+// stray temp file, never a half-written record; but unlike rename() it
+// fails with EEXIST instead of overwriting. So two Submits in the same
+// millisecond (e.g. from two tabs) give a "not saved" warning rather than
+// one silently replacing the other.
 async function saveSubmission(record) {
   const id = record.submittedAt.replace(/:/g, '-');
-  const file = resolveInside(USERS_DIR, CURRENT_USER, 'submissions', record.question, `${id}.json`);
+  const file = resolveInside(USERS_DIR, CURRENT_USER, 'submissions', `${id}.json`);
   if (!file) throw new Error('Refusing to save outside users/');
 
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
   await fs.promises.writeFile(tmp, `${JSON.stringify(record, null, 2)}\n`);
-  await fs.promises.rename(tmp, file);
+  try {
+    await fs.promises.link(tmp, file);
+  } finally {
+    await fs.promises.unlink(tmp);
+  }
   return id;
 }
 
