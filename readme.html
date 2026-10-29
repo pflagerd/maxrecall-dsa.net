@@ -86,6 +86,10 @@ front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</cod
 <p>Submits are saved for the user named by the <code>MAXRECALL_USER</code> environment variable
 (default <code>daniel.pflager@gmail.com</code>), e.g. <code>MAXRECALL_USER=someone@example.com make run</code>.
 The server prints whose Submits it's recording when it starts.</p>
+<p>The server listens on every network interface unless the <code>HOST</code> environment
+variable says otherwise. With <code>HOST=127.0.0.1</code> it accepts connections only from the same
+machine, which is how it runs on the VPS behind an SSH tunnel (see Environments). The first line it prints
+says which. <span class="src">Source: <code>server.js</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
 <code>PORT ?= 3000</code> default — see the
 <a href="https://www.gnu.org/software/make/manual/html_node/Overriding.html">GNU Make manual, “Overriding Variables”</a>.</p>

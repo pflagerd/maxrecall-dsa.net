@@ -9,6 +9,11 @@ const { CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = requir
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// Which network address to listen on. Unset means every interface (the
+// Node default), so other devices on a home network can connect.
+// HOST=127.0.0.1 accepts only connections from this machine, e.g. on a
+// server reached through an SSH tunnel.
+const HOST = process.env.HOST || undefined;
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 
@@ -184,6 +189,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT} (recording Submits for ${CURRENT_USER})`);
+app.listen(PORT, HOST, () => {
+  const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
+  console.log(`Server listening on ${where}, http://localhost:${PORT} (recording Submits for ${CURRENT_USER})`);
 });
