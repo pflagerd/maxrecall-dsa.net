@@ -9,7 +9,7 @@ through an SSH tunnel. Nothing is exposed to the internet.
 
 - runs as its own unprivileged user, `maxrecall`;
 - is reachable only through your SSH login;
-- runs under systemd containment (`deploy/maxrecall-dsa.service`): no
+- runs under systemd containment (`deploy/maxrecall-dsa.test.service`): no
   network except the VPS itself, a read-only file system apart from three
   folders, and a private `/tmp`.
 
@@ -131,19 +131,34 @@ folders. The folder must exist before the service starts, because systemd's
 ## 5. Install and start the service [VPS]
 
 ```bash
-sudo cp deploy/maxrecall-dsa.service /etc/systemd/system/
+sudo cp deploy/maxrecall-dsa.test.service /etc/systemd/system/
 ```
 Copies the unit file to where systemd looks for local services. If you want a
 different `MAXRECALL_USER`, edit the copy with `sudo vi
-/etc/systemd/system/maxrecall-dsa.service`.
+/etc/systemd/system/maxrecall-dsa.test.service`.
 
 ```bash
 sudo systemctl daemon-reload
 ```
 Makes systemd re-read its unit files.
 
+The service is called `maxrecall-dsa.test.service`. The commands below always
+give that full name. With a dot in the name, a shortened form relies on
+systemd guessing the `.service` part.
+
+If you already installed it under its earlier name, `maxrecall-dsa.service`,
+remove that one first so the two don't both try to use port 3000:
 ```bash
-sudo systemctl enable --now maxrecall-dsa
+sudo systemctl disable --now maxrecall-dsa.service
+sudo rm /etc/systemd/system/maxrecall-dsa.service
+sudo systemctl daemon-reload
+```
+- `disable --now` stops it and stops it starting at boot.
+- `rm` deletes its unit file.
+- `daemon-reload` makes systemd forget it.
+
+```bash
+sudo systemctl enable --now maxrecall-dsa.test.service
 ```
 - `enable` starts the service at every boot.
 - `--now` also starts it immediately.
@@ -151,12 +166,12 @@ sudo systemctl enable --now maxrecall-dsa
 See [systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html).
 
 ```bash
-systemctl status maxrecall-dsa
+systemctl status maxrecall-dsa.test.service
 ```
 Should say `active (running)`.
 
 ```bash
-journalctl -u maxrecall-dsa -n 20
+journalctl -u maxrecall-dsa.test.service -n 20
 ```
 Shows the service's last 20 log lines (`-u` selects the unit, `-n` sets how
 many lines). The first should read
@@ -181,7 +196,7 @@ the service and recheck the `HOST` line in the service file.
 
 **[VPS]**
 ```bash
-sudo systemd-analyze security maxrecall-dsa
+sudo systemd-analyze security maxrecall-dsa.test.service
 ```
 Lists the containment settings and an overall exposure score, where lower is
 better. See [systemd-analyze(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
@@ -224,12 +239,12 @@ follow GitHub, never have commits of its own.
 
 ```bash
 sudo -u maxrecall npm install --omit=dev
-sudo systemctl restart maxrecall-dsa
+sudo systemctl restart maxrecall-dsa.test.service
 ```
 Picks up any dependency changes, then restarts the server so it runs the new
 code.
 
-If `deploy/maxrecall-dsa.service` itself changed, copy it again (step 5) and
+If `deploy/maxrecall-dsa.test.service` itself changed, copy it again (step 5) and
 run `sudo systemctl daemon-reload` before restarting.
 
 ## 9. Bringing VPS submissions into the repo [Kubuntu]
