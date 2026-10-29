@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-10-28.</p>
+Last updated: 2026-10-29.</p>
 
 <nav>
 <ol>
@@ -76,11 +76,11 @@ system. <span class="src">Source: <code>THOUGHTS</code>, <code>TODO</code>.</spa
 <table>
   <tr><th>Command</th><th>What it does</th></tr>
   <tr><td><code>make install</code></td><td>Runs <code>npm install</code> if <code>node_modules</code> is older than <code>package.json</code>.</td></tr>
-  <tr><td><code>make run</code></td><td>Starts the server: <code>PORT=3000 node server.js</code>. Override the port with <code>make run PORT=8080</code>.</td></tr>
-  <tr><td><code>make dev</code></td><td>Same, but under <code>nodemon</code>, which restarts the server whenever a source file changes.</td></tr>
+  <tr><td><code>make run</code></td><td>Starts the server in the foreground (<code>PORT=3000 node server.js</code>; Ctrl-C stops it). In the background it polls the server with <code>curl</code> until it answers, then opens it with <code>xdg-open</code> (your default browser). Override the port with <code>make run PORT=8080</code>. Needs <code>curl</code> and <code>xdg-open</code> (package <code>xdg-utils</code>); the cloud environment has no <code>xdg-open</code>, so there the browser step fails and the server still runs.</td></tr>
+  <tr><td><code>make dev</code></td><td>Starts the server under <code>nodemon</code>, which restarts it whenever a source file changes. Doesn't open a browser.</td></tr>
   <tr><td><code>make clean</code></td><td>Deletes <code>node_modules</code>.</td></tr>
 </table>
-<p>Then open <code>http://localhost:3000/</code>. There is no compile step for the
+<p>With <code>make dev</code>, open <code>http://localhost:3000/</code> yourself. There is no compile step for the
 front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</code>,
 <code>package.json</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
