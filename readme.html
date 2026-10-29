@@ -119,6 +119,8 @@ The server prints whose Submits it's recording when it starts.</p>
   <tr><td><code>GET /api/questions/:slug</code></td><td>The problem with hidden test cases removed: <code>visibleTestCases</code> plus a <code>hiddenCount</code>.</td></tr>
   <tr><td><code>POST /api/questions/:slug/run</code></td><td>Body <code>{language, code}</code>. Judges against <em>visible</em> test cases only.</td></tr>
   <tr><td><code>POST /api/questions/:slug/submit</code></td><td>Same body. Judges against <em>all</em> test cases, hidden included, then saves a record (see <a href="#state">Where data lives</a>). The response adds <code>saved: true</code> and <code>submissionId</code> (the record's timestamp), or <code>saved: false</code> and <code>saveError</code> if the save failed. The judged result is returned either way, and the page shows a “not saved” warning.</td></tr>
+  <tr><td><code>GET /api/submissions</code></td><td>The current user's saved Submits, newest first, as summaries: <code>{id, submittedAt, question, language, status, passed, total, runtimeMs}</code> (no <code>code</code>, <code>stdout</code> or <code>stderr</code>). <code>?question=&lt;slug&gt;</code> keeps only that question's; giving it twice is a <code>400</code>. Unreadable files are skipped with a warning in the server log.</td></tr>
+  <tr><td><code>GET /api/submissions/:id</code></td><td>One saved Submit in full, including <code>code</code>, <code>stdout</code> and <code>stderr</code>. <code>:id</code> is the file's timestamp, e.g. <code>2026-10-29T04-05-29.199Z</code>, and must match that pattern exactly; otherwise, or if there's no such file, <code>404</code>.</td></tr>
   <tr><td>any other <code>/api/…</code></td><td><code>404</code> with <code>{error}</code> JSON. The API was at <code>/api/problems/…</code> until 2026-10-29.</td></tr>
   <tr><td><code>GET /&lt;file&gt;</code></td><td>Only the files in the <code>STATIC_FILES</code> list are served; anything else falls back to <code>index.html</code>.</td></tr>
 </table>
@@ -211,7 +213,7 @@ millisecond (from two tabs) produce a “not saved” warning rather than one ov
 this data is public. nodemon ignores <code>users/</code>, so saving doesn't restart <code>make dev</code>.
 The other persistent state is the browser preferences above, which belong to one browser
 on one machine. <span class="src">Source: <code>users.js</code>, <code>server.js</code>
-(<code>handleExecution</code>).</span></p>
+(<code>handleExecution</code>, <code>/api/submissions</code>).</span></p>
 
 <h2 id="envs">9. Environments</h2>
 <p>Development happens in two places. Git is the only thing they share: push before
@@ -271,6 +273,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 1): every Submit is saved under <code>users/&lt;email&gt;/submissions/</code>. Next: step 2, endpoints to read the records back.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Changed</strong> (owner's request): submissions are saved directly in <code>users/&lt;email&gt;/submissions/</code>, not in a folder per question; the record's <code>question</code> field identifies the question. Saving now uses <code>link()</code> instead of <code>rename()</code> so a same-millisecond collision can't overwrite a record.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Changed</strong> (owner's request): the API moved from <code>/api/problems/…</code> to <code>/api/questions/…</code>, matching the <code>questions/</code> folder. Unknown <code>/api/…</code> URLs now get a JSON 404 instead of the home page.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 2): <code>GET /api/submissions</code> (optionally <code>?question=</code>) and <code>GET /api/submissions/:id</code>, top-level to match the flat <code>submissions/</code> folder. Next: step 4, the Submissions tab.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>

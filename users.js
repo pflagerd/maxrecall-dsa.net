@@ -50,4 +50,57 @@ async function saveSubmission(record) {
   return id;
 }
 
-module.exports = { CURRENT_USER, saveSubmission };
+// A submission id is the timestamp part of its file name. Checked exactly
+// before it's used in a path, so a crafted id can't reach other files.
+const SUBMISSION_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
+
+function submissionsDir() {
+  return path.join(USERS_DIR, CURRENT_USER, 'submissions');
+}
+
+async function readSubmission(id) {
+  const record = JSON.parse(await fs.promises.readFile(path.join(submissionsDir(), `${id}.json`), 'utf8'));
+  return { id, ...record };
+}
+
+// Every saved Submit for the current user, newest first (ids sort by time).
+// No folder yet means no submissions. A file that can't be read or parsed is
+// skipped with a warning rather than breaking the whole list.
+async function listSubmissions() {
+  let names;
+  try {
+    names = await fs.promises.readdir(submissionsDir());
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const ids = names
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.slice(0, -'.json'.length))
+    .filter((id) => SUBMISSION_ID_PATTERN.test(id))
+    .sort()
+    .reverse();
+
+  const records = [];
+  for (const id of ids) {
+    try {
+      records.push(await readSubmission(id));
+    } catch (err) {
+      console.warn(`Skipping unreadable submission ${id}: ${err.message}`);
+    }
+  }
+  return records;
+}
+
+// One saved Submit, or null if the id is malformed or there's no such file.
+async function loadSubmission(id) {
+  if (!SUBMISSION_ID_PATTERN.test(id)) return null;
+  try {
+    return await readSubmission(id);
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+module.exports = { CURRENT_USER, saveSubmission, listSubmissions, loadSubmission };

@@ -5,7 +5,7 @@ const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
-const { CURRENT_USER, saveSubmission } = require('./users');
+const { CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -129,6 +129,39 @@ async function handleExecution(req, res, { onlyVisible }) {
 
 app.post('/api/questions/:slug/run', (req, res) => handleExecution(req, res, { onlyVisible: true }));
 app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, { onlyVisible: false }));
+
+// --- Saved submissions (current user only) ----------------------------------
+// Express 4 doesn't catch errors from async handlers, hence the try/catch.
+
+// Summaries for a list: everything except code, stdout and stderr.
+function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs }) {
+  return { id, submittedAt, question, language, status, passed, total, runtimeMs };
+}
+
+// Newest first. Optional ?question=<slug> keeps only that question's.
+app.get('/api/submissions', async (req, res) => {
+  const { question } = req.query;
+  if (question !== undefined && typeof question !== 'string') {
+    return res.status(400).json({ error: 'question must be given at most once' });
+  }
+  try {
+    const records = await listSubmissions();
+    res.json(records.filter((r) => !question || r.question === question).map(toSubmissionSummary));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not read submissions' });
+  }
+});
+
+// One submission in full, including code, stdout and stderr.
+app.get('/api/submissions/:id', async (req, res) => {
+  try {
+    const record = await loadSubmission(req.params.id);
+    if (!record) return res.status(404).json({ error: 'Submission not found' });
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Could not read submission' });
+  }
+});
 
 // Any other /api/ URL is an error, not a page: without this, GET requests
 // would fall through to the index.html fallback below and get a 200 with

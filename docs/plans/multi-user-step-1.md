@@ -1,6 +1,6 @@
 # Plan: multi-user step 1 — record each Submit under `users/<email>/`
 
-Status: **decided 2026-10-29; in progress.** Steps 0 and 1 done (readme updated with each), step 2 next.
+Status: **in progress.** Steps 0, 1 and 2 done; step 4 (Submissions tab) next, at the owner's choice of option b on 2026-10-29.
 Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 ## Already decided (2026-10-29)
@@ -157,6 +157,11 @@ sees either the whole file or no file at all
 Check: Submit in the browser, then `ls users/*/submissions/` and open the new file.
 
 **Step 2: read endpoints.**
+**As built (2026-10-29), replacing the two bullets below:** submissions are
+top-level, matching the flat folder: `GET /api/submissions` (optionally
+`?question=<slug>`) and `GET /api/submissions/:id`. The API itself moved from
+`/api/problems` to `/api/questions` the same day.
+
 - `GET /api/problems/:slug/submissions` returns the current user's records,
   newest first, without `code`.
 - `GET /api/problems/:slug/submissions/:id` returns one record, including `code`.
