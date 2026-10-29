@@ -91,6 +91,7 @@ front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</cod
 <table>
   <tr><th>Path</th><th>Role</th></tr>
   <tr><td><code>server.js</code></td><td>Express server: problem API, run/submit endpoints, serves the front-end files.</td></tr>
+  <tr><td><code>paths.js</code></td><td><code>resolveInside(baseDir, ...parts)</code>: builds a path and returns <code>null</code> if it would land outside <code>baseDir</code> (path traversal). Used by <code>loadProblem</code>; <code>users/</code> code will use it too.</td></tr>
   <tr><td><code>judge/runner.js</code></td><td>Builds a harness around submitted code, runs it in a child process, compares results.</td></tr>
   <tr><td><code>judge/cpp/judge_json.{hpp,cpp}</code></td><td>JSON parser/serializer linked into C++ submissions. Compiled once to <code>judge_json.o</code> (gitignored) at server start.</td></tr>
   <tr><td><code>judge/java/JudgeJson.java</code></td><td>Same role for Java. Compiled to <code>JudgeJson.class</code> (gitignored) at server start.</td></tr>
@@ -208,13 +209,6 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 <span class="src">Source: <code>spawnJudged</code> in <code>judge/runner.js</code>.</span></p>
 </div>
 <ul>
-  <li>The path check in <code>loadProblem</code> (<code>server.js</code>) uses
-  <code>file.startsWith(QUESTIONS_DIR)</code> with no trailing separator. <strong>Confirmed 2026-10-29:</strong>
-  <code>GET /api/problems/..%2Fquestions-evil%2Fx</code> returned
-  <code>questions-evil/x.json</code> from a sibling directory. Going up further
-  (<code>..%2F..%2F…</code>) is still blocked. Low risk today, since no such
-  directory exists, but the fix is step 0 of the
-  <a href="docs/plans/multi-user-step-1.md">multi-user plan</a>.</li>
   <li><code>package-lock.json</code> is gitignored, so the cloud and Kubuntu can
   install different dependency versions.
   <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json">npm's docs</a>
@@ -232,6 +226,8 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> <code>users/</code> is committed to git, so results travel between the cloud and Kubuntu. <strong>The repository is public</strong>, so everything under <code>users/</code> (the email address, attempt history, and code if it's stored) is public too. Done the same day: nodemon ignores <code>users/</code> (<code>package.json</code> → <code>nodemonConfig</code>), because nodemon 3 always watches <code>.json</code> files (<code>lib/config/exec.js</code>) and would otherwise restart the server on every save. Note for implementation, not yet decided: one file per attempt, rather than one growing file, would stop commits from two machines conflicting.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> each submission's code is stored in the user's directory (public, like the rest of <code>users/</code>).</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> only Submit is recorded, not Run (or Skip). Consequence: the planned ordering that brings hard problems back more often can only judge difficulty from Submit results, such as failed submissions and time between them, not from how many Runs it took.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Decided</strong> (see the plan): one JSON file per Submit; record fields <code>schemaVersion</code>, <code>submittedAt</code>, <code>question</code>, <code>questionSha256</code>, <code>language</code>, <code>judgeMode</code>, <code>code</code>, <code>status</code>, <code>passed</code>/<code>total</code>, <code>runtimeMs</code>, per-test pass/fail, <code>stdout</code>, <code>stderr</code>; user set by <code>MAXRECALL_USER</code>; the owner commits <code>users/</code> by hand.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Fixed</strong> (plan step 0): <code>loadProblem</code> could read <code>questions-evil/x.json</code> from a sibling directory via the slug <code>..%2Fquestions-evil%2Fx</code>, because it checked <code>startsWith(QUESTIONS_DIR)</code>. It now uses <code>resolveInside</code> (<code>paths.js</code>). <span class="src">Source: <code>server.js</code>, <code>paths.js</code>.</span></td></tr>
 </table>
 <p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
 

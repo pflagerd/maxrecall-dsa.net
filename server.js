@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
+const { resolveInside } = require('./paths');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,8 +15,8 @@ app.use(express.json());
 // --- Problem data -----------------------------------------------------
 
 function loadProblem(slug) {
-  const file = path.join(QUESTIONS_DIR, `${slug}.json`);
-  if (!file.startsWith(QUESTIONS_DIR) || !fs.existsSync(file)) return null;
+  const file = resolveInside(QUESTIONS_DIR, `${slug}.json`);
+  if (!file || !fs.existsSync(file)) return null;
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
