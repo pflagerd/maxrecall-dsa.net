@@ -642,7 +642,7 @@ async function execute(endpoint, button) {
   consoleStderrEl.textContent = '';
 
   try {
-    const res = await fetch(`/api/problems/${slug}/${endpoint}`, {
+    const res = await fetch(`/api/questions/${slug}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ language: languageSelect.value, code: editor.getValue() }),
@@ -669,7 +669,7 @@ async function init() {
   const labelsPromise = loadLabels();
 
   try {
-    const res = await fetch(`/api/problems/${slug}`);
+    const res = await fetch(`/api/questions/${slug}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     problem = await res.json();
   } catch (err) {

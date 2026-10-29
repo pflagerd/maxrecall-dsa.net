@@ -59,19 +59,19 @@ function toPublicProblem(problem) {
 
 // --- API ----------------------------------------------------------------
 
-app.get('/api/problems', (req, res) => {
+app.get('/api/questions', (req, res) => {
   res.json(listProblems());
 });
 
-app.get('/api/problems/:slug', (req, res) => {
+app.get('/api/questions/:slug', (req, res) => {
   const loaded = loadProblem(req.params.slug);
-  if (!loaded) return res.status(404).json({ error: 'Problem not found' });
+  if (!loaded) return res.status(404).json({ error: 'Question not found' });
   res.json(toPublicProblem(loaded.problem));
 });
 
 async function handleExecution(req, res, { onlyVisible }) {
   const loaded = loadProblem(req.params.slug);
-  if (!loaded) return res.status(404).json({ error: 'Problem not found' });
+  if (!loaded) return res.status(404).json({ error: 'Question not found' });
   const { problem } = loaded;
 
   const { language, code } = req.body || {};
@@ -127,8 +127,15 @@ async function handleExecution(req, res, { onlyVisible }) {
   }
 }
 
-app.post('/api/problems/:slug/run', (req, res) => handleExecution(req, res, { onlyVisible: true }));
-app.post('/api/problems/:slug/submit', (req, res) => handleExecution(req, res, { onlyVisible: false }));
+app.post('/api/questions/:slug/run', (req, res) => handleExecution(req, res, { onlyVisible: true }));
+app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, { onlyVisible: false }));
+
+// Any other /api/ URL is an error, not a page: without this, GET requests
+// would fall through to the index.html fallback below and get a 200 with
+// HTML (e.g. the old /api/problems URLs, renamed to /api/questions).
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `No such API endpoint: ${req.method} ${req.path}` });
+});
 
 // --- Static front end -----------------------------------------------------
 

@@ -10,7 +10,7 @@ async function loadProblems() {
   // Fetched alongside the list; loadLabels() (bubbles.js) never rejects.
   const labelsPromise = loadLabels();
   try {
-    const res = await fetch('/api/problems');
+    const res = await fetch('/api/questions');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const problems = await res.json();
 

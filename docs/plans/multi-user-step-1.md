@@ -16,7 +16,7 @@ Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 ## How Submit works today
 
 1. `problem-page.js` → `execute('submit')` POSTs `{language, code}` to
-   `/api/problems/:slug/submit`.
+   `/api/questions/:slug/submit` (`/api/problems/…` until 2026-10-29).
 2. `server.js` → `handleExecution` loads `questions/<slug>.json`, validates the
    body, and calls `runSubmission` (`judge/runner.js`).
 3. The judge returns `{status, passed, total, runtimeMs, stdout, stderr, results}`.
