@@ -15,7 +15,8 @@ build: install
 
 # Run the server
 run: build
-	PORT=$(PORT) node server.js
+	PORT=$(PORT) node server.js &
+	google-chrome http://localhost:$(PORT)
 
 # Run with auto-reload for development (requires nodemon, installed via devDependencies)
 dev: build
