@@ -1,6 +1,6 @@
 # Plan: multi-user step 1 — record each Submit under `users/<email>/`
 
-Status: **draft, waiting for the owner's decisions** (marked ❓ below).
+Status: **decided 2026-10-29; in progress.** Step 0 done, steps 1–3 next.
 Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 ## Already decided (2026-10-29)
@@ -26,9 +26,24 @@ Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 Step 1 adds one thing between 3 and 4: **write a record to disk**.
 
-## Decisions needed
+## Decisions made 2026-10-29 (second round)
 
-### ❓ D1. File layout
+- **D1 layout:** A, one JSON file per Submit. The owner plans to replace
+  file-based storage with something better later, so this only has to be simple.
+- **D2 record:** `schemaVersion`, `submittedAt` (UTC), `question`,
+  `questionSha256`, `language`, `judgeMode`, `code`, `status`, `passed`,
+  `total`, `runtimeMs`, `results` (pass/fail per test), **`stdout` and `stderr`
+  kept**. No `user` field: the directory name already says who it is.
+- **D3 identity:** A, a server setting (`MAXRECALL_USER`, defaulting to
+  `daniel.pflager@gmail.com`). It's only the owner for now.
+- **D4 committing:** A, the owner commits `users/` by hand.
+- **D5 scope:** steps 0–3; the Submissions tab is a later step.
+
+The options as they were presented are kept below for the record.
+
+## Options considered
+
+### D1. File layout
 
 | Option | Layout | For | Against |
 |---|---|---|---|
@@ -44,17 +59,16 @@ File names: an ISO-8601 UTC time with `:` replaced by `-`, e.g.
 ([Microsoft: Naming Files](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file)),
 and this keeps the repo usable there. Sorting by name also sorts by time.
 
-### ❓ D2. What each record contains
+### D2. What each record contains
 
-Proposed (layout A):
+As decided (layout A):
 
 ```json
 {
   "schemaVersion": 1,
   "submittedAt": "2026-10-29T03:10:00.123Z",
-  "user": "daniel.pflager@gmail.com",
-  "problem": "two-sum",
-  "problemSha256": "<hash of questions/two-sum.json at the time of the Submit>",
+  "question": "two-sum",
+  "questionSha256": "<hash of questions/two-sum.json at the time of the Submit>",
   "language": "python",
   "judgeMode": "function",
   "code": "def twoSum(nums, target):\n    ...",
@@ -62,7 +76,9 @@ Proposed (layout A):
   "passed": 3,
   "total": 5,
   "runtimeMs": 41,
-  "results": [true, true, true, false, false]
+  "results": [true, true, true, false, false],
+  "stdout": "",
+  "stderr": ""
 }
 ```
 
@@ -77,9 +93,9 @@ Proposed (layout A):
 - **Left out: `stdout` and `stderr`.** They can be large, for example from a
   print in a loop, and they add a lot of noise to git.
 
-❓ Keep `stdout`/`stderr`, perhaps limited to the first few KB, or leave them out (recommended)?
+Decided: keep them.
 
-### ❓ D3. How the server knows who the user is (no login yet)
+### D3. How the server knows who the user is (no login yet)
 
 | Option | How | For | Against |
 |---|---|---|---|
@@ -90,7 +106,7 @@ The value from A is still checked: lower-cased, then matched against a strict
 pattern such as `^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$`. If it doesn't match,
 the server refuses to start.
 
-### ❓ D4. Who commits `users/`
+### D4. Who commits `users/`
 
 | Option | For | Against |
 |---|---|---|
@@ -101,7 +117,7 @@ the server refuses to start.
 Note: you practise on Kubuntu, not in the cloud. The cloud has no browser, and
 a cloud container is thrown away with any uncommitted `users/` data.
 
-### ❓ D5. What step 1 includes
+### D5. What step 1 includes
 
 Proposed: steps 0–3 below, with the Submissions tab as step 4, later. Or should step 1 stop at 2?
 
