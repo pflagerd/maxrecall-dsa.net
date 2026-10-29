@@ -531,9 +531,11 @@ function loadLanguage(language) {
 // the language being left (into codeByLanguage, so switching back restores
 // it) before loading the new one, and persists the new language as the
 // default. Shared by language-select, the language-filter menu's
-// name-click, and its checkbox-uncheck fallback — every path that changes
-// "what language is this" goes through here.
-async function switchLanguage(newLanguage) {
+// name-click, its checkbox-uncheck fallback, and the Submissions tab's Load
+// — every path that changes "what language is this" goes through here.
+// Load passes { saveAsDefault: false }: looking at an old submission isn't
+// choosing a new default language.
+async function switchLanguage(newLanguage, { saveAsDefault = true } = {}) {
   if (!problem) {
     setStoredDefaultLanguage(newLanguage);
     updateDefaultLanguageHighlight();
@@ -543,8 +545,10 @@ async function switchLanguage(newLanguage) {
     codeByLanguage[currentLanguage] = editor.getValue();
     loadLanguage(newLanguage);
   }
-  setStoredDefaultLanguage(newLanguage);
-  updateDefaultLanguageHighlight();
+  if (saveAsDefault) {
+    setStoredDefaultLanguage(newLanguage);
+    updateDefaultLanguageHighlight();
+  }
   return true;
 }
 
@@ -742,7 +746,7 @@ async function loadSubmissionIntoEditor(id) {
   if (current !== starter && current !== code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
     return;
   }
-  await switchLanguage(language);
+  await switchLanguage(language, { saveAsDefault: false });
   editor.setValue(code);
 }
 
