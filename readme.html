@@ -237,6 +237,15 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   say it's meant to be committed.</li>
   <li>There are no automated tests yet.</li>
   <li>No D compiler in the cloud environment (see <a href="#envs">Environments</a>).</li>
+  <li><strong>The problem page needs internet access.</strong> <code>problem.html</code> loads
+  CodeMirror 5.65.16 and KaTeX 0.16.9 from <code>cdnjs.cloudflare.com</code>. Without them
+  (offline, or where the CDN is blocked, as in the cloud sandbox), <code>CodeMirror</code> is
+  undefined. <code>init()</code> then throws when <code>loadLanguage</code> creates the editor
+  (<code>problem-page.js</code> line 512), before it wires up Run/Submit/Skip (line 687), so those
+  buttons do nothing. KaTeX alone is optional: <code>renderMath</code> checks for it and leaves
+  the math as plain text. The problem list (<code>index.html</code>) uses no CDN. A fix would be
+  to install both with npm and serve them locally. Found 2026-10-29.
+  <span class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>.</span></li>
 </ul>
 
 <h2 id="decisions">11. Decisions &amp; plans</h2>
