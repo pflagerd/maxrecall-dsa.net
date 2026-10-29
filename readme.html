@@ -177,8 +177,8 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
 <p><strong>The server stores nothing about users or submissions yet.</strong> Run and
 Submit results exist only in the open browser tab. The only persistent state is the
 browser preferences above, and those belong to one browser on one machine.</p>
-<p>The planned first step is per-user results under a <code>users/</code> directory.
-See <a href="#decisions">Decisions &amp; plans</a>.</p>
+<p>The planned first step is per-user results under <code>users/&lt;email&gt;/</code>,
+committed to git. See <a href="#decisions">Decisions &amp; plans</a>.</p>
 
 <h2 id="envs">9. Environments</h2>
 <p>Development happens in two places. Git is the only thing they share: push before
@@ -223,7 +223,9 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
   <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>
-  <tr><td>2026-10-28</td><td><strong>In planning, not decided:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. Open questions: email vs opaque id as the directory name; whether <code>users/</code> is committed to git; whether to store submitted code; whether to record Run as well as Submit.</td></tr>
+  <tr><td>2026-10-28</td><td><strong>In planning:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. Still open: whether to store submitted code; whether to record Run as well as Submit.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Decided:</strong> each user's directory is named by email address, e.g. <code>users/daniel.pflager@gmail.com/</code>. There's one user for now. Before anyone else can sign up, the address must be lower-cased and checked against a strict pattern: <a href="https://www.rfc-editor.org/rfc/rfc5322#section-3.2.3">RFC&nbsp;5322 §3.2.3</a> allows <code>/</code> in the part before the <code>@</code>, so an unchecked address could reach outside <code>users/</code> (path traversal).</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Decided:</strong> <code>users/</code> is committed to git, so results travel between the cloud and Kubuntu. <strong>The repository is public</strong>, so everything under <code>users/</code> (the email address, attempt history, and code if it's stored) is public too. Notes for implementation, not yet decided: <code>make dev</code> will need <code>nodemon --ignore users/</code>, because nodemon 3 watches <code>.json</code> files by default (<code>lib/config/exec.js</code>) and would restart the server on every save; and one file per attempt, rather than one growing file, would stop commits from two machines conflicting.</td></tr>
 </table>
 <p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
 
