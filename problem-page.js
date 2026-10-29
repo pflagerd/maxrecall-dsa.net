@@ -2,7 +2,7 @@ const slug = new URLSearchParams(window.location.search).get('slug');
 
 const titleEl = document.getElementById('problem-title');
 const difficultyEl = document.getElementById('problem-difficulty');
-const tagsEl = document.getElementById('problem-tags');
+const bubblesEl = document.getElementById('problem-bubbles');
 const descriptionEl = document.getElementById('problem-description');
 const examplesEl = document.getElementById('problem-examples');
 const constraintsEl = document.getElementById('problem-constraints');
@@ -441,12 +441,13 @@ function renderMath(el) {
   });
 }
 
-// Language-independent header: title, difficulty, topics. Rendered once.
-function renderHeader() {
+// Language-independent header: title, difficulty, then source and topic
+// bubbles (bubbles.js). Rendered once.
+function renderHeader(labels) {
   titleEl.textContent = problem.title;
   difficultyEl.textContent = problem.difficulty;
   difficultyEl.className = `badge difficulty-${String(problem.difficulty || '').toLowerCase()}`;
-  tagsEl.textContent = (problem.topics || []).join(' · ');
+  renderBubbles(bubblesEl, problem, labels);
 }
 
 // Description/examples/constraints are per-language (like starterCode), so this
@@ -664,6 +665,9 @@ async function init() {
     return;
   }
 
+  // Fetched alongside the problem; loadLabels() never rejects.
+  const labelsPromise = loadLabels();
+
   try {
     const res = await fetch(`/api/problems/${slug}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -673,7 +677,7 @@ async function init() {
     return;
   }
 
-  renderHeader();
+  renderHeader(await labelsPromise);
   loadLanguage(pickInitialLanguage(problem));
 
   // Default to the Learning tab on first load only, when it has real content

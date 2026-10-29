@@ -103,7 +103,8 @@ The server prints whose Submits it's recording when it starts.</p>
   <tr><td><code>questions/*.json</code></td><td>One file per problem. Every <code>.json</code> here is listed automatically.</td></tr>
   <tr><td><code>labels.json</code></td><td>Colours for topic and source bubbles: <code>{"topics": {name: style}, "sources": {name: style}}</code>, where a style is <code>{"background", "text", "link"}</code>, all optional. Names not listed get a default style. <code>link</code> is reserved and not shown yet. Served to the browser as a static file. Every pair here was checked against WCAG's 4.5:1 contrast minimum on 2026-10-29.</td></tr>
   <tr><td><code>index.html</code>, <code>problems-list.js</code></td><td>Problem list page.</td></tr>
-  <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: description/learning tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
+  <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: header (title, difficulty, source and topic bubbles), description/learning tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
+  <tr><td><code>bubbles.js</code></td><td>Browser script shared by both pages: loads <code>labels.json</code> and draws source (outlined) and topic (filled) bubbles. Builds them with <code>textContent</code> and <code>element.style</code>, applying only colours <code>CSS.supports</code> accepts. If <code>labels.json</code> can't be loaded, bubbles use the default colours.</td></tr>
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
@@ -180,6 +181,7 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <code>maxrecall-dsa:default-language</code>,
   <code>maxrecall-dsa:available-languages</code>.</li>
   <li>The Skip button is a placeholder that only shows an alert.</li>
+  <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>.</li>
 </ul>
 <p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>.</p>
 
