@@ -17,7 +17,8 @@ Well, we kind of need both.  The focus of this system is teaching/learning rathe
 
 Going to want to support multiple users.  Save their session results data in users/XYZ eventually (where XYZ is their userid).  For now store my data in users/daniel.pflager@gmail.com
 
-Next to the difficulty bubble, allow other bubbles such as "Cracking the Coding Interview".  Add "tags" attribute to each question. Display these tags in bubbles like the difficulty in the order the tags appear in the question, but with different colors the name or value of which is stored with each tag in the question's json.
+Bubbles next to the difficulty: done 2026-10-29 (see docs/plans/topics-and-sources.md).  Each question has "sources" (e.g. "Cracking the Coding Interview", shown as outlined bubbles) and "topics" (formerly "tags", shown as filled bubbles), each in the order they appear in the question.  Colours live in labels.json, one place for all questions, not in each question's json.
+  Still to do: fill in each question's "sources" (all empty so far); an optional link for each topic and source ("link" in labels.json, reserved but not shown yet).
 
 for second-largest-number.json:
 
