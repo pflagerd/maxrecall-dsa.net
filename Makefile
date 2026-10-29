@@ -16,13 +16,13 @@ node_modules: package.json
 build: install
 
 # Run the server in the foreground (so Ctrl-C stops it). In the background,
-# poll it every 0.2s for up to OPEN_WAIT seconds, then open it in the default
-# browser. If it never answers, give up without opening anything.
+# poll it every 0.2s for about OPEN_WAIT seconds (whole-second clock, so +/-1s),
+# then open it in the default browser. If it never answers, give up without
+# opening anything.
 run: build
-	( tries=$$(( $(OPEN_WAIT) * 5 )); \
+	( deadline=$$(( $$(date +%s) + $(OPEN_WAIT) )); \
 	  until curl -s -o /dev/null --max-time 1 http://localhost:$(PORT)/; do \
-	    tries=$$(( tries - 1 )); \
-	    if [ $$tries -le 0 ]; then echo "make run: no answer on port $(PORT) after $(OPEN_WAIT)s; not opening a browser" >&2; exit 1; fi; \
+	    if [ $$(date +%s) -ge $$deadline ]; then echo "make run: no answer on port $(PORT) after $(OPEN_WAIT)s; not opening a browser" >&2; exit 1; fi; \
 	    sleep 0.2; \
 	  done; \
 	  xdg-open http://localhost:$(PORT)/ ) &
