@@ -181,9 +181,9 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <code>maxrecall-dsa:default-language</code>,
   <code>maxrecall-dsa:available-languages</code>.</li>
   <li>The Skip button is a placeholder that only shows an alert.</li>
-  <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>.</li>
+  <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>. The problem list shows the same bubbles in its “Sources &amp; topics” column.</li>
 </ul>
-<p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>.</p>
+<p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>, <code>index.html</code>, <code>problems-list.js</code>, <code>bubbles.js</code>.</p>
 
 <h2 id="state">8. Where data lives</h2>
 <p><strong>Every Submit is saved; Run is not.</strong> Each Submit writes one file:</p>
@@ -266,6 +266,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Fixed</strong> (plan step 0): <code>loadProblem</code> could read <code>questions-evil/x.json</code> from a sibling directory via the slug <code>..%2Fquestions-evil%2Fx</code>, because it checked <code>startsWith(QUESTIONS_DIR)</code>. It now uses <code>resolveInside</code> (<code>paths.js</code>). <span class="src">Source: <code>server.js</code>, <code>paths.js</code>.</span></td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 1): every Submit is saved under <code>users/&lt;email&gt;/submissions/</code>. Next: step 2, endpoints to read the records back.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>
 <p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
 

@@ -1,6 +1,6 @@
 # Plan: topics and sources as coloured bubbles
 
-Status: **all decided 2026-10-29; in progress.** Steps 1–3 done.
+Status: **all decided 2026-10-29.** Steps 1–4 done 2026-10-29; step 5 (links) is for later.
 Comes from the `TODO` note "Next to the difficulty bubble, allow other bubbles…".
 Linked from `readme.html` → Decisions & plans.
 
