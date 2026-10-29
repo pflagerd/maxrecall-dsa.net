@@ -30,6 +30,12 @@ run: build
 
 # Run with auto-reload for development (requires nodemon, installed via devDependencies)
 dev: build
+	( deadline=$$(( $$(date +%s) + $(OPEN_WAIT) )); \
+	  until curl -s -o /dev/null --max-time 1 http://localhost:$(PORT)/; do \
+	    if [ $$(date +%s) -ge $$deadline ]; then echo "make run: no answer on port $(PORT) after $(OPEN_WAIT)s; not opening a browser" >&2; exit 1; fi; \
+	    sleep 0.2; \
+	  done; \
+	  xdg-open http://localhost:$(PORT)/ ) &
 	PORT=$(PORT) npx nodemon server.js
 
 # Remove installed dependencies
