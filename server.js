@@ -5,7 +5,7 @@ const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
-const { CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');
+const { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -191,5 +191,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, HOST, () => {
   const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
-  console.log(`Server listening on ${where}, http://localhost:${PORT} (recording Submits for ${CURRENT_USER})`);
+  console.log(`Server listening on ${where}, http://localhost:${PORT} (recording Submits for ${CURRENT_USER} in ${USERS_DIR})`);
 });

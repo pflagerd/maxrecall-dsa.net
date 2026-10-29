@@ -1,0 +1,56 @@
+# systemd service for running MaxRecall DSA on the VPS.
+# Install and use it by following docs/deploy-vps.md.
+#
+# Paths assume the layout in that guide:
+#   /srv/maxrecall/maxrecall-dsa.net   the git checkout (read-only to the service)
+#   /srv/maxrecall/data/users          saved submissions (outside the checkout)
+#   /usr/local/bin/node                Node 22 from nodejs.org
+
+[Unit]
+Description=MaxRecall DSA practice server
+Documentation=https://github.com/pflagerd/maxrecall-dsa.net/blob/master/docs/deploy-vps.md
+After=network.target
+
+[Service]
+Type=simple
+User=maxrecall
+Group=maxrecall
+WorkingDirectory=/srv/maxrecall/maxrecall-dsa.net
+ExecStart=/usr/local/bin/node server.js
+Restart=on-failure
+RestartSec=2
+
+# Only reachable from this machine: you connect through an SSH tunnel.
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=MAXRECALL_USER=daniel.pflager@gmail.com
+Environment=MAXRECALL_USERS_DIR=/srv/maxrecall/data/users
+
+# --- Containment -----------------------------------------------------------
+# Submitted code runs as this service, so these limit what it can do.
+# See systemd.exec(5) and systemd.resource-control(5).
+
+# No network except this machine itself: the server only needs to answer the
+# tunnel, so submitted code can't reach the internet either.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+# The whole file system is read-only except these: saved submissions, and
+# the two folders where the judge compiles its helpers at startup.
+ProtectSystem=strict
+ReadWritePaths=/srv/maxrecall/data /srv/maxrecall/maxrecall-dsa.net/judge/cpp /srv/maxrecall/maxrecall-dsa.net/judge/java
+ProtectHome=yes
+# A private /tmp (the judge writes its temporary files there).
+PrivateTmp=yes
+PrivateDevices=yes
+
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+# Not MemoryDenyWriteExecute: Node's and Java's JIT compilers need it off.
+
+[Install]
+WantedBy=multi-user.target

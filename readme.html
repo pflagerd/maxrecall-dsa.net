@@ -89,7 +89,7 @@ The server prints whose Submits it's recording when it starts.</p>
 <p>The server listens on every network interface unless the <code>HOST</code> environment
 variable says otherwise. With <code>HOST=127.0.0.1</code> it accepts connections only from the same
 machine, which is how it runs on the VPS behind an SSH tunnel (see Environments). The first line it prints
-says which. <span class="src">Source: <code>server.js</code>.</span></p>
+says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the repo's <code>users/</code> (see Where data lives). <span class="src">Source: <code>server.js</code>, <code>users.js</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
 <code>PORT ?= 3000</code> default — see the
 <a href="https://www.gnu.org/software/make/manual/html_node/Overriding.html">GNU Make manual, “Overriding Variables”</a>.</p>
@@ -112,6 +112,7 @@ says which. <span class="src">Source: <code>server.js</code>.</span></p>
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
+  <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecall-dsa.service</code></td><td>Step-by-step guide and systemd service for running the app on the VPS (Ubuntu 24.04), reachable only through an SSH tunnel.</td></tr>
   <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
   <tr><td><code>readme.html</code></td><td>This file.</td></tr>
 </table>
@@ -196,6 +197,7 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
 <h2 id="state">8. Where data lives</h2>
 <p><strong>Every Submit is saved; Run is not.</strong> Each Submit writes one file:</p>
 <pre><code>users/&lt;email&gt;/submissions/&lt;timestamp&gt;.json</code></pre>
+<p><code>users/</code> is in the repo unless the <code>MAXRECALL_USERS_DIR</code> environment variable points elsewhere. The VPS uses <code>/srv/maxrecall/data/users</code>, outside its checkout, so <code>git pull</code> there never collides with its records. The server's first log line says which folder it's using.</p>
 <p>All questions share that one folder; each record's <code>question</code> field says which question it was.</p>
 <p><code>&lt;email&gt;</code> is the <code>MAXRECALL_USER</code> environment variable, lower-cased
 (default <code>daniel.pflager@gmail.com</code>). The server refuses to start if it isn't a plain
@@ -237,6 +239,15 @@ switching, pull after.</p>
 <pre><code>node --version; g++ --version | head -1; python3 --version; java -version; dmd --version | head -1</code></pre>
 <p class="src">Cloud versions checked 2026-10-28. Docs for the cloud environment:
 <a href="https://code.claude.com/docs/en/claude-code-on-the-web">Claude Code on the web</a>.</p>
+
+<h3>The VPS (third place, from 2026-10-29)</h3>
+<p>A Hostinger VPS running Ubuntu 24.04 can run the app for testing, set up by
+<a href="docs/deploy-vps.md"><code>docs/deploy-vps.md</code></a>. It uses Node 22 from nodejs.org (Ubuntu's own
+package is 18.19), g++ 13.2 and OpenJDK 21 from Ubuntu, and no D compiler. The server
+listens only on <code>127.0.0.1</code>, and you reach it with <code>ssh -N -L 3000:127.0.0.1:3000 root@VPS_IP</code>. It runs as the
+<code>maxrecall</code> user under systemd containment: no network except loopback, and a read-only file
+system apart from its data and the judge's helper folders. Its submissions are copied to Kubuntu with
+<code>rsync</code> and committed there. That's containment, not a sandbox (see Known gaps).</p>
 
 <h2 id="gaps">10. Known gaps &amp; caveats</h2>
 <div class="note">
@@ -280,6 +291,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Changed</strong> (owner's request): the API moved from <code>/api/problems/…</code> to <code>/api/questions/…</code>, matching the <code>questions/</code> folder. Unknown <code>/api/…</code> URLs now get a JSON 404 instead of the home page.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 2): <code>GET /api/submissions</code> (optionally <code>?question=</code>) and <code>GET /api/submissions/:id</code>, top-level to match the flat <code>submissions/</code> folder. Next: step 4, the Submissions tab.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 4): the Submissions tab lists a question's saved Submits and can load one's code back into the editor. Multi-user step 1 is complete.</td></tr>
+  <tr><td>2026-10-29</td><td><strong>Decided:</strong> test on the owner's Hostinger VPS (Ubuntu 24.04, nothing else on it), reachable <em>only</em> through an SSH tunnel (option A), because submitted code isn't sandboxed. Added the <code>HOST</code> and <code>MAXRECALL_USERS_DIR</code> settings, <code>deploy/maxrecall-dsa.service</code> and <code>docs/deploy-vps.md</code>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>

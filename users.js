@@ -3,7 +3,12 @@ const path = require('path');
 
 const { resolveInside } = require('./paths');
 
-const USERS_DIR = path.join(__dirname, 'users');
+// Where user data lives. Defaults to users/ in the repo (committed by hand).
+// MAXRECALL_USERS_DIR moves it elsewhere, e.g. outside the checkout on the
+// VPS, so records written there never collide with a later git pull.
+const USERS_DIR = process.env.MAXRECALL_USERS_DIR
+  ? path.resolve(process.env.MAXRECALL_USERS_DIR)
+  : path.join(__dirname, 'users');
 const DEFAULT_USER = 'daniel.pflager@gmail.com';
 
 // Strict on purpose: the address becomes a directory name, and RFC 5322
@@ -103,4 +108,4 @@ async function loadSubmission(id) {
   }
 }
 
-module.exports = { CURRENT_USER, saveSubmission, listSubmissions, loadSubmission };
+module.exports = { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission };
