@@ -17,7 +17,7 @@ Well, we kind of need both.  The focus of this system is teaching/learning rathe
 
 Going to want to support multiple users.  Save their session results data in users/XYZ eventually (where XYZ is their userid).  For now store my data in users/daniel.pflager@gmail.com
 
-Next to the difficulty bubble, allow other bubbles such as "Cracking the Coding Interview".  Add "tags" attribute to each question. Display these tags in bubbles like the difficulty in the order the tags appear in the question, but with different colors the name or value of which is stored with each tag in the question's json file..
+Next to the difficulty bubble, allow other bubbles such as "Cracking the Coding Interview".  Add "tags" attribute to each question. Display these tags in bubbles like the difficulty in the order the tags appear in the question, but with different colors the name or value of which is stored with each tag in the question's json.
 
 for second-largest-number.json:
 
