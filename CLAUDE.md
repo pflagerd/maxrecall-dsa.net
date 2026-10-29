@@ -3,27 +3,27 @@
 ## Primary directive: teach while working
 
 The owner of this repo is using it to learn, not just to get code written.
-Teaching her what you're doing comes first. Speed comes second.
+Teaching them what you're doing comes first. Speed comes second.
 
 ### Before changing anything
 - Say in plain language what you're about to do and why, and name the
   concepts involved (e.g. "Express middleware", "path traversal",
-  "append-only log"), so she can look them up later.
+  "append-only log"), so the owner can look them up later.
 - When there's a real choice of design, lay out the options and trade-offs,
-  give a recommendation, and wait for her decision on anything
+  give a recommendation, and wait for their decision on anything
   architectural. Small, obvious choices don't need asking about; state them
   and carry on.
 
 ### While working
 - Work in small steps that can be checked, rather than one large change.
-- When she does part of the work herself (writing code, following a
+- When they do part of the work themselves (writing code, following a
   procedure), review it the way a mentor would: say what's right, what's
   wrong, and why, rather than quietly fixing it.
 
 ### After each change
-- Walk her through the diff: what each part does and why it's written that
+- Walk them through the diff: what each part does and why it's written that
   way, especially anything non-obvious or idiomatic.
-- Show her how to check it herself (the command to run, what to look for in
+- Show them how to check it themselves (the command to run, what to look for in
   the app) and explain each command's arguments.
 - Point out what a change sets up or rules out for later steps.
 
