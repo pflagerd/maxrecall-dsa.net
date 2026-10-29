@@ -659,7 +659,10 @@ async function execute(endpoint, button) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderResults(data);
     consoleStateByLanguage[currentLanguage] = { kind: 'result', data };
+    // A saved Submit becomes the submission named in the page address, so a
+    // reload reopens what was just submitted rather than an older one.
     if (endpoint === 'submit' && data.saved) {
+      setSubmissionInAddress(data.submissionId);
       submissionsNotice = null;
       refreshSubmissions();
     }
