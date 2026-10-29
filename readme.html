@@ -99,6 +99,7 @@ front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</cod
   <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: description/learning tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
+  <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
   <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
   <tr><td><code>readme.html</code></td><td>This file.</td></tr>
 </table>
@@ -208,9 +209,12 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 </div>
 <ul>
   <li>The path check in <code>loadProblem</code> (<code>server.js</code>) uses
-  <code>file.startsWith(QUESTIONS_DIR)</code> with no trailing separator. My guess is
-  that a crafted slug could reach a sibling directory whose name starts with
-  <code>questions</code>. This hasn't been tested; low risk today.</li>
+  <code>file.startsWith(QUESTIONS_DIR)</code> with no trailing separator. <strong>Confirmed 2026-10-29:</strong>
+  <code>GET /api/problems/..%2Fquestions-evil%2Fx</code> returned
+  <code>questions-evil/x.json</code> from a sibling directory. Going up further
+  (<code>..%2F..%2F…</code>) is still blocked. Low risk today, since no such
+  directory exists, but the fix is step 0 of the
+  <a href="docs/plans/multi-user-step-1.md">multi-user plan</a>.</li>
   <li><code>package-lock.json</code> is gitignored, so the cloud and Kubuntu can
   install different dependency versions.
   <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json">npm's docs</a>
@@ -223,7 +227,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
   <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>
-  <tr><td>2026-10-28</td><td><strong>In planning:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. The four open questions were decided on 2026-10-29 (below); next is a plan for the file layout and API.</td></tr>
+  <tr><td>2026-10-28</td><td><strong>In planning:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. The four open questions were decided on 2026-10-29 (below). Plan, with decisions still needed on layout, record contents, identity and committing: <a href="docs/plans/multi-user-step-1.md"><code>docs/plans/multi-user-step-1.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> each user's directory is named by email address, e.g. <code>users/daniel.pflager@gmail.com/</code>. There's one user for now. Before anyone else can sign up, the address must be lower-cased and checked against a strict pattern: <a href="https://www.rfc-editor.org/rfc/rfc5322#section-3.2.3">RFC&nbsp;5322 §3.2.3</a> allows <code>/</code> in the part before the <code>@</code>, so an unchecked address could reach outside <code>users/</code> (path traversal).</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> <code>users/</code> is committed to git, so results travel between the cloud and Kubuntu. <strong>The repository is public</strong>, so everything under <code>users/</code> (the email address, attempt history, and code if it's stored) is public too. Done the same day: nodemon ignores <code>users/</code> (<code>package.json</code> → <code>nodemonConfig</code>), because nodemon 3 always watches <code>.json</code> files (<code>lib/config/exec.js</code>) and would otherwise restart the server on every save. Note for implementation, not yet decided: one file per attempt, rather than one growing file, would stop commits from two machines conflicting.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> each submission's code is stored in the user's directory (public, like the rest of <code>users/</code>).</td></tr>
