@@ -533,9 +533,12 @@ function loadLanguage(language) {
 // default. Shared by language-select, the language-filter menu's
 // name-click, its checkbox-uncheck fallback, and the Submissions tab's Load
 // — every path that changes "what language is this" goes through here.
-// Load passes { saveAsDefault: false }: looking at an old submission isn't
-// choosing a new default language.
-async function switchLanguage(newLanguage, { saveAsDefault = true } = {}) {
+// When the user picks a language themselves (chosenByUser, the default) it
+// becomes their default language, and any loaded submission is dropped
+// from the page address so a reload doesn't bring it back over their
+// choice. Loading a submission passes { chosenByUser: false }: it does
+// neither.
+async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
   if (!problem) {
     setStoredDefaultLanguage(newLanguage);
     updateDefaultLanguageHighlight();
@@ -544,8 +547,9 @@ async function switchLanguage(newLanguage, { saveAsDefault = true } = {}) {
   if (newLanguage !== currentLanguage) {
     codeByLanguage[currentLanguage] = editor.getValue();
     loadLanguage(newLanguage);
+    if (chosenByUser) setSubmissionInAddress(null);
   }
-  if (saveAsDefault) {
+  if (chosenByUser) {
     setStoredDefaultLanguage(newLanguage);
     updateDefaultLanguageHighlight();
   }
@@ -655,7 +659,10 @@ async function execute(endpoint, button) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderResults(data);
     consoleStateByLanguage[currentLanguage] = { kind: 'result', data };
-    if (endpoint === 'submit' && data.saved) refreshSubmissions();
+    if (endpoint === 'submit' && data.saved) {
+      submissionsNotice = null;
+      refreshSubmissions();
+    }
   } catch (err) {
     renderClientError(err.message);
     consoleStateByLanguage[currentLanguage] = { kind: 'error', message: err.message };
@@ -676,8 +683,16 @@ function makeEl(tag, text, className) {
   return el;
 }
 
+// A message shown above the Submissions list, e.g. why the submission named
+// in the page address couldn't be opened. Null when there's nothing to say.
+let submissionsNotice = null;
+
+function showInSubmissionsPanel(...nodes) {
+  const notice = submissionsNotice ? [makeEl('p', submissionsNotice, 'status-fail')] : [];
+  descriptionTabPanels.submissions.replaceChildren(...notice, ...nodes);
+}
+
 async function refreshSubmissions() {
-  const panel = descriptionTabPanels.submissions;
   let summaries;
   try {
     const res = await fetch(`/api/submissions?question=${encodeURIComponent(slug)}`);
@@ -685,11 +700,11 @@ async function refreshSubmissions() {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     summaries = data;
   } catch (err) {
-    panel.replaceChildren(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
+    showInSubmissionsPanel(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
     return;
   }
   if (!summaries.length) {
-    panel.replaceChildren(makeEl('p', 'No submissions yet. Press Submit to record one.', 'coming-soon'));
+    showInSubmissionsPanel(makeEl('p', 'No submissions yet. Press Submit to record one.', 'coming-soon'));
     return;
   }
 
@@ -718,36 +733,95 @@ async function refreshSubmissions() {
   // Scrolls sideways rather than being cut off when the pane is narrow.
   const scroller = makeEl('div', undefined, 'submissions-scroll');
   scroller.appendChild(table);
-  panel.replaceChildren(scroller);
+  showInSubmissionsPanel(scroller);
 }
 
-// Switches to the submission's language and puts its code in the editor.
-// Asks first only if that language's current code has been edited (it's
-// neither the starter code nor already this submission's code).
+// The page address records which submission is loaded
+// (problem.html?slug=…&submission=<id>), so a reload reopens it.
+// replaceState changes the address without reloading or adding history.
+function setSubmissionInAddress(id) {
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set('submission', id);
+  else url.searchParams.delete('submission');
+  history.replaceState(null, '', url);
+}
+
+async function fetchSubmission(id) {
+  const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
+  const record = await res.json();
+  if (!res.ok) throw new Error(record.error || `HTTP ${res.status}`);
+  return record;
+}
+
+// Why a submission can't be loaded on this page, or null if it can.
+function whyNotLoadable(record) {
+  if (record.question !== slug) return `That submission is for a different question (${record.question}).`;
+  if (![...languageSelect.options].some((o) => o.value === record.language)) {
+    const label = LANGUAGE_LABELS[record.language] || record.language;
+    return `${label} is turned off in the language menu. Turn it on to load this submission.`;
+  }
+  return null;
+}
+
+// Switches to the submission's language (without making it the default),
+// puts its code in the editor, and records it in the page address.
+async function applySubmission(record) {
+  await switchLanguage(record.language, { chosenByUser: false });
+  editor.setValue(record.code);
+  setSubmissionInAddress(record.id);
+  if (submissionsNotice) {
+    submissionsNotice = null;
+    refreshSubmissions();
+  }
+}
+
+// The Submissions tab's Load button. Asks first only if that language's
+// current code has been edited (it's neither the starter code nor already
+// this submission's code).
 async function loadSubmissionIntoEditor(id) {
   let record;
   try {
-    const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
-    record = await res.json();
-    if (!res.ok) throw new Error(record.error || `HTTP ${res.status}`);
+    record = await fetchSubmission(id);
   } catch (err) {
     alert(`Couldn't load that submission: ${err.message}`);
     return;
   }
+  const problemWithIt = whyNotLoadable(record);
+  if (problemWithIt) {
+    alert(problemWithIt);
+    return;
+  }
+  const label = LANGUAGE_LABELS[record.language] || record.language;
+  const starter = problem.starterCode[record.language] ?? '';
+  const current = record.language === currentLanguage ? editor.getValue() : codeByLanguage[record.language] ?? starter;
+  if (current !== starter && current !== record.code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
+    return;
+  }
+  await applySubmission(record);
+}
 
-  const { language, code } = record;
-  const label = LANGUAGE_LABELS[language] || language;
-  if (![...languageSelect.options].some((o) => o.value === language)) {
-    alert(`${label} is turned off in the language menu. Turn it on to load this submission.`);
-    return;
+// On page load: if the address names a submission, open it. Nothing has
+// been edited yet, so there's nothing to confirm. If it can't be opened,
+// the page stays as it opened, the address is cleaned up, and the
+// Submissions tab says why.
+async function openSubmissionFromAddress() {
+  const id = new URLSearchParams(window.location.search).get('submission');
+  if (!id) return;
+  let reason;
+  try {
+    const record = await fetchSubmission(id);
+    reason = whyNotLoadable(record);
+    if (!reason) {
+      await applySubmission(record);
+      return;
+    }
+  } catch (err) {
+    reason = `Couldn't open submission ${id} from the page address: ${err.message}.`;
   }
-  const starter = problem.starterCode[language] ?? '';
-  const current = language === currentLanguage ? editor.getValue() : codeByLanguage[language] ?? starter;
-  if (current !== starter && current !== code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
-    return;
-  }
-  await switchLanguage(language, { saveAsDefault: false });
-  editor.setValue(code);
+  submissionsNotice = reason;
+  setSubmissionInAddress(null);
+  setDescriptionTab('submissions');
+  refreshSubmissions();
 }
 
 async function init() {
@@ -784,6 +858,9 @@ async function init() {
   submitBtn.addEventListener('click', () => execute('submit', submitBtn));
   // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
   skipBtn.addEventListener('click', () => alert('Skip button pressed'));
+
+  // Last, so the buttons above are wired up without waiting for this fetch.
+  openSubmissionFromAddress();
 }
 
 init();
