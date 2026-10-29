@@ -1,6 +1,6 @@
 # Plan: multi-user step 1 — record each Submit under `users/<email>/`
 
-Status: **decided 2026-10-29; in progress.** Step 0 done, steps 1–3 next.
+Status: **decided 2026-10-29; in progress.** Steps 0 and 1 done (readme updated with each), step 2 next.
 Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 ## Already decided (2026-10-29)

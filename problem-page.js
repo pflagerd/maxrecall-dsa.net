@@ -599,7 +599,9 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
 function renderResults(result) {
   consoleStatusEl.textContent = `${result.status}${
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
-  }${typeof result.runtimeMs === 'number' ? ` (${result.runtimeMs} ms)` : ''}`;
+  }${typeof result.runtimeMs === 'number' ? ` (${result.runtimeMs} ms)` : ''}${
+    result.saved === false ? ` — ⚠ not saved: ${result.saveError}` : ''
+  }`;
   consoleStatusEl.className = result.status === 'Accepted' ? 'status-pass' : 'status-fail';
 
   // textContent, not innerHTML — this is raw program output, not markup.

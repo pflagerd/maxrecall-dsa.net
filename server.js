@@ -1,9 +1,11 @@
+const crypto = require('crypto');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
+const { CURRENT_USER, saveSubmission } = require('./users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,10 +16,17 @@ app.use(express.json());
 
 // --- Problem data -----------------------------------------------------
 
+// Returns { problem, sha256 }: the parsed problem, and the SHA-256 of the
+// file's exact bytes so a saved submission can tell later whether the
+// question has been edited since. Both come from one read, so they match.
 function loadProblem(slug) {
   const file = resolveInside(QUESTIONS_DIR, `${slug}.json`);
   if (!file || !fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  const bytes = fs.readFileSync(file);
+  return {
+    problem: JSON.parse(bytes.toString('utf8')),
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  };
 }
 
 function listProblems() {
@@ -55,14 +64,15 @@ app.get('/api/problems', (req, res) => {
 });
 
 app.get('/api/problems/:slug', (req, res) => {
-  const problem = loadProblem(req.params.slug);
-  if (!problem) return res.status(404).json({ error: 'Problem not found' });
-  res.json(toPublicProblem(problem));
+  const loaded = loadProblem(req.params.slug);
+  if (!loaded) return res.status(404).json({ error: 'Problem not found' });
+  res.json(toPublicProblem(loaded.problem));
 });
 
 async function handleExecution(req, res, { onlyVisible }) {
-  const problem = loadProblem(req.params.slug);
-  if (!problem) return res.status(404).json({ error: 'Problem not found' });
+  const loaded = loadProblem(req.params.slug);
+  if (!loaded) return res.status(404).json({ error: 'Problem not found' });
+  const { problem } = loaded;
 
   const { language, code } = req.body || {};
   if (!SUPPORTED_LANGUAGES.includes(language)) {
@@ -82,7 +92,35 @@ async function handleExecution(req, res, { onlyVisible }) {
   const signature = problem.signature && problem.signature[language];
 
   try {
+    const submittedAt = new Date().toISOString();
     const result = await runSubmission({ language, code, functionName, testCases, signature, judgeMode });
+    // Only Submit is recorded (Run isn't). A failed save mustn't cost the
+    // learner their result, so it's reported alongside it instead.
+    if (!onlyVisible) {
+      try {
+        result.submissionId = await saveSubmission({
+          schemaVersion: 1,
+          submittedAt,
+          question: problem.slug,
+          questionSha256: loaded.sha256,
+          language,
+          judgeMode,
+          code,
+          status: result.status,
+          passed: result.passed,
+          total: result.total,
+          runtimeMs: result.runtimeMs,
+          results: result.results.map((r) => r.passed),
+          stdout: result.stdout,
+          stderr: result.stderr,
+        });
+        result.saved = true;
+      } catch (err) {
+        console.error(`Failed to save submission for ${problem.slug}:`, err);
+        result.saved = false;
+        result.saveError = err.message;
+      }
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message || 'Execution failed' });
@@ -107,5 +145,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT} (recording Submits for ${CURRENT_USER})`);
 });
