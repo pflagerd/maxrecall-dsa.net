@@ -1,0 +1,15 @@
+{
+  "topics": {
+    "Array": { "background": "#1e3a8a", "text": "#bfdbfe" },
+    "Hash Table": { "background": "#581c87", "text": "#e9d5ff" },
+    "Dynamic Programming": { "background": "#7c2d12", "text": "#fed7aa" },
+    "Math": { "background": "#134e4a", "text": "#99f6e4" },
+    "Linked List": { "background": "#831843", "text": "#fbcfe8" },
+    "Singly Linked List": { "background": "#831843", "text": "#fbcfe8" },
+    "String": { "background": "#164e63", "text": "#a5f3fc" },
+    "Stack": { "background": "#312e81", "text": "#c7d2fe" }
+  },
+  "sources": {
+    "Cracking the Coding Interview": { "text": "#fda4af" }
+  }
+}

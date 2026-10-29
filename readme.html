@@ -101,6 +101,7 @@ The server prints whose Submits it's recording when it starts.</p>
   <tr><td><code>judge/cpp/judge_json.{hpp,cpp}</code></td><td>JSON parser/serializer linked into C++ submissions. Compiled once to <code>judge_json.o</code> (gitignored) at server start.</td></tr>
   <tr><td><code>judge/java/JudgeJson.java</code></td><td>Same role for Java. Compiled to <code>JudgeJson.class</code> (gitignored) at server start.</td></tr>
   <tr><td><code>questions/*.json</code></td><td>One file per problem. Every <code>.json</code> here is listed automatically.</td></tr>
+  <tr><td><code>labels.json</code></td><td>Colours for topic and source bubbles: <code>{"topics": {name: style}, "sources": {name: style}}</code>, where a style is <code>{"background", "text", "link"}</code>, all optional. Names not listed get a default style. <code>link</code> is reserved and not shown yet. Served to the browser as a static file. Every pair here was checked against WCAG's 4.5:1 contrast minimum on 2026-10-29.</td></tr>
   <tr><td><code>index.html</code>, <code>problems-list.js</code></td><td>Problem list page.</td></tr>
   <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: description/learning tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
