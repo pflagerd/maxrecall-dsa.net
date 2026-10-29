@@ -77,10 +77,10 @@ system. <span class="src">Source: <code>THOUGHTS</code>, <code>TODO</code>.</spa
   <tr><th>Command</th><th>What it does</th></tr>
   <tr><td><code>make install</code></td><td>Runs <code>npm install</code> if <code>node_modules</code> is older than <code>package.json</code>.</td></tr>
   <tr><td><code>make run</code></td><td>Starts the server in the foreground (<code>PORT=3000 node server.js</code>; Ctrl-C stops it). In the background it polls the server with <code>curl</code> every 0.2&nbsp;s until it answers, then opens it with <code>xdg-open</code> (your default browser). If the server hasn't answered within about <code>OPEN_WAIT</code> seconds (±1&nbsp;s) (default 30; e.g. <code>make run OPEN_WAIT=60</code>), it prints a message and gives up on the browser. Override the port with <code>make run PORT=8080</code>. Needs <code>curl</code> and <code>xdg-open</code> (package <code>xdg-utils</code>); the cloud environment has no <code>xdg-open</code>, so there the browser step fails and the server still runs.</td></tr>
-  <tr><td><code>make dev</code></td><td>Starts the server under <code>nodemon</code>, which restarts it whenever a <code>.js</code>, <code>.mjs</code>, <code>.cjs</code> or <code>.json</code> file changes, except under <code>users/</code> (set in <code>package.json</code> → <code>nodemonConfig</code>). Doesn't open a browser.</td></tr>
+  <tr><td><code>make dev</code></td><td>Starts the server under <code>nodemon</code>, which restarts it whenever a <code>.js</code>, <code>.mjs</code>, <code>.cjs</code> or <code>.json</code> file changes, except under <code>users/</code> (set in <code>package.json</code> → <code>nodemonConfig</code>). Opens the browser once at startup, the same way as <code>make run</code>; restarts don't open it again.</td></tr>
   <tr><td><code>make clean</code></td><td>Deletes <code>node_modules</code>.</td></tr>
 </table>
-<p>With <code>make dev</code>, open <code>http://localhost:3000/</code> yourself. There is no compile step for the
+<p>Both open <code>http://localhost:3000/</code> for you. There is no compile step for the
 front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</code>,
 <code>package.json</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
