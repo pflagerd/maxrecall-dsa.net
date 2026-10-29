@@ -34,10 +34,10 @@ function listProblems() {
     .readdirSync(QUESTIONS_DIR)
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
-      const { slug, title, difficulty, tags } = JSON.parse(
+      const { slug, title, difficulty, topics, sources } = JSON.parse(
         fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8')
       );
-      return { slug, title, difficulty, tags };
+      return { slug, title, difficulty, topics, sources };
     })
     .sort((a, b) => a.title.localeCompare(b.title));
 }

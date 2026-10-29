@@ -441,12 +441,12 @@ function renderMath(el) {
   });
 }
 
-// Language-independent header: title, difficulty, tags. Rendered once.
+// Language-independent header: title, difficulty, topics. Rendered once.
 function renderHeader() {
   titleEl.textContent = problem.title;
   difficultyEl.textContent = problem.difficulty;
   difficultyEl.className = `badge difficulty-${String(problem.difficulty || '').toLowerCase()}`;
-  tagsEl.textContent = (problem.tags || []).join(' · ');
+  tagsEl.textContent = (problem.topics || []).join(' · ');
 }
 
 // Description/examples/constraints are per-language (like starterCode), so this

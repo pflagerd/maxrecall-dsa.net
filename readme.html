@@ -113,7 +113,7 @@ The server prints whose Submits it's recording when it starts.</p>
 <h2 id="api">4. HTTP API</h2>
 <table>
   <tr><th>Method &amp; path</th><th>Behaviour</th></tr>
-  <tr><td><code>GET /api/problems</code></td><td>List of <code>{slug, title, difficulty, tags}</code>, sorted by title.</td></tr>
+  <tr><td><code>GET /api/problems</code></td><td>List of <code>{slug, title, difficulty, topics, sources}</code>, sorted by title.</td></tr>
   <tr><td><code>GET /api/problems/:slug</code></td><td>The problem with hidden test cases removed: <code>visibleTestCases</code> plus a <code>hiddenCount</code>.</td></tr>
   <tr><td><code>POST /api/problems/:slug/run</code></td><td>Body <code>{language, code}</code>. Judges against <em>visible</em> test cases only.</td></tr>
   <tr><td><code>POST /api/problems/:slug/submit</code></td><td>Same body. Judges against <em>all</em> test cases, hidden included, then saves a record (see <a href="#state">Where data lives</a>). The response adds <code>saved: true</code> and <code>submissionId</code> (the record's timestamp), or <code>saved: false</code> and <code>saveError</code> if the save failed. The judged result is returned either way, and the page shows a “not saved” warning.</td></tr>
@@ -125,7 +125,9 @@ The server prints whose Submits it's recording when it starts.</p>
 <table>
   <tr><th>Field</th><th>Meaning</th></tr>
   <tr><td><code>slug</code></td><td>URL id; should match the file name.</td></tr>
-  <tr><td><code>title</code>, <code>difficulty</code>, <code>tags</code></td><td>Shown in the list. <code>difficulty</code> is <code>Easy</code>/<code>Medium</code>/<code>Hard</code>.</td></tr>
+  <tr><td><code>title</code>, <code>difficulty</code></td><td>Shown in the list. <code>difficulty</code> is <code>Easy</code>/<code>Medium</code>/<code>Hard</code>.</td></tr>
+  <tr><td><code>topics</code></td><td>What the question is about, e.g. <code>["Array", "Hash Table"]</code>. Shown in the order given. Was called <code>tags</code> until 2026-10-29.</td></tr>
+  <tr><td><code>sources</code></td><td>Where the question comes from, e.g. <code>["Cracking the Coding Interview"]</code>, or <code>[]</code>. Shown in the order given.</td></tr>
   <tr><td><code>judgeMode</code></td><td><code>"function"</code> (default if absent) or <code>"program"</code>. See <a href="#judge">Judging</a>.</td></tr>
   <tr><td><code>learning</code></td><td>Optional. Per-language HTML for the Learning tab.</td></tr>
   <tr><td><code>description</code>, <code>examples</code>, <code>constraints</code></td><td>Per-language (an object keyed by language), since wording differs between languages.</td></tr>

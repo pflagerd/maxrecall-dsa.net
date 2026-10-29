@@ -1,6 +1,6 @@
 # Plan: topics and sources as coloured bubbles
 
-Status: **decisions recorded 2026-10-29; details below waiting for the owner** (❓).
+Status: **all decided 2026-10-29; in progress.** Step 1 done.
 Comes from the `TODO` note "Next to the difficulty bubble, allow other bubbles…".
 Linked from `readme.html` → Decisions & plans.
 
@@ -28,16 +28,28 @@ Linked from `readme.html` → Decisions & plans.
    spaced repetition is built, so it gets the simple version.
 4. Within each kind, bubbles keep the order they have in the question file.
 
-## Details to decide
+## Details decided 2026-10-29: all as recommended
 
-### ❓ T1. Field names in question files
+T1 a (`topics` + `sources`), T2 `labels.json` at the top level, T3 sources
+outlined and topics filled, T4 difficulty → sources → topics in the header,
+T5 `labels.json` served as a static file. The options are kept below for the
+record.
+
+**Correction:** T2 below first said the colour pairs work "in light and dark
+mode". The app has only a dark theme (`style.css`, `:root`, background
+`#0f172a`); only `readme.html` has a light mode. Colours are chosen and
+contrast-checked for the dark page.
+
+## Details considered
+
+### T1. Field names in question files
 
 | Option | Question file | For | Against |
 |---|---|---|---|
 | **a. Rename `tags` to `topics`, add `sources`** (recommended) | `"topics": ["Array"], "sources": ["Cracking the Coding Interview"]` | Says what it means, and matches the decision to keep the two apart. Cheap now: 9 files. | Touches all 9 files, and so changes every question's SHA-256 once. That's harmless while there are no real records yet. |
 | b. Keep `tags` (meaning topics), add `sources` | `"tags": […], "sources": […]` | Question files stay as they are, apart from adding `sources`. | "tags" stays vague alongside "sources". |
 
-### ❓ T2. The shared file
+### T2. The shared file
 
 Recommended: **`labels.json` at the top level of the repo.** It can't go in
 `questions/`, because `listProblems` treats every `.json` file there as a question.
@@ -56,24 +68,23 @@ Recommended: **`labels.json` at the top level of the repo.** It can't go in
 
 - `background` and `text` are set as a pair, so the text stays readable. WCAG
   asks for a contrast ratio of at least 4.5:1
-  ([WCAG 2.2, 1.4.3](https://www.w3.org/TR/WCAG22/#contrast-minimum)). The pair
-  sets its own background, so it works the same in light and dark mode.
+  ([WCAG 2.2, 1.4.3](https://www.w3.org/TR/WCAG22/#contrast-minimum)).
 - `link` is optional. This step only reserves the name, and nothing displays it
   yet. A later step can turn the bubble into a link.
 - A name that isn't listed gets a default style for its kind. This means a new
   topic shows up straight away, with no edit to `labels.json` needed.
 
-### ❓ T3. Telling sources from topics at a glance
+### T3. Telling sources from topics at a glance
 
 Recommended: **sources are outlined bubbles, topics are filled ones**, so the two
 kinds look different even when they have no colours of their own.
 
-### ❓ T4. Order on the problem page
+### T4. Order on the problem page
 
 Recommended: **difficulty, then sources, then topics**, all in the header. The
 " · " text line in the description pane goes away.
 
-### ❓ T5. How the browser gets `labels.json`
+### T5. How the browser gets `labels.json`
 
 | Option | For | Against |
 |---|---|---|

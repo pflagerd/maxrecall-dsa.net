@@ -2,7 +2,8 @@
   "slug": "contains-duplicate",
   "title": "Contains Duplicate",
   "difficulty": "Easy",
-  "tags": ["Array", "Hash Table"],
+  "topics": ["Array", "Hash Table"],
+  "sources": [],
   "description": {
     "javascript": "<p>Given an integer array <code>nums</code>, return <code>true</code> if any value appears at least twice in the array, and return <code>false</code> if every element is distinct.</p>",
     "python": "<p>Given a list of integers <code>nums</code>, return <code>True</code> if any value appears at least twice in the list, and return <code>False</code> if every element is distinct.</p>",

@@ -22,7 +22,7 @@ async function loadProblems() {
         (p) => `
         <tr class="problem-row" data-slug="${p.slug}">
           <td class="problem-title">${p.title}</td>
-          <td class="problem-tags">${(p.tags || []).join(', ')}</td>
+          <td class="problem-tags">${(p.topics || []).join(', ')}</td>
           <td><span class="badge ${difficultyClass(p.difficulty)}">${p.difficulty}</span></td>
         </tr>`
       )

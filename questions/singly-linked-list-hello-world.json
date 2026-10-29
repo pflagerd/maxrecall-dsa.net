@@ -2,7 +2,8 @@
   "slug": "singly-linked-list-hello-world",
   "title": "Singly Linked List: Hello World",
   "difficulty": "Easy",
-  "tags": ["Linked List", "Singly Linked List"],
+  "topics": ["Linked List", "Singly Linked List"],
+  "sources": [],
   "description": {
     "javascript": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>null</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",
     "python": "<p>A <strong>singly linked list</strong> is a linear data structure made up of nodes, where each node stores a value (<code>.value</code>) and a pointer (<code>.next</code>) to the following node. The last node's <code>.next</code> pointer is <code>None</code>, marking the end of the list.</p><p>You are given the <code>SinglyLinkedListNode</code> class below, which takes a <code>.value</code> and an optional <code>.next</code> pointer. Using only this class, construct a singly linked list where each node holds one word from the phrase <code>\"Hello World!\"</code>, in order, and return the <strong>head</strong> of the list.</p>",

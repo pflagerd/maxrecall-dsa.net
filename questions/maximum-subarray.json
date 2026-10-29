@@ -2,7 +2,8 @@
   "slug": "maximum-subarray",
   "title": "Maximum Subarray",
   "difficulty": "Medium",
-  "tags": ["Array", "Dynamic Programming"],
+  "topics": ["Array", "Dynamic Programming"],
+  "sources": [],
   "description": {
     "javascript": "<p>Given an integer array <code>nums</code>, find the subarray with the largest sum, and return <em>its sum</em>.</p>",
     "python": "<p>Given a list of integers <code>nums</code>, find the subarray with the largest sum, and return <em>its sum</em>.</p>",

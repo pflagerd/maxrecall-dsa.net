@@ -2,7 +2,8 @@
   "slug": "second-largest-number",
   "title": "Second Largest Number",
   "difficulty": "Easy",
-  "tags": ["Array"],
+  "topics": ["Array"],
+  "sources": [],
   "description": {
     "javascript": "<p>Given an array of integers <code>nums</code>, return the <strong>second largest distinct</strong> value in the array.</p><p>If the largest value appears more than once, the second largest is the next distinct value below it &mdash; not simply the element in the second sorted position.</p>",
     "python": "<p>Given a list of integers <code>nums</code>, return the <strong>second largest distinct</strong> value in the list.</p><p>If the largest value appears more than once, the second largest is the next distinct value below it &mdash; not simply the element in the second sorted position.</p>",

@@ -2,7 +2,8 @@
   "slug": "hello-world",
   "title": "Hello World!",
   "difficulty": "Easy",
-  "tags": ["Fundamentals"],
+  "topics": ["Fundamentals"],
+  "sources": [],
   "judgeMode": "program",
   "learning": {
     "javascript": "<p>In JavaScript, you print text using <code>console.log()</code>:</p><div class=\"example\"><pre>console.log(\"Hello World!\");</pre></div><p>This writes the text to the console, followed by a newline. It's the most common way to produce output you can see while developing or debugging.</p>",
