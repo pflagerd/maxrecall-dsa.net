@@ -1,6 +1,6 @@
 # Plan: multi-user step 1 — record each Submit under `users/<email>/`
 
-Status: **in progress.** Steps 0, 1 and 2 done; step 4 (Submissions tab) next, at the owner's choice of option b on 2026-10-29.
+Status: **done 2026-10-29.** Steps 0, 1, 2 and 4 are built (readme updated with each, so step 3 was folded in).
 Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 ## Already decided (2026-10-29)

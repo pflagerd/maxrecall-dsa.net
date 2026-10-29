@@ -520,6 +520,40 @@ button.primary:hover {
   font-style: italic;
 }
 
+/* Submissions tab (problem-page.js, refreshSubmissions) */
+.submissions-scroll {
+  overflow-x: auto;
+}
+
+.submissions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.submissions-table th {
+  text-align: left;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 0.4rem 0.45rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.submissions-table td {
+  padding: 0.4rem 0.45rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+/* Only "When" may wrap; the short columns read badly split over two lines. */
+.submissions-table td:not(:first-child) {
+  white-space: nowrap;
+}
+
+.submissions-table button {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+}
+
 .learning-cta {
   margin-top: 1.5rem;
   padding-top: 1rem;

@@ -651,12 +651,99 @@ async function execute(endpoint, button) {
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     renderResults(data);
     consoleStateByLanguage[currentLanguage] = { kind: 'result', data };
+    if (endpoint === 'submit' && data.saved) refreshSubmissions();
   } catch (err) {
     renderClientError(err.message);
     consoleStateByLanguage[currentLanguage] = { kind: 'error', message: err.message };
   } finally {
     button.disabled = false;
   }
+}
+
+// --- Submissions tab ---------------------------------------------------------
+// Lists this question's saved Submits (GET /api/submissions?question=…),
+// newest first, and can load one's code back into the editor. Built with
+// createElement/textContent, so nothing from a record is treated as HTML.
+
+function makeEl(tag, text, className) {
+  const el = document.createElement(tag);
+  if (text !== undefined) el.textContent = text;
+  if (className) el.className = className;
+  return el;
+}
+
+async function refreshSubmissions() {
+  const panel = descriptionTabPanels.submissions;
+  let summaries;
+  try {
+    const res = await fetch(`/api/submissions?question=${encodeURIComponent(slug)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    summaries = data;
+  } catch (err) {
+    panel.replaceChildren(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
+    return;
+  }
+  if (!summaries.length) {
+    panel.replaceChildren(makeEl('p', 'No submissions yet. Press Submit to record one.', 'coming-soon'));
+    return;
+  }
+
+  const table = makeEl('table', undefined, 'submissions-table');
+  const head = table.createTHead().insertRow();
+  ['When', 'Language', 'Result', 'Time', ''].forEach((h) => head.appendChild(makeEl('th', h)));
+  const body = table.createTBody();
+  for (const s of summaries) {
+    const row = body.insertRow();
+    const when = makeEl('td', new Date(s.submittedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }));
+    when.title = `${s.submittedAt} (UTC)`;
+    row.append(
+      when,
+      makeEl('td', LANGUAGE_LABELS[s.language] || s.language),
+      makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
+      makeEl('td', `${s.runtimeMs} ms`)
+    );
+    const loadBtn = makeEl('button', 'Load');
+    loadBtn.type = 'button';
+    loadBtn.title = 'Load this code into the editor';
+    loadBtn.addEventListener('click', () => loadSubmissionIntoEditor(s.id));
+    const cell = makeEl('td');
+    cell.appendChild(loadBtn);
+    row.appendChild(cell);
+  }
+  // Scrolls sideways rather than being cut off when the pane is narrow.
+  const scroller = makeEl('div', undefined, 'submissions-scroll');
+  scroller.appendChild(table);
+  panel.replaceChildren(scroller);
+}
+
+// Switches to the submission's language and puts its code in the editor.
+// Asks first only if that language's current code has been edited (it's
+// neither the starter code nor already this submission's code).
+async function loadSubmissionIntoEditor(id) {
+  let record;
+  try {
+    const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
+    record = await res.json();
+    if (!res.ok) throw new Error(record.error || `HTTP ${res.status}`);
+  } catch (err) {
+    alert(`Couldn't load that submission: ${err.message}`);
+    return;
+  }
+
+  const { language, code } = record;
+  const label = LANGUAGE_LABELS[language] || language;
+  if (![...languageSelect.options].some((o) => o.value === language)) {
+    alert(`${label} is turned off in the language menu. Turn it on to load this submission.`);
+    return;
+  }
+  const starter = problem.starterCode[language] ?? '';
+  const current = language === currentLanguage ? editor.getValue() : codeByLanguage[language] ?? starter;
+  if (current !== starter && current !== code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
+    return;
+  }
+  await switchLanguage(language);
+  editor.setValue(code);
 }
 
 async function init() {
@@ -678,6 +765,7 @@ async function init() {
   }
 
   renderHeader(await labelsPromise);
+  refreshSubmissions();
   loadLanguage(pickInitialLanguage(problem));
 
   // Default to the Learning tab on first load only, when it has real content
