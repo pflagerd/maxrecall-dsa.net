@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-10-29.</p>
+Last updated: 2026-10-30.</p>
 
 <nav>
 <ol>
@@ -335,6 +335,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-30</td><td><strong>Done</strong> (sign-in steps 1–5): accounts and sessions, the gate and login page, identity from the session, the trusted port, and the VPS service and guide (<code>TRUSTED_PORT=3001</code>, auth data in <code>/srv/maxrecall/data/auth</code>, optional <code>EnvironmentFile</code> for the password).</td></tr>
   <tr><td>2026-10-30</td><td><strong>Changed</strong> (owner's choice): the password minimum is 10 characters, not 15. That's knowingly below NIST SP 800-63B rev. 4, which requires 15 for a password used as the only factor; throttling and the slow scrypt hash remain.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Added</strong> (branch <code>is-unique-i</code>): question <em>Is Unique I</em>, worded as the owner gave it, with a Learning tab on ASCII and each language's hash table (<code>Set</code>, <code>set</code>, <code>unordered_set</code>, <code>HashSet</code>, D associative arrays). Links in question text now use the accent colour (<code>style.css</code>).</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Changed</strong> (<a href="https://github.com/pflagerd/maxrecall-dsa.net/issues/10">issue #10</a>): <em>Is Unique I</em>'s Learning tab is now mostly about hash tables. Its ASCII section moved to <em>To Uppercase and Lowercase</em> (branch <code>to-uppercase-lowercase</code>), and is replaced by a short recap that says strings were learned earlier, plus a <em>Learned earlier</em> section at the bottom linking that question. The link is broken until both branches are merged.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>
