@@ -273,15 +273,24 @@ function toSubmissionSummary({ id, submittedAt, question, language, status, pass
   return { id, submittedAt, question, language, status, passed, total, runtimeMs };
 }
 
-// Newest first. Optional ?question=<slug> keeps only that question's.
+// Newest first. Optional ?question=<slug> and ?language=<language> narrow
+// it down. Progress is per (question, language), so the problem page asks
+// for exactly one pair.
 app.get('/api/submissions', async (req, res) => {
-  const { question } = req.query;
+  const { question, language } = req.query;
   if (question !== undefined && typeof question !== 'string') {
     return res.status(400).json({ error: 'question must be given at most once' });
   }
+  if (language !== undefined && !(typeof language === 'string' && SUPPORTED_LANGUAGES.includes(language))) {
+    return res.status(400).json({ error: `language must be given at most once, as one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
+  }
   try {
     const records = await listSubmissions(req.userEmail);
-    res.json(records.filter((r) => !question || r.question === question).map(toSubmissionSummary));
+    res.json(
+      records
+        .filter((r) => (!question || r.question === question) && (!language || r.language === language))
+        .map(toSubmissionSummary)
+    );
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not read submissions' });
   }
