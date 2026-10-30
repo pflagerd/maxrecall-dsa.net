@@ -16,6 +16,16 @@
   name.className = 'account-email';
   name.textContent = me.email;
 
+  // On the trusted port (the VPS's SSH tunnel) there's no session to end.
+  if (me.trusted) {
+    const marker = document.createElement('span');
+    marker.className = 'account-trusted';
+    marker.textContent = 'trusted (SSH tunnel)';
+    marker.title = 'Signed in automatically because you came in on the trusted port';
+    el.replaceChildren(name, marker);
+    return;
+  }
+
   const logout = document.createElement('button');
   logout.type = 'button';
   logout.textContent = 'Log out';

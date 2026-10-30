@@ -87,6 +87,10 @@ front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</cod
 <code>MAXRECALL_USER</code> (default <code>daniel.pflager@gmail.com</code>) is the <em>owner</em>: the only email
 allowed to register. The server won't start if it isn't a plain email address, and it prints whether registration
 is open when it starts.</p>
+<p><code>TRUSTED_PORT</code> (unset by default; 3001 on the VPS) opens a second listener on <code>127.0.0.1</code>
+only, where every request is the owner, <code>MAXRECALL_USER</code>, with no sign-in. It's for the VPS's SSH tunnel,
+and it's a separate port, not "trust requests from 127.0.0.1", because a reverse proxy on the same machine
+would make every visitor look like 127.0.0.1. The server won't start if it isn't a valid port different from <code>PORT</code>.</p>
 <p>Settings can go in a <code>.env</code> file in the repo (gitignored; copy <code>.env.example</code>). It's read at
 startup with Node's <code>process.loadEnvFile</code>, and anything already set in the environment wins over it.
 <code>MAXRECALL_PASSWORD</code> is the fixed password that registering requires (at least 15 characters, or the
@@ -134,7 +138,7 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>POST /api/auth/register</code></td><td>Body <code>{email, password}</code>. Succeeds only for <code>MAXRECALL_USER</code> with exactly <code>MAXRECALL_PASSWORD</code>, and only once; any refusal is <code>400</code> with one generic message. On success, sets the session cookie and returns <code>{email}</code>.</td></tr>
   <tr><td><code>POST /api/auth/login</code></td><td>Body <code>{email, password}</code>. <code>401</code> with "Invalid email or password." for any failure. After 5 failures for an email, <code>429</code> with <code>Retry-After</code> until the wait (doubling, up to 15 minutes) is over. On success, ends any session the browser had and sets a new cookie.</td></tr>
   <tr><td><code>POST /api/auth/logout</code></td><td>Ends the session and clears the cookie.</td></tr>
-  <tr><td><code>GET /api/auth/me</code></td><td><code>{email}</code> if signed in, otherwise <code>401</code>.</td></tr>
+  <tr><td><code>GET /api/auth/me</code></td><td><code>{email, trusted}</code> if signed in (<code>trusted</code> is true on the trusted port), otherwise <code>401</code>.</td></tr>
   <tr><td><code>GET /api/questions</code></td><td>List of <code>{slug, title, difficulty, topics, sources}</code>, sorted by title.</td></tr>
   <tr><td><code>GET /api/questions/:slug</code></td><td>The problem with hidden test cases removed: <code>visibleTestCases</code> plus a <code>hiddenCount</code>.</td></tr>
   <tr><td><code>POST /api/questions/:slug/run</code></td><td>Body <code>{language, code}</code>. Judges against <em>visible</em> test cases only.</td></tr>
@@ -205,7 +209,7 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <code>maxrecall-dsa:default-language</code>,
   <code>maxrecall-dsa:available-languages</code>.</li>
   <li>The Skip button is a placeholder that only shows an alert.</li>
-  <li>Every page needs you to be signed in (see the API section's sign-in gate). The header shows your email and a <strong>Log out</strong> button (<code>account.js</code>).</li>
+  <li>Every page needs you to be signed in (see the API section's sign-in gate). The header shows your email and a <strong>Log out</strong> button (<code>account.js</code>). On the trusted port there's no sign-in, and a yellow “trusted (SSH tunnel)” marker shows instead of the button.</li>
   <li>The <strong>Submissions</strong> tab lists this question's saved Submits, newest first (local time, language, verdict, tests passed, run time), from <code>GET /api/submissions?question=</code>. It refreshes after each saved Submit. <strong>Load</strong> switches to that submission's language and puts its code in the editor. It asks first only if that language's code has been edited, and explains if the language is turned off in the language menu. Loading switches the editor's language but, unlike the dropdown, doesn't change your default language. It also adds <code>&amp;submission=&lt;id&gt;</code> to the page address (<code>history.replaceState</code>, no reload), so reloading or bookmarking reopens that submission's language and code; edits made since are not kept. A saved Submit puts its own id there, so a reload reopens what was just submitted (Run, or a Submit that failed to save, leaves the address alone). Choosing a language yourself (dropdown or language menu) removes it from the address. If the address names a submission that's missing, belongs to another question, or is in a language that's turned off, the page opens normally, drops it from the address, and the Submissions tab says why.</li>
   <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>. The problem list shows the same bubbles in its “Sources &amp; topics” column.</li>
 </ul>

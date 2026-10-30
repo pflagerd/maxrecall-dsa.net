@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 
 // Settings may come from a gitignored .env file (see .env.example). Loaded
@@ -24,6 +25,17 @@ const PORT = process.env.PORT || 3000;
 // HOST=127.0.0.1 accepts only connections from this machine, e.g. on a
 // server reached through an SSH tunnel.
 const HOST = process.env.HOST || undefined;
+
+// An optional second listener, always on 127.0.0.1, where every request is
+// the owner (MAXRECALL_USER) with no sign-in. On the VPS it's what the SSH
+// tunnel connects to; nothing else (e.g. a future reverse proxy) should
+// ever point at it. Its own port rather than "trust requests from
+// 127.0.0.1", because a proxy on the same machine would make every visitor
+// look like 127.0.0.1. Unset (as on Kubuntu) means no trusted listener.
+const TRUSTED_PORT = process.env.TRUSTED_PORT ? Number(process.env.TRUSTED_PORT) : null;
+if (TRUSTED_PORT !== null && !(Number.isInteger(TRUSTED_PORT) && TRUSTED_PORT > 0 && TRUSTED_PORT < 65536 && TRUSTED_PORT !== Number(PORT))) {
+  throw new Error(`TRUSTED_PORT must be a port number different from PORT, got ${JSON.stringify(process.env.TRUSTED_PORT)}`);
+}
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 
@@ -57,6 +69,10 @@ function setSessionCookie(req, res, token) {
 }
 
 app.use(async (req, res, next) => {
+  if (req.viaTrustedPort) {
+    req.userEmail = OWNER_EMAIL;
+    return next();
+  }
   try {
     req.userEmail = await sessionEmail(readCookie(req, SESSION_COOKIE));
     next();
@@ -118,7 +134,7 @@ app.post('/api/auth/logout', async (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.userEmail) return res.status(401).json({ error: 'Not signed in' });
-  res.json({ email: req.userEmail });
+  res.json({ email: req.userEmail, trusted: Boolean(req.viaTrustedPort) });
 });
 
 // The gate. Not signed in: pages redirect to the login page (which comes
@@ -308,3 +324,15 @@ app.listen(PORT, HOST, () => {
   console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
   console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
 });
+
+if (TRUSTED_PORT !== null) {
+  // Marks the request before handing it to the same app, so the code above
+  // knows which listener it arrived on.
+  const trustedServer = http.createServer((req, res) => {
+    req.viaTrustedPort = true;
+    app(req, res);
+  });
+  trustedServer.listen(TRUSTED_PORT, '127.0.0.1', () => {
+    console.log(`Trusted listener on 127.0.0.1:${TRUSTED_PORT} only: every request there is ${OWNER_EMAIL}, no sign-in`);
+  });
+}
