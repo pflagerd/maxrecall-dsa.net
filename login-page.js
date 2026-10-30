@@ -25,11 +25,20 @@ async function signIn(url, form, body) {
   button.disabled = true;
   errorEl.textContent = '';
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    // fetch itself only fails when no answer came back at all (server
+    // stopped, wrong address). Browsers word that differently ("Failed to
+    // fetch", "NetworkError…", "Load failed"), so say what it means instead.
+    // Errors the server sends back are shown as they are.
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error("Can't reach the server. Is it running? Check the terminal where you started it.");
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     window.location.replace(nextPath());
@@ -57,6 +66,8 @@ window.addEventListener('hashchange', showMode);
 showMode();
 
 // Already signed in? Then there's nothing to do here.
-fetch('/api/auth/me').then((res) => {
-  if (res.ok) window.location.replace(nextPath());
-});
+fetch('/api/auth/me')
+  .then((res) => {
+    if (res.ok) window.location.replace(nextPath());
+  })
+  .catch(() => {}); // Server unreachable: the forms will say so when used.
