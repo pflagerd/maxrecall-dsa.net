@@ -86,6 +86,11 @@ front end: it's plain HTML/CSS/JS. <span class="src">Source: <code>Makefile</cod
 <p>Submits are saved for the user named by the <code>MAXRECALL_USER</code> environment variable
 (default <code>daniel.pflager@gmail.com</code>), e.g. <code>MAXRECALL_USER=someone@example.com make run</code>.
 The server prints whose Submits it's recording when it starts.</p>
+<p>Settings can go in a <code>.env</code> file in the repo (gitignored; copy <code>.env.example</code>). It's read at
+startup with Node's <code>process.loadEnvFile</code>, and anything already set in the environment wins over it.
+<code>MAXRECALL_PASSWORD</code> is the fixed password that registering requires (at least 15 characters, or the
+server won't start; empty means registration is closed). <code>MAXRECALL_AUTH_DIR</code> moves account and session
+data out of the repo's gitignored <code>auth/</code>.</p>
 <p>The server listens on every network interface unless the <code>HOST</code> environment
 variable says otherwise. With <code>HOST=127.0.0.1</code> it accepts connections only from the same
 machine, which is how it runs on the VPS behind an SSH tunnel (see Environments). The first line it prints
@@ -99,6 +104,9 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><th>Path</th><th>Role</th></tr>
   <tr><td><code>server.js</code></td><td>Express server: problem API, run/submit endpoints, serves the front-end files.</td></tr>
   <tr><td><code>users.js</code></td><td>Works out the current user from <code>MAXRECALL_USER</code> and saves Submit records under <code>users/</code>.</td></tr>
+  <tr><td><code>auth.js</code></td><td>Accounts and sessions: registration (only <code>MAXRECALL_USER</code>, only with <code>MAXRECALL_PASSWORD</code>, once), login against a scrypt hash, throttling after failed attempts, and 360-day sessions.</td></tr>
+  <tr><td><code>auth/</code></td><td>Account and session files (see Where data lives). <strong>Gitignored</strong>: password hashes must never reach the public repo.</td></tr>
+  <tr><td><code>.env.example</code></td><td>Template for the gitignored <code>.env</code> settings file.</td></tr>
   <tr><td><code>users/</code></td><td>Saved submissions, one JSON file per Submit (see Where data lives). Committed by hand.</td></tr>
   <tr><td><code>paths.js</code></td><td><code>resolveInside(baseDir, ...parts)</code>: builds a path and returns <code>null</code> if it would land outside <code>baseDir</code> (path traversal). Used by <code>loadProblem</code>; <code>users/</code> code will use it too.</td></tr>
   <tr><td><code>judge/runner.js</code></td><td>Builds a harness around submitted code, runs it in a child process, compares results.</td></tr>
@@ -216,6 +224,16 @@ millisecond (from two tabs) produce a “not saved” warning rather than one ov
   <tr><td><code>results</code></td><td>Pass/fail for each test case, in file order.</td></tr>
   <tr><td><code>stdout</code>, <code>stderr</code></td><td>The program's output.</td></tr>
 </table>
+<p><strong>Accounts and sessions</strong> are kept in <code>auth/</code> (or <code>MAXRECALL_AUTH_DIR</code>), which is
+gitignored and created with owner-only permissions:</p>
+<ul>
+  <li><code>accounts/&lt;email&gt;.json</code>: the email, the scrypt parameters (N=2<sup>17</sup>, r=8, p=1, the OWASP minimum),
+  a random salt and the hash. Never the password.</li>
+  <li><code>sessions/&lt;sha256 of token&gt;.json</code>: the email and the expiry time (360 days after login). The browser
+  holds the random 256-bit token; the server keeps only its hash, so reading this folder doesn't give anyone a usable token.</li>
+</ul>
+<p>Failed-attempt counts for throttling are kept in memory only, so restarting the server clears them.
+<span class="src">Source: <code>auth.js</code>.</span></p>
 <p><code>users/</code> is committed to git <strong>by hand</strong>, and the repository is public, so
 this data is public. nodemon ignores <code>users/</code>, so saving doesn't restart <code>make dev</code>.
 The other persistent state is the browser preferences above, which belong to one browser

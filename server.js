@@ -3,6 +3,15 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
+// Settings may come from a gitignored .env file (see .env.example). Loaded
+// before any module below reads process.env. Variables already set in the
+// environment win over the file; no file is fine.
+try {
+  process.loadEnvFile(path.join(__dirname, '.env'));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err;
+}
+
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');

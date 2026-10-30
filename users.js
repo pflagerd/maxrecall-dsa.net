@@ -108,4 +108,4 @@ async function loadSubmission(id) {
   }
 }
 
-module.exports = { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission };
+module.exports = { USERS_DIR, CURRENT_USER, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission };
