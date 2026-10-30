@@ -1,0 +1,206 @@
+{
+  "slug": "double-each-character",
+  "title": "Double Each Character",
+  "difficulty": "Easy",
+  "topics": ["String"],
+  "sources": [],
+  "learning": {
+    "javascript": "<h3>Going through a string</h3><p>A <code>for...of</code> loop visits a string's characters one at a time, in order. Each <code>c</code> is a one-character string:</p><div class=\"example\"><pre>for (const c of s) {\n    console.log(c);   // \"H\", then \"i\", then \"!\" when s is \"Hi!\"\n}</pre></div><p>Inside the loop you can do anything with <code>c</code>, such as adding it to a new string, as below.</p><h3>Strings can't be changed: build a new one</h3><p>JavaScript strings are <em>immutable</em>: once made, a string never changes. Assigning to <code>s[0]</code> doesn't change <code>s</code> (it's ignored, or in strict mode it throws a <code>TypeError</code>). Instead, build a new string from pieces:</p><div class=\"example\"><pre>let result = \"\";\nresult += \"h\";            // each += makes a new, longer string\nresult += \"I\";            // \"hI\"\n\nconst parts = [];         // or collect pieces in an array\nparts.push(\"h\");\nparts.push(\"I\");\nparts.join(\"\");           // \"hI\"</pre></div><p>Either way is fine for strings of this size.</p>",
+    "python": "<h3>Going through a string</h3><p>A <code>for</code> loop visits a string's characters one at a time, in order. Each <code>c</code> is a one-character string:</p><div class=\"example\"><pre>for c in s:\n    print(c)          # \"H\", then \"i\", then \"!\" when s is \"Hi!\"</pre></div><p>Inside the loop you can do anything with <code>c</code>, such as adding it to a new string, as below.</p><h3>Strings can't be changed: build a new one</h3><p>Python strings are <em>immutable</em>: once made, a string never changes. <code>s[0] = \"H\"</code> raises <code>TypeError: 'str' object does not support item assignment</code>. Instead, build a new string from pieces:</p><div class=\"example\"><pre>result = \"\"\nresult += \"h\"             # each += makes a new, longer string\nresult += \"I\"             # \"hI\"\n\nparts = []                # or collect pieces in a list\nparts.append(\"h\")\nparts.append(\"I\")\n\"\".join(parts)            # \"hI\"</pre></div><p>Either way is fine for strings of this size. <code>\"\".join(...)</code> is the usual Python idiom. See <a href=\"https://docs.python.org/3/library/stdtypes.html#str.join\" target=\"_blank\" rel=\"noopener\">str.join()</a>.</p>",
+    "cpp": "<h3>Going through a string</h3><p>A range-based <code>for</code> loop visits a <code>std::string</code>'s characters one at a time, in order. Each <code>c</code> is a <code>char</code>:</p><div class=\"example\"><pre>for (char c : s) {\n    cout &lt;&lt; c &lt;&lt; endl;   // 'H', then 'i', then '!' when s is \"Hi!\"\n}</pre></div><p>Inside the loop you can do anything with <code>c</code>, such as adding it to a new string, as below.</p><h3>A <code>std::string</code> can be changed</h3><p>Unlike strings in JavaScript, Python, Java and D, a C++ <code>std::string</code> is <em>mutable</em>: <code>s[0] = 'H';</code> changes it. Here <code>s</code> is passed by value, so the function has its own copy, and you can change it and return it. To change the characters in a loop, take each one by <em>reference</em>, with <code>&amp;</code>:</p><div class=\"example\"><pre>for (char c : s)  { c = 'x'; }   // changes a copy of each char: s is unchanged\nfor (char&amp; c : s) { c = 'x'; }   // changes s itself</pre></div><p>You can also build a new string: <code>string result; result += 'h';</code> or <code>result.push_back('h');</code>.</p>",
+    "java": "<h3>Going through a string</h3><p>A for-each loop over <code>s.toCharArray()</code> visits a <code>String</code>'s characters one at a time, in order. Each <code>c</code> is a <code>char</code>:</p><div class=\"example\"><pre>for (char c : s.toCharArray()) {\n    System.out.println(c);   // 'H', then 'i', then '!' when s is \"Hi!\"\n}</pre></div><p>Inside the loop you can do anything with <code>c</code>, such as adding it to a new string, as below.</p><h3>Strings can't be changed: build a new one</h3><p>Java <code>String</code>s are <em>immutable</em>: once made, a <code>String</code> never changes, and there's no method that changes one. Build a new one instead, either with a <code>StringBuilder</code> or from a <code>char</code> array:</p><div class=\"example\"><pre>StringBuilder sb = new StringBuilder();\nsb.append('h');\nsb.append('I');\nsb.toString();                  // \"hI\"\n\nchar[] chars = s.toCharArray();  // a copy you can change\nchars[0] = 'H';\nnew String(chars);              // a new String from the array</pre></div><p>See <a href=\"https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html\" target=\"_blank\" rel=\"noopener\">String</a> and <a href=\"https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/StringBuilder.html\" target=\"_blank\" rel=\"noopener\">StringBuilder</a> in the Java 21 documentation.</p>",
+    "d": "<h3>Going through a string</h3><p>A <code>foreach</code> loop visits a <code>string</code>'s characters one at a time, in order. Each <code>c</code> is a <code>char</code>:</p><div class=\"example\"><pre>foreach (c; s) {\n    writeln(c);   // 'H', then 'i', then '!' when s is \"Hi!\"\n}</pre></div><p>Inside the loop you can do anything with <code>c</code>, such as adding it to a new string, as below.</p><h3>Strings can't be changed: build a new one</h3><p>In D, <code>string</code> means <code>immutable(char)[]</code>: an array of characters that can't be changed, so <code>s[0] = 'H';</code> doesn't compile. Either make a changeable copy and turn it back into a <code>string</code> at the end, or build a new one by appending:</p><div class=\"example\"><pre>char[] buf = s.dup;     // .dup: a changeable copy\nbuf[0] = 'H';\nreturn buf.idup;        // .idup: an immutable copy, which is a string\n\nstring result;\nresult ~= 'h';          // ~= appends\nresult ~= 'I';          // \"hI\"</pre></div><p>See <a href=\"https://dlang.org/spec/arrays.html#strings\" target=\"_blank\" rel=\"noopener\">Strings</a> in the D language specification.</p>"
+  },
+  "description": {
+    "javascript": "<p>Given a string <code>s</code>, return a new string in which every character of <code>s</code> appears twice in a row, in the same order. Spaces, digits and punctuation are doubled too.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers going through a string one character at a time and building a new string.</p>",
+    "python": "<p>Given a string <code>s</code>, return a new string in which every character of <code>s</code> appears twice in a row, in the same order. Spaces, digits and punctuation are doubled too.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers going through a string one character at a time and building a new string.</p>",
+    "cpp": "<p>Given a string <code>s</code>, return a new string in which every character of <code>s</code> appears twice in a row, in the same order. Spaces, digits and punctuation are doubled too.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers going through a string one character at a time and building a new string.</p>",
+    "java": "<p>Given a string <code>s</code>, return a new string in which every character of <code>s</code> appears twice in a row, in the same order. Spaces, digits and punctuation are doubled too.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers going through a string one character at a time and building a new string.</p>",
+    "d": "<p>Given a string <code>s</code>, return a new string in which every character of <code>s</code> appears twice in a row, in the same order. Spaces, digits and punctuation are doubled too.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers going through a string one character at a time and building a new string.</p>"
+  },
+  "examples": {
+    "javascript": [
+      {
+        "input": "s = \"abc\"",
+        "output": "\"aabbcc\""
+      },
+      {
+        "input": "s = \"Hi!\"",
+        "output": "\"HHii!!\""
+      },
+      {
+        "input": "s = \"a b\"",
+        "output": "\"aa  bb\"",
+        "explanation": "The space is doubled too."
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"\"",
+        "explanation": "An empty string gives an empty string."
+      }
+    ],
+    "python": [
+      {
+        "input": "s = 'abc'",
+        "output": "'aabbcc'"
+      },
+      {
+        "input": "s = 'Hi!'",
+        "output": "'HHii!!'"
+      },
+      {
+        "input": "s = 'a b'",
+        "output": "'aa  bb'",
+        "explanation": "The space is doubled too."
+      },
+      {
+        "input": "s = ''",
+        "output": "''",
+        "explanation": "An empty string gives an empty string."
+      }
+    ],
+    "cpp": [
+      {
+        "input": "s = \"abc\"",
+        "output": "\"aabbcc\""
+      },
+      {
+        "input": "s = \"Hi!\"",
+        "output": "\"HHii!!\""
+      },
+      {
+        "input": "s = \"a b\"",
+        "output": "\"aa  bb\"",
+        "explanation": "The space is doubled too."
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"\"",
+        "explanation": "An empty string gives an empty string."
+      }
+    ],
+    "java": [
+      {
+        "input": "s = \"abc\"",
+        "output": "\"aabbcc\""
+      },
+      {
+        "input": "s = \"Hi!\"",
+        "output": "\"HHii!!\""
+      },
+      {
+        "input": "s = \"a b\"",
+        "output": "\"aa  bb\"",
+        "explanation": "The space is doubled too."
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"\"",
+        "explanation": "An empty string gives an empty string."
+      }
+    ],
+    "d": [
+      {
+        "input": "s = \"abc\"",
+        "output": "\"aabbcc\""
+      },
+      {
+        "input": "s = \"Hi!\"",
+        "output": "\"HHii!!\""
+      },
+      {
+        "input": "s = \"a b\"",
+        "output": "\"aa  bb\"",
+        "explanation": "The space is doubled too."
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"\"",
+        "explanation": "An empty string gives an empty string."
+      }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "$0 \\le \\texttt{s.length} \\le 500$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "python": [
+      "$0 \\le \\texttt{len(s)} \\le 500$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "cpp": [
+      "$0 \\le \\texttt{s.size()} \\le 500$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "java": [
+      "$0 \\le \\texttt{s.length()} \\le 500$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "d": [
+      "$0 \\le \\texttt{s.length} \\le 500$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ]
+  },
+  "functionName": {
+    "javascript": "doubleEachCharacter",
+    "python": "double_each_character",
+    "cpp": "doubleEachCharacter",
+    "java": "doubleEachCharacter",
+    "d": "doubleEachCharacter"
+  },
+  "starterCode": {
+    "javascript": "/**\n * @param {string} s\n * @return {string}\n */\nfunction doubleEachCharacter(s) {\n    \n}\n",
+    "python": "def double_each_character(s):\n    pass\n",
+    "cpp": "string doubleEachCharacter(string s) {\n    \n}\n",
+    "java": "class Solution {\n    public String doubleEachCharacter(String s) {\n        \n    }\n}\n",
+    "d": "string doubleEachCharacter(string s) {\n    \n}\n"
+  },
+  "signature": {
+    "cpp": {
+      "params": ["string"],
+      "returns": "string"
+    },
+    "java": {
+      "params": ["String"],
+      "returns": "String"
+    },
+    "d": {
+      "params": ["string"],
+      "returns": "string"
+    }
+  },
+  "testCases": [
+    { "args": ["abc"], "expected": "aabbcc", "hidden": false },
+    { "args": ["Hi!"], "expected": "HHii!!", "hidden": false },
+    { "args": ["a b"], "expected": "aa  bb", "hidden": false },
+    { "args": [""], "expected": "", "hidden": false },
+    { "args": ["a"], "expected": "aa", "hidden": true },
+    { "args": [" "], "expected": "  ", "hidden": true },
+    { "args": ["aa"], "expected": "aaaa", "hidden": true },
+    { "args": ["0123456789"], "expected": "00112233445566778899", "hidden": true },
+    { "args": ["MaxRecall 2026!"], "expected": "MMaaxxRReeccaallll  22002266!!", "hidden": true },
+    {
+      "args": ["She said \"Hi\" \\ then left"],
+      "expected": "SShhee  ssaaiidd  \"\"HHii\"\"  \\\\  tthheenn  lleefftt",
+      "hidden": true
+    },
+    {
+      "args": [" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"],
+      "expected": "  !!\"\"##$$%%&&''(())**++,,--..//00112233445566778899::;;<<==>>??@@AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQRRSSTTUUVVWWXXYYZZ[[\\\\]]^^__``aabbccddeeffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz{{||}}~~",
+      "hidden": true
+    },
+    {
+      "args": ["   spaces   around   "],
+      "expected": "      ssppaacceess      aarroouunndd      ",
+      "hidden": true
+    },
+    {
+      "args": [
+        "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+      ],
+      "expected": "aabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabbaabb",
+      "hidden": true
+    }
+  ]
+}
