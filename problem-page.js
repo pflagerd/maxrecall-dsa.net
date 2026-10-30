@@ -545,8 +545,7 @@ async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
     return true;
   }
   if (newLanguage !== currentLanguage) {
-    codeByLanguage[currentLanguage] = editor.getValue();
-    loadLanguage(newLanguage);
+    if (!(await showLanguage(newLanguage))) return true; // a later switch took over
     if (chosenByUser) setSubmissionInAddress(null);
   }
   if (chosenByUser) {
@@ -695,32 +694,74 @@ function showInSubmissionsPanel(...nodes) {
   descriptionTabPanels.submissions.replaceChildren(...notice, ...nodes);
 }
 
-// This question's saved Submits for the signed-in user, newest first.
-async function fetchSubmissionSummaries() {
-  const res = await fetch(`/api/submissions?question=${encodeURIComponent(slug)}`);
+// Progress is per (question, language), the owner's design (2026-10-30):
+// answering in C++ says nothing about Python. So everything below is about
+// one language at a time.
+
+// This question's saved Submits for the signed-in user in one language,
+// newest first.
+async function fetchSubmissionSummaries(language) {
+  const params = new URLSearchParams({ question: slug, language });
+  const res = await fetch(`/api/submissions?${params}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
 }
 
-// Fills the Submissions tab. Pass a fetch already in flight to reuse it
-// (as init does); otherwise it fetches afresh.
-async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries()) {
+// The tab to show when the question is opened in `language`, or the user
+// switches to it: Learning until they have a saved Submit in that language,
+// then Applying, to encourage answering it. A question with no Learning text
+// for that language shows Applying. If the Submits can't be loaded, treat it
+// as never submitted. Otherwise the user moves between tabs freely, and
+// submitting doesn't move them.
+async function tabForLanguage(language, summariesPromise) {
+  const submitted = await summariesPromise.then((summaries) => summaries.length > 0, () => false);
+  const hasLearning = Boolean(problem.learning && problem.learning[language]);
+  return !submitted && hasLearning ? 'learning' : 'applying';
+}
+
+// Puts `language` in the editor and applies the per-language rules: the tab
+// as if the question had just been opened in it, and the Submissions tab
+// listing only its submissions. The tab is decided before the new content
+// appears, so the page doesn't show one tab and then jump to another.
+// Returns false if a later call took over while this one was waiting (e.g.
+// two quick language changes), so the slower answer can't overwrite it.
+let latestShowLanguage = 0;
+async function showLanguage(language) {
+  const call = ++latestShowLanguage;
+  const summaries = fetchSubmissionSummaries(language);
+  summaries.catch(() => {}); // still awaited below; this only stops an "unhandled" warning
+  const tab = await tabForLanguage(language, summaries);
+  if (call !== latestShowLanguage) return false;
+  if (editor && currentLanguage) codeByLanguage[currentLanguage] = editor.getValue();
+  loadLanguage(language);
+  setDescriptionTab(tab);
+  refreshSubmissions(summaries, language);
+  return true;
+}
+
+// Fills the Submissions tab with one language's submissions. Pass a fetch
+// already in flight to reuse it; otherwise it fetches afresh for the
+// current language. Ignored if the language has changed meanwhile.
+async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(currentLanguage), language = currentLanguage) {
   let summaries;
   try {
     summaries = await summariesPromise;
+    if (language !== currentLanguage) return;
   } catch (err) {
+    if (language !== currentLanguage) return;
     showInSubmissionsPanel(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
     return;
   }
+  const label = LANGUAGE_LABELS[language] || language;
   if (!summaries.length) {
-    showInSubmissionsPanel(makeEl('p', 'No submissions yet. Press Submit to record one.', 'coming-soon'));
+    showInSubmissionsPanel(makeEl('p', `No ${label} submissions yet. Press Submit to record one.`, 'coming-soon'));
     return;
   }
 
   const table = makeEl('table', undefined, 'submissions-table');
   const head = table.createTHead().insertRow();
-  ['When', 'Language', 'Result', 'Time', ''].forEach((h) => head.appendChild(makeEl('th', h)));
+  ['When', 'Result', 'Time', ''].forEach((h) => head.appendChild(makeEl('th', h)));
   const body = table.createTBody();
   for (const s of summaries) {
     const row = body.insertRow();
@@ -728,7 +769,6 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries())
     when.title = `${s.submittedAt} (UTC)`;
     row.append(
       when,
-      makeEl('td', LANGUAGE_LABELS[s.language] || s.language),
       makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
       makeEl('td', `${s.runtimeMs} ms`)
     );
@@ -743,7 +783,7 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries())
   // Scrolls sideways rather than being cut off when the pane is narrow.
   const scroller = makeEl('div', undefined, 'submissions-scroll');
   scroller.appendChild(table);
-  showInSubmissionsPanel(scroller);
+  showInSubmissionsPanel(makeEl('p', `Your ${label} submissions, newest first:`, 'submissions-heading'), scroller);
 }
 
 // The page address records which submission is loaded
@@ -845,12 +885,6 @@ async function init() {
 
   // Fetched alongside the problem; loadLabels() never rejects.
   const labelsPromise = loadLabels();
-  // Also alongside: this user's Submits for the question, which fill the
-  // Submissions tab and decide the opening tab. The no-op catch only stops
-  // an "unhandled rejection" warning if the problem itself fails to load;
-  // the promise is still awaited (and its error handled) below.
-  const summariesPromise = fetchSubmissionSummaries();
-  summariesPromise.catch(() => {});
 
   try {
     const res = await fetch(`/api/questions/${slug}`);
@@ -862,23 +896,9 @@ async function init() {
   }
 
   renderHeader(await labelsPromise);
-  refreshSubmissions(summariesPromise);
-  loadLanguage(pickInitialLanguage(problem));
-
-  // The tab a question opens on (the owner's rule, 2026-10-30): Learning
-  // until this user has a saved Submit for it in the language it opens in;
-  // Applying after that, to encourage answering it. A Submit in another
-  // language doesn't count. A question with no Learning text for this
-  // language opens on Applying. If the Submits can't be loaded, treat it as
-  // never submitted. This only applies on opening: afterwards the user
-  // switches tabs freely, and neither submitting nor changing language
-  // moves them.
-  const submittedBefore = await summariesPromise.then(
-    (summaries) => summaries.some((s) => s.language === currentLanguage),
-    () => false
-  );
-  const hasLearning = Boolean(problem.learning && problem.learning[currentLanguage]);
-  setDescriptionTab(!submittedBefore && hasLearning ? 'learning' : 'applying');
+  // Opening the question in its initial language applies the same
+  // per-language rules as switching to one (showLanguage).
+  await showLanguage(pickInitialLanguage(problem));
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));

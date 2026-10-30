@@ -521,6 +521,12 @@ button.primary:hover {
 }
 
 /* Submissions tab (problem-page.js, refreshSubmissions) */
+.submissions-heading {
+  margin: 0 0 0.5rem;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
 .submissions-scroll {
   overflow-x: auto;
 }

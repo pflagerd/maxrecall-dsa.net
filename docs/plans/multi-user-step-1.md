@@ -26,6 +26,14 @@ Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 Step 1 adds one thing between 3 and 4: **write a record to disk**.
 
+## Design principle, 2026-10-30 (owner)
+
+Progress is per **(question, language)**. Answering a question in C++ says
+nothing about whether you can in Python. Submissions are listed, credited
+and (later) scheduled for spaced repetition per language. Each record
+already stores its `language`, and `GET /api/submissions` takes
+`?language=`.
+
 ## Change 2026-10-29 (owner's request, after step 1)
 
 Records are saved directly in `users/<email>/submissions/<timestamp>.json`,
