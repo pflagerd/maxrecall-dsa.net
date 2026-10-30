@@ -695,13 +695,20 @@ function showInSubmissionsPanel(...nodes) {
   descriptionTabPanels.submissions.replaceChildren(...notice, ...nodes);
 }
 
-async function refreshSubmissions() {
+// This question's saved Submits for the signed-in user, newest first.
+async function fetchSubmissionSummaries() {
+  const res = await fetch(`/api/submissions?question=${encodeURIComponent(slug)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// Fills the Submissions tab. Pass a fetch already in flight to reuse it
+// (as init does); otherwise it fetches afresh.
+async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries()) {
   let summaries;
   try {
-    const res = await fetch(`/api/submissions?question=${encodeURIComponent(slug)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    summaries = data;
+    summaries = await summariesPromise;
   } catch (err) {
     showInSubmissionsPanel(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
     return;
@@ -816,6 +823,9 @@ async function openSubmissionFromAddress() {
     reason = whyNotLoadable(record);
     if (!reason) {
       await applySubmission(record);
+      // The question now opens in that submission's language, which by
+      // definition has a Submit, so the opening-tab rule says Applying.
+      setDescriptionTab('applying');
       return;
     }
   } catch (err) {
@@ -835,6 +845,12 @@ async function init() {
 
   // Fetched alongside the problem; loadLabels() never rejects.
   const labelsPromise = loadLabels();
+  // Also alongside: this user's Submits for the question, which fill the
+  // Submissions tab and decide the opening tab. The no-op catch only stops
+  // an "unhandled rejection" warning if the problem itself fails to load;
+  // the promise is still awaited (and its error handled) below.
+  const summariesPromise = fetchSubmissionSummaries();
+  summariesPromise.catch(() => {});
 
   try {
     const res = await fetch(`/api/questions/${slug}`);
@@ -846,15 +862,23 @@ async function init() {
   }
 
   renderHeader(await labelsPromise);
-  refreshSubmissions();
+  refreshSubmissions(summariesPromise);
   loadLanguage(pickInitialLanguage(problem));
 
-  // Default to the Learning tab on first load only, when it has real content
-  // for this language — switching languages afterward keeps whatever tab
-  // the user is already on rather than jumping back to Learning each time.
-  if (problem.learning && problem.learning[currentLanguage]) {
-    setDescriptionTab('learning');
-  }
+  // The tab a question opens on (the owner's rule, 2026-10-30): Learning
+  // until this user has a saved Submit for it in the language it opens in;
+  // Applying after that, to encourage answering it. A Submit in another
+  // language doesn't count. A question with no Learning text for this
+  // language opens on Applying. If the Submits can't be loaded, treat it as
+  // never submitted. This only applies on opening: afterwards the user
+  // switches tabs freely, and neither submitting nor changing language
+  // moves them.
+  const submittedBefore = await summariesPromise.then(
+    (summaries) => summaries.some((s) => s.language === currentLanguage),
+    () => false
+  );
+  const hasLearning = Boolean(problem.learning && problem.learning[currentLanguage]);
+  setDescriptionTab(!submittedBefore && hasLearning ? 'learning' : 'applying');
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
