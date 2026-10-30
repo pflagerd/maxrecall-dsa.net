@@ -1,0 +1,220 @@
+{
+  "slug": "swap-case-with-helpers",
+  "title": "Swap Case with Helpers",
+  "difficulty": "Easy",
+  "topics": ["String"],
+  "sources": [],
+  "learning": {
+    "javascript": "<h3>You already know how to do this by hand</h3><p>You've already solved this question by hand, using character codes (see <em>Learned earlier</em> at the bottom of this page). Most languages also have ready-made helpers that test and change a letter's case, so you don't need the codes at all.</p><h3>Ready-made helpers</h3><p><code>toUpperCase()</code> and <code>toLowerCase()</code> return a new string with its letters changed. They work on a one-character string too:</p><div class=\"example\"><pre>\"q\".toUpperCase();        // \"Q\"\n\"Q\".toLowerCase();        // \"q\"\n\"1\".toUpperCase();        // \"1\": not a letter, unchanged</pre></div><p>Calling one of these on the <em>whole</em> string changes every letter the same way, so it can't do this question on its own: making everything uppercase and then everything lowercase just gives lowercase. Each character needs its own decision.</p><p>See MDN's <a href=\"https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toUpperCase\" target=\"_blank\" rel=\"noopener\">toUpperCase()</a> and <a href=\"https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLowerCase\" target=\"_blank\" rel=\"noopener\">toLowerCase()</a>. These also handle letters beyond ASCII, which adding 32 doesn't.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=to-uppercase-lowercase\" target=\"_blank\" rel=\"noopener\">To Uppercase and Lowercase</a>: characters as ASCII codes, and changing a letter's case with them.</li></ul>",
+    "python": "<h3>You already know how to do this by hand</h3><p>You've already solved this question by hand, using character codes (see <em>Learned earlier</em> at the bottom of this page). Most languages also have ready-made helpers that test and change a letter's case, so you don't need the codes at all.</p><h3>Ready-made helpers</h3><p>Strings have methods that test and change case. They work on a one-character string too:</p><div class=\"example\"><pre>\"Q\".isupper()             # True\n\"q\".islower()             # True\n\"1\".isupper()             # False: not a letter\n\"q\".upper()               # \"Q\"\n\"Q\".lower()               # \"q\"</pre></div><p>Calling one of these on the <em>whole</em> string changes every letter the same way, so it can't do this question on its own: making everything uppercase and then everything lowercase just gives lowercase. Each character needs its own decision.</p><p>Python also has <code>s.swapcase()</code>, which does this whole question in one call. Try it with the per-character methods above first, then compare with <code>swapcase()</code>. See <a href=\"https://docs.python.org/3/library/stdtypes.html#string-methods\" target=\"_blank\" rel=\"noopener\">String Methods</a> in the Python documentation. These methods also handle letters beyond ASCII, which adding 32 doesn't.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=to-uppercase-lowercase\" target=\"_blank\" rel=\"noopener\">To Uppercase and Lowercase</a>: characters as ASCII codes, and changing a letter's case with them.</li></ul>",
+    "cpp": "<h3>You already know how to do this by hand</h3><p>You've already solved this question by hand, using character codes (see <em>Learned earlier</em> at the bottom of this page). Most languages also have ready-made helpers that test and change a letter's case, so you don't need the codes at all.</p><h3>Ready-made helpers</h3><p>The header <code>&lt;cctype&gt;</code> has <code>isupper</code>, <code>islower</code>, <code>toupper</code> and <code>tolower</code>. Put <code>#include &lt;cctype&gt;</code> at the top of your code. They take and return an <code>int</code>, and expect a value that fits in <code>unsigned char</code>, so the careful way to use them is:</p><div class=\"example\"><pre>static_cast&lt;char&gt;(toupper(static_cast&lt;unsigned char&gt;(c)))   // 'q' becomes 'Q'\nisupper(static_cast&lt;unsigned char&gt;(c))   // nonzero if c is 'A' to 'Z'</pre></div><p>With ASCII only, a plain <code>char</code> works too, but the cast to <code>unsigned char</code> is a good habit: for a negative <code>char</code> (possible above 127) their behaviour is undefined. See <a href=\"https://en.cppreference.com/w/cpp/string/byte/toupper\" target=\"_blank\" rel=\"noopener\">std::toupper</a> on cppreference.</p><p>There's no one-call version for a whole <code>std::string</code>. Any \"whole string\" approach changes every letter the same way, so it can't do this question on its own: making everything uppercase and then everything lowercase just gives lowercase. Each character needs its own decision.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=to-uppercase-lowercase\" target=\"_blank\" rel=\"noopener\">To Uppercase and Lowercase</a>: characters as ASCII codes, and changing a letter's case with them.</li></ul>",
+    "java": "<h3>You already know how to do this by hand</h3><p>You've already solved this question by hand, using character codes (see <em>Learned earlier</em> at the bottom of this page). Most languages also have ready-made helpers that test and change a letter's case, so you don't need the codes at all.</p><h3>Ready-made helpers</h3><p>The class <code>Character</code> (in <code>java.lang</code>, so no import is needed) tests and changes single characters:</p><div class=\"example\"><pre>Character.isUpperCase('Q');   // true\nCharacter.isLowerCase('q');   // true\nCharacter.isUpperCase('1');   // false: not a letter\nCharacter.toUpperCase('q');   // 'Q'\nCharacter.toLowerCase('Q');   // 'q'</pre></div><p>A <code>String</code> also has <code>toUpperCase()</code> and <code>toLowerCase()</code>.</p><p>Calling one of these on the <em>whole</em> string changes every letter the same way, so it can't do this question on its own: making everything uppercase and then everything lowercase just gives lowercase. Each character needs its own decision.</p><p>See <a href=\"https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Character.html\" target=\"_blank\" rel=\"noopener\">Character</a>. These also handle letters beyond ASCII, which adding 32 doesn't.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=to-uppercase-lowercase\" target=\"_blank\" rel=\"noopener\">To Uppercase and Lowercase</a>: characters as ASCII codes, and changing a letter's case with them.</li></ul>",
+    "d": "<h3>You already know how to do this by hand</h3><p>You've already solved this question by hand, using character codes (see <em>Learned earlier</em> at the bottom of this page). Most languages also have ready-made helpers that test and change a letter's case, so you don't need the codes at all.</p><h3>Ready-made helpers</h3><p>The module <code>std.ascii</code> has <code>isUpper</code>, <code>isLower</code>, <code>toUpper</code> and <code>toLower</code> for single ASCII characters. Add <code>import std.ascii;</code> above your function. Writing the full name, as below, avoids mixing them up with the whole-string functions of the same names in other modules:</p><div class=\"example\"><pre>std.ascii.isUpper('Q');    // true\nstd.ascii.toLower('Q');    // 'q'</pre></div><p>Calling one of these on the <em>whole</em> string changes every letter the same way, so it can't do this question on its own: making everything uppercase and then everything lowercase just gives lowercase. Each character needs its own decision.</p><p>See <a href=\"https://dlang.org/phobos/std_ascii.html\" target=\"_blank\" rel=\"noopener\">std.ascii</a> in the D library reference.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=to-uppercase-lowercase\" target=\"_blank\" rel=\"noopener\">To Uppercase and Lowercase</a>: characters as ASCII codes, and changing a letter's case with them.</li></ul>"
+  },
+  "description": {
+    "javascript": "<p>Given a string <code>s</code> of words, spaces, digits and punctuation, return a new string in which every lowercase letter has been changed to uppercase <strong>and</strong> every uppercase letter has been changed to lowercase, both at the same time. Everything that isn't a letter stays as it is.</p><p>You've done this by hand in <em>To Uppercase and Lowercase</em>. This time, use the language's ready-made helpers for testing and changing case.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers <code>toUpperCase()</code> and <code>toLowerCase()</code>.</p>",
+    "python": "<p>Given a string <code>s</code> of words, spaces, digits and punctuation, return a new string in which every lowercase letter has been changed to uppercase <strong>and</strong> every uppercase letter has been changed to lowercase, both at the same time. Everything that isn't a letter stays as it is.</p><p>You've done this by hand in <em>To Uppercase and Lowercase</em>. This time, use the language's ready-made helpers for testing and changing case.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers <code>isupper()</code>, <code>upper()</code> and their relatives.</p>",
+    "cpp": "<p>Given a string <code>s</code> of words, spaces, digits and punctuation, return a new string in which every lowercase letter has been changed to uppercase <strong>and</strong> every uppercase letter has been changed to lowercase, both at the same time. Everything that isn't a letter stays as it is.</p><p>You've done this by hand in <em>To Uppercase and Lowercase</em>. This time, use the language's ready-made helpers for testing and changing case.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers <code>isupper</code>, <code>toupper</code> and their relatives.</p>",
+    "java": "<p>Given a string <code>s</code> of words, spaces, digits and punctuation, return a new string in which every lowercase letter has been changed to uppercase <strong>and</strong> every uppercase letter has been changed to lowercase, both at the same time. Everything that isn't a letter stays as it is.</p><p>You've done this by hand in <em>To Uppercase and Lowercase</em>. This time, use the language's ready-made helpers for testing and changing case.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers <code>Character.isUpperCase</code>, <code>Character.toUpperCase</code> and their relatives.</p>",
+    "d": "<p>Given a string <code>s</code> of words, spaces, digits and punctuation, return a new string in which every lowercase letter has been changed to uppercase <strong>and</strong> every uppercase letter has been changed to lowercase, both at the same time. Everything that isn't a letter stays as it is.</p><p>You've done this by hand in <em>To Uppercase and Lowercase</em>. This time, use the language's ready-made helpers for testing and changing case.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers <code>std.ascii</code>'s <code>isUpper</code>, <code>toUpper</code> and their relatives.</p>"
+  },
+  "examples": {
+    "javascript": [
+      {
+        "input": "s = \"Hello World\"",
+        "output": "\"hELLO wORLD\""
+      },
+      {
+        "input": "s = \"abc\"",
+        "output": "\"ABC\""
+      },
+      {
+        "input": "s = \"XYZ\"",
+        "output": "\"xyz\""
+      },
+      {
+        "input": "s = \"MaxRecall 2026!\"",
+        "output": "\"mAXrECALL 2026!\"",
+        "explanation": "The digits, the space and the \"!\" aren't letters, so they stay the same."
+      }
+    ],
+    "python": [
+      {
+        "input": "s = \"Hello World\"",
+        "output": "\"hELLO wORLD\""
+      },
+      {
+        "input": "s = \"abc\"",
+        "output": "\"ABC\""
+      },
+      {
+        "input": "s = \"XYZ\"",
+        "output": "\"xyz\""
+      },
+      {
+        "input": "s = \"MaxRecall 2026!\"",
+        "output": "\"mAXrECALL 2026!\"",
+        "explanation": "The digits, the space and the \"!\" aren't letters, so they stay the same."
+      }
+    ],
+    "cpp": [
+      {
+        "input": "s = \"Hello World\"",
+        "output": "\"hELLO wORLD\""
+      },
+      {
+        "input": "s = \"abc\"",
+        "output": "\"ABC\""
+      },
+      {
+        "input": "s = \"XYZ\"",
+        "output": "\"xyz\""
+      },
+      {
+        "input": "s = \"MaxRecall 2026!\"",
+        "output": "\"mAXrECALL 2026!\"",
+        "explanation": "The digits, the space and the \"!\" aren't letters, so they stay the same."
+      }
+    ],
+    "java": [
+      {
+        "input": "s = \"Hello World\"",
+        "output": "\"hELLO wORLD\""
+      },
+      {
+        "input": "s = \"abc\"",
+        "output": "\"ABC\""
+      },
+      {
+        "input": "s = \"XYZ\"",
+        "output": "\"xyz\""
+      },
+      {
+        "input": "s = \"MaxRecall 2026!\"",
+        "output": "\"mAXrECALL 2026!\"",
+        "explanation": "The digits, the space and the \"!\" aren't letters, so they stay the same."
+      }
+    ],
+    "d": [
+      {
+        "input": "s = \"Hello World\"",
+        "output": "\"hELLO wORLD\""
+      },
+      {
+        "input": "s = \"abc\"",
+        "output": "\"ABC\""
+      },
+      {
+        "input": "s = \"XYZ\"",
+        "output": "\"xyz\""
+      },
+      {
+        "input": "s = \"MaxRecall 2026!\"",
+        "output": "\"mAXrECALL 2026!\"",
+        "explanation": "The digits, the space and the \"!\" aren't letters, so they stay the same."
+      }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "$0 \\le \\texttt{s.length} \\le 1000$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "python": [
+      "$0 \\le \\texttt{len(s)} \\le 1000$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "cpp": [
+      "$0 \\le \\texttt{s.size()} \\le 1000$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "java": [
+      "$0 \\le \\texttt{s.length()} \\le 1000$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "d": [
+      "$0 \\le \\texttt{s.length} \\le 1000$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ]
+  },
+  "functionName": {
+    "javascript": "swapCase",
+    "python": "swap_case",
+    "cpp": "swapCase",
+    "java": "swapCase",
+    "d": "swapCase"
+  },
+  "starterCode": {
+    "javascript": "/**\n * @param {string} s\n * @return {string}\n */\nfunction swapCase(s) {\n    \n}\n",
+    "python": "def swap_case(s):\n    pass\n",
+    "cpp": "string swapCase(string s) {\n    \n}\n",
+    "java": "class Solution {\n    public String swapCase(String s) {\n        \n    }\n}\n",
+    "d": "string swapCase(string s) {\n    \n}\n"
+  },
+  "signature": {
+    "cpp": {
+      "params": ["string"],
+      "returns": "string"
+    },
+    "java": {
+      "params": ["String"],
+      "returns": "String"
+    },
+    "d": {
+      "params": ["string"],
+      "returns": "string"
+    }
+  },
+  "testCases": [
+    { "args": ["Hello World"], "expected": "hELLO wORLD", "hidden": false },
+    { "args": ["abc"], "expected": "ABC", "hidden": false },
+    { "args": ["XYZ"], "expected": "xyz", "hidden": false },
+    { "args": ["MaxRecall 2026!"], "expected": "mAXrECALL 2026!", "hidden": false },
+    { "args": [""], "expected": "", "hidden": true },
+    { "args": ["a"], "expected": "A", "hidden": true },
+    { "args": ["Z"], "expected": "z", "hidden": true },
+    { "args": [" "], "expected": " ", "hidden": true },
+    { "args": ["0123456789"], "expected": "0123456789", "hidden": true },
+    { "args": ["!#$%&()*+,-./:;<=>?^_|~"], "expected": "!#$%&()*+,-./:;<=>?^_|~", "hidden": true },
+    {
+      "args": ["@[`{"],
+      "expected": "@[`{",
+      "hidden": true
+    },
+    { "args": ["AZaz"], "expected": "azAZ", "hidden": true },
+    {
+      "args": ["@AZ[`az{"],
+      "expected": "@az[`AZ{",
+      "hidden": true
+    },
+    { "args": ["abcdefghijklmnopqrstuvwxyz"], "expected": "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "hidden": true },
+    { "args": ["ABCDEFGHIJKLMNOPQRSTUVWXYZ"], "expected": "abcdefghijklmnopqrstuvwxyz", "hidden": true },
+    { "args": ["tHIS iS aLREADY sWAPPED"], "expected": "This Is Already Swapped", "hidden": true },
+    {
+      "args": ["The Quick Brown Fox Jumps Over The Lazy Dog."],
+      "expected": "tHE qUICK bROWN fOX jUMPS oVER tHE lAZY dOG.",
+      "hidden": true
+    },
+    { "args": ["She said \"Hi\" \\ then left"], "expected": "sHE SAID \"hI\" \\ THEN LEFT", "hidden": true },
+    { "args": ["   spaces   around   "], "expected": "   SPACES   AROUND   ", "hidden": true },
+    {
+      "args": [" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"],
+      "expected": " !\"#$%&'()*+,-./0123456789:;<=>?@abcdefghijklmnopqrstuvwxyz[\\]^_`ABCDEFGHIJKLMNOPQRSTUVWXYZ{|}~",
+      "hidden": true
+    },
+    {
+      "args": [
+        "e<gJT$}bkAqB/KDT2t24*#D2vL~XeUI+']KR_7n>FwPgms3q7 Z)7|A]h9|0iz*,]?)_R_k&3>+*U~uO)xs-:WnB<H,Bk@bB9bd%AMt2rp*%}ynO\\Z3J!%PEyN{V+NH0z8Po7s(9*E~FTj6EN>_~DsEA/7?K$aHu{D0Y0I3@6+&R$%eOE?,?1,(.q5pr1_f<R[}F9nik;~aB%#p&4p?0+swi(BDc>E=%]n[[gNNnz?5xVwlhJ4Uz{]L!(1!9'B%!&G*aw@R}Nz&2ELkl__4R]rD-uEo.>{j/:$6Fi ~s$[xb4fYVyXOov*(eU>4}\"@NpV#'\"Ur-X,DwR9\"<<9eOG;hi1v>d^[&IZ_Q(7?=5Q+6KM DJ[w8aGZ\"{n,Tn&m>Z60e{td:)-AJa3i^Jx!^$I:c2#$ n(I5S|{4ffp}7}'^'t(bI*f8gabTf-C1Y3qM1m4HbL|</wJ8M{$,RqD=P#skgm[1N7Ve{J+PgE~Y!]$O@3,s9D=vZWt@^w!.1)%x}6\\`Q:yr}yA14^t +x|-vc_0DYK53NKi2K%7GGU,/7B{0mLAg$eRYzQW`JL%`6rF#q@v5F\\vp>3N3ns2(@{#@L{(/bn;iVR5393nT'%.#e-<zTUJ?snt4hgBc=24bTkkDh>,-ne/Sz1aL\\)7Tc?msBjTM!~h:#[{eNhre)giLBpz;^%t\\\\a,@48}O<3]S,|jeu97N=fa#0|VMqP9?3Cr&<#;)RW|#kelqPiN?PbI9kS;_OvGQ6iBO {^~k5w1dhnm$qSxbNQRuAUKY2T4$AB\"F4gZ<? 8}fxg_Y\"Qnpnty6Mga.|J2Z}3~T3QW](b>z5yL-`B;z24CAC7X$aA+N)Oz^[Bfqp4#z7@Y/Q`4cVD9gD<TLaZkAt9?4X=?5?nU kgP6k?>SQA{m=ZlHJ-#I+jaedt<%6Hv*&;j[26wMM8@71./pxfk^=G-u;a66/F]oV@H[$w*k.&joety+*0~\"4%910MB\"1/b7geKB-7XUr2{"
+      ],
+      "expected": "E<Gjt$}BKaQb/kdt2T24*#d2Vl~xEui+']kr_7N>fWpGMS3Q7 z)7|a]H9|0IZ*,]?)_r_K&3>+*u~Uo)XS-:wNb<h,bK@Bb9BD%amT2RP*%}YNo\\z3j!%peYn{v+nh0Z8pO7S(9*e~ftJ6en>_~dSea/7?k$AhU{d0y0i3@6+&r$%Eoe?,?1,(.Q5PR1_F<r[}f9NIK;~Ab%#P&4P?0+SWI(bdC>e=%]N[[GnnNZ?5XvWLHj4uZ{]l!(1!9'b%!&g*AW@r}nZ&2elKL__4r]Rd-UeO.>{J/:$6fI ~S$[XB4FyvYxoOV*(Eu>4}\"@nPv#'\"uR-x,dWr9\"<<9Eog;HI1V>D^[&iz_q(7?=5q+6km dj[W8Agz\"{N,tN&M>z60E{TD:)-ajA3I^jX!^$i:C2#$ N(i5s|{4FFP}7}'^'T(Bi*F8GABtF-c1y3Qm1M4hBl|</Wj8m{$,rQd=p#SKGM[1n7vE{j+pGe~y!]$o@3,S9d=VzwT@^W!.1)%X}6\\`q:YR}Ya14^T +X|-VC_0dyk53nkI2k%7ggu,/7b{0MlaG$EryZqw`jl%`6Rf#Q@V5f\\VP>3n3NS2(@{#@l{(/BN;Ivr5393Nt'%.#E-<Ztuj?SNT4HGbC=24BtKKdH>,-NE/sZ1Al\\)7tC?MSbJtm!~H:#[{EnHRE)GIlbPZ;^%T\\\\A,@48}o<3]s,|JEU97n=FA#0|vmQp9?3cR&<#;)rw|#KELQpIn?pBi9Ks;_oVgq6Ibo {^~K5W1DHNM$QsXBnqrUauky2t4$ab\"f4Gz<? 8}FXG_y\"qNPNTY6mGA.|j2z}3~t3qw](B>Z5Yl-`b;Z24cac7x$Aa+n)oZ^[bFQP4#Z7@y/q`4Cvd9Gd<tlAzKaT9?4x=?5?Nu KGp6K?>sqa{M=zLhj-#i+JAEDT<%6hV*&;J[26Wmm8@71./PXFK^=g-U;A66/f]Ov@h[$W*K.&JOETY+*0~\"4%910mb\"1/B7GEkb-7xuR2{",
+      "hidden": true
+    },
+    {
+      "args": [
+        "over over Quick a1B2 x over the dogs Jumps over ok? x ok? fox over over BROWN a1B2 x the over Quick LAZY 42 BROWN Yes! 42 dogs Quick ok? MaxRecall MaxRecall BROWN over a1B2 MaxRecall x BROWN 42 dogs LAZY Quick dogs 42 fox ok? MaxRecall fox BROWN Quick Yes! x LAZY over dogs LAZY Yes! the fox Yes! ok? ok? over dogs LAZY over dogs x LAZY 42 Jumps Quick fox dogs 42 Yes! a1B2 over Quick MaxRecall Quick Jumps ok? LAZY Yes! over the 42 42 the Quick Yes! BROWN Jumps a1B2 42 the dogs the Yes! fox dogs Jumps the x Jumps dogs Jumps x the the Yes! 42 Jumps dogs fox LAZY over the x LAZY fox fox a1B2 BROWN LAZY MaxRecall x fox over a1B2 42 a1B2 over Quick the Jumps dogs the LAZY fox MaxRecall ok? MaxRecall ok? fox a1B2 fox a1B2 42 fox BROWN over Quick ok? 42 x 42 42 42 BROWN x MaxRecall dogs Quick BROWN 42 MaxRecall 42 dogs Jumps dogs x a1B2 Quick 42 a1B2 the ok? Jumps MaxRecall the 42 42 Yes! Yes! dogs LAZY fox MaxRecall over Jumps ok? BROWN Jumps a1B2 BROWN LAZY the x ok? fox 42 ok? Quick LAZY dog"
+      ],
+      "expected": "OVER OVER qUICK A1b2 X OVER THE DOGS jUMPS OVER OK? X OK? FOX OVER OVER brown A1b2 X THE OVER qUICK lazy 42 brown yES! 42 DOGS qUICK OK? mAXrECALL mAXrECALL brown OVER A1b2 mAXrECALL X brown 42 DOGS lazy qUICK DOGS 42 FOX OK? mAXrECALL FOX brown qUICK yES! X lazy OVER DOGS lazy yES! THE FOX yES! OK? OK? OVER DOGS lazy OVER DOGS X lazy 42 jUMPS qUICK FOX DOGS 42 yES! A1b2 OVER qUICK mAXrECALL qUICK jUMPS OK? lazy yES! OVER THE 42 42 THE qUICK yES! brown jUMPS A1b2 42 THE DOGS THE yES! FOX DOGS jUMPS THE X jUMPS DOGS jUMPS X THE THE yES! 42 jUMPS DOGS FOX lazy OVER THE X lazy FOX FOX A1b2 brown lazy mAXrECALL X FOX OVER A1b2 42 A1b2 OVER qUICK THE jUMPS DOGS THE lazy FOX mAXrECALL OK? mAXrECALL OK? FOX A1b2 FOX A1b2 42 FOX brown OVER qUICK OK? 42 X 42 42 42 brown X mAXrECALL DOGS qUICK brown 42 mAXrECALL 42 DOGS jUMPS DOGS X A1b2 qUICK 42 A1b2 THE OK? jUMPS mAXrECALL THE 42 42 yES! yES! DOGS lazy FOX mAXrECALL OVER jUMPS OK? brown jUMPS A1b2 brown lazy THE X OK? FOX 42 OK? qUICK lazy DOG",
+      "hidden": true
+    }
+  ]
+}
