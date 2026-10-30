@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-10-29.</p>
+Last updated: 2026-10-30.</p>
 
 <nav>
 <ol>
@@ -336,6 +336,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-30</td><td><strong>Changed</strong> (owner's choice): the password minimum is 10 characters, not 15. That's knowingly below NIST SP 800-63B rev. 4, which requires 15 for a password used as the only factor; throttling and the slow scrypt hash remain.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Decided:</strong> the <em>Cracking the Coding Interview</em> (6th edition) PDF lives in the separate <strong>private</strong> repo <code>pflagerd/cracking</code>, never in this one. This repo is public, the book is copyrighted, and at 54&nbsp;MB it would be in every clone's history for good. It was committed here briefly (<code>a8b4ff9</code>) and removed by force-pushing <code>master</code> back to <code>c110c8b</code>, but GitHub still serves that commit by its hash until GitHub Support purges it (<a href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository">Removing sensitive data</a>). In <code>pflagerd/cracking</code> the PDF is a plain git file, not Git LFS, because cloud sessions check out LFS files as pointers (<code>git-lfs smudge --skip</code>). A cloud session can only read it once that repo is attached to the session. The PDF's text comes from OCR and gets digits and symbols wrong (e.g. <code>#117</code> → <code>#7 7 7</code>, <code>|=</code> → <code>I=</code>), so check code, numbers and notation against the rendered page or the paper book. Questions based on the book go in <code>questions/</code> in our own words, not copied text.</td></tr>
 </table>
 <p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
 
