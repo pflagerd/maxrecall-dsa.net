@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-10-29.</p>
+Last updated: 2026-10-30.</p>
 
 <nav>
 <ol>
@@ -128,6 +128,7 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
   <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecall-dsa.test.service</code></td><td>Step-by-step guide and systemd service for running the app on the VPS (Ubuntu 24.04), reachable only through an SSH tunnel.</td></tr>
+  <tr><td><code>docs/d-compiler.md</code></td><td>How to install DMD in a cloud session, from d-apt (the D community's APT repository on SourceForge), with the key fingerprint to check.</td></tr>
   <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
   <tr><td><code>readme.html</code></td><td>This file.</td></tr>
 </table>
@@ -263,7 +264,7 @@ switching, pull after.</p>
   <tr><td>g++</td><td>13.3.0</td><td><em>fill in</em></td></tr>
   <tr><td>Python</td><td>3.13.17</td><td><em>fill in</em></td></tr>
   <tr><td>Java</td><td>installed (version not recorded)</td><td><em>fill in</em></td></tr>
-  <tr><td>D (<code>dmd</code>)</td><td><strong>not installed</strong>, so D submissions fail</td><td><em>fill in</em></td></tr>
+  <tr><td>D (<code>dmd</code>)</td><td><strong>not installed</strong> to begin with, so D submissions fail until it's installed with <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a> (2.113.0 on 2026-10-30). The container forgets it when it's reclaimed.</td><td><em>fill in</em></td></tr>
 </table>
 <p>To fill in the Kubuntu column, run each of these and note the version:</p>
 <pre><code>node --version; g++ --version | head -1; python3 --version; java -version; dmd --version | head -1</code></pre>
@@ -301,7 +302,9 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   if a session expires while a page is open, its requests fail with "Not signed in" instead of going back to the
   login page; and behind a future HTTPS reverse proxy, Express's <code>trust proxy</code> setting will be needed for
   <code>req.secure</code>, and so the cookie's <code>Secure</code> flag, to work.</li>
-  <li>No D compiler in the cloud environment (see <a href="#envs">Environments</a>).</li>
+  <li>No D compiler in the cloud environment until each session installs one with
+  <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a> (see <a href="#envs">Environments</a>).
+  The official downloads on <code>dlang.org</code> are blocked there by the network policy.</li>
   <li><strong>The problem page needs internet access.</strong> <code>problem.html</code> loads
   CodeMirror 5.65.16 and KaTeX 0.16.9 from <code>cdnjs.cloudflare.com</code>. Without them
   (offline, or where the CDN is blocked, as in the cloud sandbox), <code>CodeMirror</code> is
@@ -331,6 +334,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 4): the Submissions tab lists a question's saved Submits and can load one's code back into the editor. Multi-user step 1 is complete.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> test on the owner's Hostinger VPS (Ubuntu 24.04, nothing else on it), reachable <em>only</em> through an SSH tunnel (option A), because submitted code isn't sandboxed. Added the <code>HOST</code> and <code>MAXRECALL_USERS_DIR</code> settings, <code>deploy/maxrecall-dsa.test.service</code> and <code>docs/deploy-vps.md</code>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Renamed</strong> (owner's request): the service is <code>maxrecall-dsa.test.service</code> (file <code>deploy/maxrecall-dsa.test.service</code>). The <code>maxrecall</code> user and <code>/srv/maxrecall/…</code> paths are unchanged.</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Decided</strong> (owner's choice): cloud sessions get DMD from d-apt, the D community's signed APT repository on SourceForge, rather than from a copy of the package re-hosted on GitHub or the owner's SourceForge, and rather than building it from source. The key is trusted for d-apt only (<code>signed-by</code>) and its fingerprint is recorded. Steps: <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>. Not decided: whether a SessionStart hook should do it automatically.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Decided and built:</strong> a sign-in gate (login, register, logout). Register only for <code>MAXRECALL_USER</code> with the fixed <code>MAXRECALL_PASSWORD</code>; 360-day sessions; required on Kubuntu too; the signed-in email becomes the current user. The VPS's SSH tunnel will bypass it through a separate trusted port (option a), not by trusting <code>127.0.0.1</code>, which a future reverse proxy would make everyone.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Done</strong> (sign-in steps 1–5): accounts and sessions, the gate and login page, identity from the session, the trusted port, and the VPS service and guide (<code>TRUSTED_PORT=3001</code>, auth data in <code>/srv/maxrecall/data/auth</code>, optional <code>EnvironmentFile</code> for the password).</td></tr>
   <tr><td>2026-10-30</td><td><strong>Changed</strong> (owner's choice): the password minimum is 10 characters, not 15. That's knowingly below NIST SP 800-63B rev. 4, which requires 15 for a password used as the only factor; throttling and the slow scrypt hash remain.</td></tr>
