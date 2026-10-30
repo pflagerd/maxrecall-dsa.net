@@ -93,7 +93,7 @@ and it's a separate port, not "trust requests from 127.0.0.1", because a reverse
 would make every visitor look like 127.0.0.1. The server won't start if it isn't a valid port different from <code>PORT</code>.</p>
 <p>Settings can go in a <code>.env</code> file in the repo (gitignored; copy <code>.env.example</code>). It's read at
 startup with Node's <code>process.loadEnvFile</code>, and anything already set in the environment wins over it.
-<code>MAXRECALL_PASSWORD</code> is the fixed password that registering requires (at least 15 characters, or the
+<code>MAXRECALL_PASSWORD</code> is the fixed password that registering requires (at least 10 characters, or the
 server won't start; empty means registration is closed). <code>MAXRECALL_AUTH_DIR</code> moves account and session
 data out of the repo's gitignored <code>auth/</code>.</p>
 <p>The server listens on every network interface unless the <code>HOST</code> environment
@@ -333,6 +333,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Renamed</strong> (owner's request): the service is <code>maxrecall-dsa.test.service</code> (file <code>deploy/maxrecall-dsa.test.service</code>). The <code>maxrecall</code> user and <code>/srv/maxrecall/…</code> paths are unchanged.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Decided and built:</strong> a sign-in gate (login, register, logout). Register only for <code>MAXRECALL_USER</code> with the fixed <code>MAXRECALL_PASSWORD</code>; 360-day sessions; required on Kubuntu too; the signed-in email becomes the current user. The VPS's SSH tunnel will bypass it through a separate trusted port (option a), not by trusting <code>127.0.0.1</code>, which a future reverse proxy would make everyone.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Done</strong> (sign-in steps 1–5): accounts and sessions, the gate and login page, identity from the session, the trusted port, and the VPS service and guide (<code>TRUSTED_PORT=3001</code>, auth data in <code>/srv/maxrecall/data/auth</code>, optional <code>EnvironmentFile</code> for the password).</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Changed</strong> (owner's choice): the password minimum is 10 characters, not 15. That's knowingly below NIST SP 800-63B rev. 4, which requires 15 for a password used as the only factor; throttling and the slow scrypt hash remain.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>

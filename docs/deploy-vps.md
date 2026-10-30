@@ -150,7 +150,7 @@ sudo vi /etc/maxrecall-dsa/test.env
 ```
 - `install -d -m 700` creates the folder, readable by root only.
 - `install -m 600 /dev/null …` creates an empty file, readable by root only.
-- In vi, add one line: `MAXRECALL_PASSWORD=` followed by at least 15
+- In vi, add one line: `MAXRECALL_PASSWORD=` followed by at least 10
   characters. The server refuses to start if it's shorter.
 
 See [install(1)](https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html).

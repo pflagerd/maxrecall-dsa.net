@@ -19,9 +19,11 @@ const SESSIONS_DIR = path.join(AUTH_DIR, 'sessions');
 
 const SESSION_LIFETIME_MS = 360 * 24 * 60 * 60 * 1000;
 
-// NIST SP 800-63B rev. 4: passwords used as the only factor SHALL be at
-// least 15 characters, with no other composition rules.
-const MIN_PASSWORD_LENGTH = 15;
+// The owner chose 10 (2026-10-30). That's below NIST SP 800-63B rev. 4,
+// which requires 15 for a password used as the only factor (8 only as part
+// of multi-factor login); throttling and the slow scrypt hash still make
+// guessing expensive. No composition rules, as NIST also says.
+const MIN_PASSWORD_LENGTH = 10;
 
 // OWASP Password Storage Cheat Sheet's scrypt minimum (Node 22 has no
 // built-in Argon2id). N=2^17 needs 128 MiB, above Node's 32 MiB default
