@@ -1,8 +1,17 @@
 # Running MaxRecall DSA on the VPS (Ubuntu 24.04, SSH tunnel only)
 
-Written 2026-10-29. This is option A from that day's discussion: the app
-listens only on the VPS's own loopback address (`127.0.0.1`), and you reach it
-through an SSH tunnel. Nothing is exposed to the internet.
+Written 2026-10-29; sign-in added 2026-10-30. This is option A from the
+2026-10-29 discussion: the app listens only on the VPS's own loopback address
+(`127.0.0.1`), and you reach it through an SSH tunnel. Nothing is exposed to
+the internet.
+
+It listens on two ports, both on `127.0.0.1`:
+
+- **3001, the trusted port.** The SSH tunnel connects here. Every request is
+  you (`MAXRECALL_USER`), with no sign-in.
+- **3000, the normal port.** It requires signing in. Nothing uses it yet. It's
+  what a reverse proxy would point at, if the app is ever made public, and it
+  must never point at 3001.
 
 **Why it's set up this way.** Submitted code isn't sandboxed (`readme.html`
 §10). It runs as the server's user. To limit the damage, the server:
@@ -13,8 +22,11 @@ through an SSH tunnel. Nothing is exposed to the internet.
   network except the VPS itself, a read-only file system apart from three
   folders, and a private `/tmp`.
 
-That's containment, not a real sandbox: a submission can still read
-world-readable files on the VPS and use CPU and memory.
+That's containment, not a real sandbox. A submission can still read
+world-readable files on the VPS, use CPU and memory, and connect to
+`127.0.0.1:3001`, so a submission could act as you. With you as the only
+user, that's no worse than you running it yourself; it would matter with
+other users.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
 your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.
@@ -126,7 +138,25 @@ Submissions are saved here, **outside the checkout**
 (`MAXRECALL_USERS_DIR` in the service file). That way a later `git pull` never
 collides with records written on the VPS. `-p` creates any missing parent
 folders. The folder must exist before the service starts, because systemd's
-`ReadWritePaths` refuses a missing path.
+`ReadWritePaths` refuses a missing path. Accounts and sessions go next to it,
+in `/srv/maxrecall/data/auth`, which the server creates itself.
+
+**Optional: a password, to register on port 3000.** You don't need this to
+use the app through the tunnel. Skip it unless you want to try the login page.
+```bash
+sudo install -d -m 700 /etc/maxrecall-dsa
+sudo install -m 600 /dev/null /etc/maxrecall-dsa/test.env
+sudo vi /etc/maxrecall-dsa/test.env
+```
+- `install -d -m 700` creates the folder, readable by root only.
+- `install -m 600 /dev/null …` creates an empty file, readable by root only.
+- In vi, add one line: `MAXRECALL_PASSWORD=` followed by at least 15
+  characters. The server refuses to start if it's shorter.
+
+See [install(1)](https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html).
+The service reads this file as root before switching to the `maxrecall` user
+(`EnvironmentFile=` in the service file), so the app's user never needs to
+read it directly.
 
 ## 5. Install and start the service [VPS]
 
@@ -174,25 +204,30 @@ Should say `active (running)`.
 journalctl -u maxrecall-dsa.test.service -n 20
 ```
 Shows the service's last 20 log lines (`-u` selects the unit, `-n` sets how
-many lines). The first should read
-`Server listening on 127.0.0.1:3000 only, … in /srv/maxrecall/data/users`.
+many lines). The latest start should show three lines:
+`Server listening on 127.0.0.1:3000 only, … (submissions in /srv/maxrecall/data/users)`,
+`Sign-in data in /srv/maxrecall/data/auth; registration …`, and
+`Trusted listener on 127.0.0.1:3001 only: every request there is …`.
 
 ## 6. Check it's private and contained [VPS, then Kubuntu]
 
 **[VPS]**
 ```bash
-ss -tlnp | grep 3000
+ss -tlnp | grep -E ':300[01]'
 ```
 - `ss` lists sockets: `-t` TCP, `-l` listening, `-n` numeric addresses, `-p`
   the owning process.
-- It should show `127.0.0.1:3000`, **not** `0.0.0.0:3000` or `*:3000`.
+- `grep -E ':300[01]'` keeps lines for ports 3000 and 3001.
+- It should show `127.0.0.1:3000` and `127.0.0.1:3001`, **not** `0.0.0.0:…` or
+  `*:…`.
 
 **[Kubuntu]**
 ```bash
 curl --max-time 5 http://VPS_IP:3000/
+curl --max-time 5 http://VPS_IP:3001/
 ```
-Should **fail** (timeout or connection refused). If it returns a page, stop
-the service and recheck the `HOST` line in the service file.
+Both should **fail** (timeout or connection refused). If either returns
+anything, stop the service and recheck the service file.
 
 **[VPS]**
 ```bash
@@ -214,19 +249,27 @@ unreachable"; I couldn't test the exact message from the cloud sandbox.
 ## 7. Use it: the SSH tunnel [Kubuntu]
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3000 root@VPS_IP
+ssh -N -L 3000:127.0.0.1:3001 root@VPS_IP
 ```
-- `-L 3000:127.0.0.1:3000` forwards port 3000 on your machine to
-  `127.0.0.1:3000` *as seen from the VPS*, that is, to the app.
+- `-L 3000:127.0.0.1:3001` forwards port 3000 on your machine to
+  `127.0.0.1:3001` *as seen from the VPS*, that is, to the trusted port.
 - `-N` runs no remote command; the connection exists only to carry the tunnel.
 - Leave it running, and press Ctrl-C to close the tunnel.
 
 See [ssh(1)](https://man.openbsd.org/ssh#L).
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:3000>. There's no login page. The header shows
+your email and a yellow **trusted (SSH tunnel)** marker.
 
-If `make dev` is already using port 3000 on Kubuntu, use another local port:
-`-L 3001:127.0.0.1:3000`, then open <http://localhost:3001>.
+If `make dev` is already using port 3000 on Kubuntu, use another local port,
+e.g. `-L 3005:127.0.0.1:3001`, then open <http://localhost:3005>.
+
+**To try the login page as well,** also forward the normal port by adding
+`-L 3006:127.0.0.1:3000` to the same command, then open
+<http://localhost:3006>. Registering there needs the optional password from
+step 4. Browsers keep cookies per host name, not per port, so all these
+`localhost` addresses share one sign-in cookie. That's harmless here: the
+trusted port ignores it.
 
 ## 8. Updating to the latest code [VPS]
 

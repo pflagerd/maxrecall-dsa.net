@@ -274,7 +274,10 @@ switching, pull after.</p>
 <p>A Hostinger VPS running Ubuntu 24.04 can run the app for testing, set up by
 <a href="docs/deploy-vps.md"><code>docs/deploy-vps.md</code></a>. It uses Node 22 from nodejs.org (Ubuntu's own
 package is 18.19), g++ 13.2 and OpenJDK 21 from Ubuntu, and no D compiler. The server
-listens only on <code>127.0.0.1</code>, and you reach it with <code>ssh -N -L 3000:127.0.0.1:3000 root@VPS_IP</code>. It runs as the
+listens only on <code>127.0.0.1</code>: port 3000 needs sign-in, and the trusted port 3001 makes you the owner with no
+sign-in. You reach the trusted port with <code>ssh -N -L 3000:127.0.0.1:3001 root@VPS_IP</code>. Accounts and sessions live in
+<code>/srv/maxrecall/data/auth</code>. An optional root-only <code>/etc/maxrecall-dsa/test.env</code> holds
+<code>MAXRECALL_PASSWORD</code>, needed only to register on port 3000. It runs as the
 <code>maxrecall</code> user under systemd containment: no network except loopback, and a read-only file
 system apart from its data and the judge's helper folders. Its submissions are copied to Kubuntu with
 <code>rsync</code> and committed there. That's containment, not a sandbox (see Known gaps).</p>
@@ -329,6 +332,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> test on the owner's Hostinger VPS (Ubuntu 24.04, nothing else on it), reachable <em>only</em> through an SSH tunnel (option A), because submitted code isn't sandboxed. Added the <code>HOST</code> and <code>MAXRECALL_USERS_DIR</code> settings, <code>deploy/maxrecall-dsa.test.service</code> and <code>docs/deploy-vps.md</code>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Renamed</strong> (owner's request): the service is <code>maxrecall-dsa.test.service</code> (file <code>deploy/maxrecall-dsa.test.service</code>). The <code>maxrecall</code> user and <code>/srv/maxrecall/…</code> paths are unchanged.</td></tr>
   <tr><td>2026-10-30</td><td><strong>Decided and built:</strong> a sign-in gate (login, register, logout). Register only for <code>MAXRECALL_USER</code> with the fixed <code>MAXRECALL_PASSWORD</code>; 360-day sessions; required on Kubuntu too; the signed-in email becomes the current user. The VPS's SSH tunnel will bypass it through a separate trusted port (option a), not by trusting <code>127.0.0.1</code>, which a future reverse proxy would make everyone.</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Done</strong> (sign-in steps 1–5): accounts and sessions, the gate and login page, identity from the session, the trusted port, and the VPS service and guide (<code>TRUSTED_PORT=3001</code>, auth data in <code>/srv/maxrecall/data/auth</code>, optional <code>EnvironmentFile</code> for the password).</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>

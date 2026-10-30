@@ -4,6 +4,8 @@
 # Paths assume the layout in that guide:
 #   /srv/maxrecall/maxrecall-dsa.net   the git checkout (read-only to the service)
 #   /srv/maxrecall/data/users          saved submissions (outside the checkout)
+#   /srv/maxrecall/data/auth           accounts and sessions (created at startup)
+#   /etc/maxrecall-dsa/test.env        optional, root-only: MAXRECALL_PASSWORD
 #   /usr/local/bin/node                Node 22 from nodejs.org
 
 [Unit]
@@ -20,11 +22,19 @@ ExecStart=/usr/local/bin/node server.js
 Restart=on-failure
 RestartSec=2
 
-# Only reachable from this machine: you connect through an SSH tunnel.
+# Only reachable from this machine. Port 3000 requires sign-in; the SSH
+# tunnel connects to the trusted port, 3001, where you are MAXRECALL_USER
+# with no sign-in. Never point anything else (e.g. a reverse proxy) at 3001.
 Environment=HOST=127.0.0.1
 Environment=PORT=3000
+Environment=TRUSTED_PORT=3001
 Environment=MAXRECALL_USER=daniel.pflager@gmail.com
 Environment=MAXRECALL_USERS_DIR=/srv/maxrecall/data/users
+Environment=MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth
+# Secrets stay out of this public file. The leading "-" makes it optional;
+# systemd reads it as root before switching user, so it can be root-only.
+# Only needed to register on port 3000 (MAXRECALL_PASSWORD=...).
+EnvironmentFile=-/etc/maxrecall-dsa/test.env
 
 # --- Containment -----------------------------------------------------------
 # Submitted code runs as this service, so these limit what it can do.
