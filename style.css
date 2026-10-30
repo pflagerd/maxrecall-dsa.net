@@ -520,6 +520,13 @@ button.primary:hover {
   font-style: italic;
 }
 
+/* Links inside question text (Learning and Applying tabs). The browser's
+   default blue is nearly invisible on the dark background. */
+.tab-panel a,
+.tab-panel a:visited {
+  color: var(--accent);
+}
+
 /* Submissions tab (problem-page.js, refreshSubmissions) */
 .submissions-heading {
   margin: 0 0 0.5rem;
