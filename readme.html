@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-10-29.</p>
+Last updated: 2026-10-30.</p>
 
 <nav>
 <ol>
@@ -336,6 +336,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-30</td><td><strong>Changed</strong> (owner's choice): the password minimum is 10 characters, not 15. That's knowingly below NIST SP 800-63B rev. 4, which requires 15 for a password used as the only factor; throttling and the slow scrypt hash remain.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Added</strong> (branch <code>to-uppercase-lowercase</code>, <a href="https://github.com/pflagerd/maxrecall-dsa.net/issues/10">issue #10</a>): question <em>To Uppercase and Lowercase</em> (<code>swapCase</code>), a first version to be refined. Its Learning tab took over the strings teaching from <em>Is Unique I</em> (ASCII codes), and adds the 32 gap between cases, building a new string (immutability), and each language's case helpers. This branch carries the same link-colour change to <code>style.css</code> as <code>is-unique-i</code>, so the two branches can merge in either order. <strong>Open:</strong> how new questions get taught in the right order (prerequisites), and whether one-call built-ins like Python's <code>swapcase()</code> are allowed.</td></tr>
 </table>
 <p>Longer plans go in <code>docs/plans/</code> and get linked from here.</p>
 
