@@ -14,7 +14,7 @@ try {
 
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
-const { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');
+const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 const app = express();
@@ -217,7 +217,7 @@ async function handleExecution(req, res, { onlyVisible }) {
     // learner their result, so it's reported alongside it instead.
     if (!onlyVisible) {
       try {
-        result.submissionId = await saveSubmission({
+        result.submissionId = await saveSubmission(req.userEmail, {
           schemaVersion: 1,
           submittedAt,
           question: problem.slug,
@@ -249,7 +249,7 @@ async function handleExecution(req, res, { onlyVisible }) {
 app.post('/api/questions/:slug/run', (req, res) => handleExecution(req, res, { onlyVisible: true }));
 app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, { onlyVisible: false }));
 
-// --- Saved submissions (current user only) ----------------------------------
+// --- Saved submissions (the signed-in user's own) --------------------------------
 // Express 4 doesn't catch errors from async handlers, hence the try/catch.
 
 // Summaries for a list: everything except code, stdout and stderr.
@@ -264,7 +264,7 @@ app.get('/api/submissions', async (req, res) => {
     return res.status(400).json({ error: 'question must be given at most once' });
   }
   try {
-    const records = await listSubmissions();
+    const records = await listSubmissions(req.userEmail);
     res.json(records.filter((r) => !question || r.question === question).map(toSubmissionSummary));
   } catch (err) {
     res.status(500).json({ error: err.message || 'Could not read submissions' });
@@ -274,7 +274,7 @@ app.get('/api/submissions', async (req, res) => {
 // One submission in full, including code, stdout and stderr.
 app.get('/api/submissions/:id', async (req, res) => {
   try {
-    const record = await loadSubmission(req.params.id);
+    const record = await loadSubmission(req.userEmail, req.params.id);
     if (!record) return res.status(404).json({ error: 'Submission not found' });
     res.json(record);
   } catch (err) {
@@ -305,6 +305,6 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, HOST, () => {
   const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
-  console.log(`Server listening on ${where}, http://localhost:${PORT} (recording Submits for ${CURRENT_USER} in ${USERS_DIR})`);
-  console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${CURRENT_USER} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
+  console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
+  console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
 });

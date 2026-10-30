@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 
-const { CURRENT_USER, EMAIL_PATTERN } = require('./users');
+const { OWNER_EMAIL, EMAIL_PATTERN } = require('./users');
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -115,7 +115,7 @@ async function register(rawEmail, password) {
   if (wait) return wait;
 
   const allowed = registrationOpen()
-    && email === CURRENT_USER
+    && email === OWNER_EMAIL
     && sameSecret(password, REGISTRATION_PASSWORD)
     && !(await readAccount(email));
   if (!allowed) {

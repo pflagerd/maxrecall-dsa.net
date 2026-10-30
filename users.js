@@ -15,10 +15,10 @@ const DEFAULT_USER = 'daniel.pflager@gmail.com';
 // allows characters in addresses (such as "/") that mustn't reach a path.
 const EMAIL_PATTERN = /^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
-// There's no login yet, so the user comes from server configuration, never
-// from the browser. Checked once at startup: a bad value stops the server
-// immediately rather than failing on the first Submit.
-function configuredUser() {
+// MAXRECALL_USER: the owner, the only email allowed to register (auth.js)
+// and who you are on the trusted port. Checked once at startup: a bad value
+// stops the server immediately.
+function configuredOwner() {
   const user = (process.env.MAXRECALL_USER || DEFAULT_USER).trim().toLowerCase();
   if (!EMAIL_PATTERN.test(user)) {
     throw new Error(`MAXRECALL_USER must be a plain email address, got ${JSON.stringify(user)}`);
@@ -26,7 +26,7 @@ function configuredUser() {
   return user;
 }
 
-const CURRENT_USER = configuredUser();
+const OWNER_EMAIL = configuredOwner();
 
 // Save one Submit as users/<email>/submissions/<timestamp>.json. All
 // questions share the folder; the record's "question" field says which one.
@@ -39,9 +39,9 @@ const CURRENT_USER = configuredUser();
 // fails with EEXIST instead of overwriting. So two Submits in the same
 // millisecond (e.g. from two tabs) give a "not saved" warning rather than
 // one silently replacing the other.
-async function saveSubmission(record) {
+async function saveSubmission(email, record) {
   const id = record.submittedAt.replace(/:/g, '-');
-  const file = resolveInside(USERS_DIR, CURRENT_USER, 'submissions', `${id}.json`);
+  const file = resolveInside(submissionsDir(email), `${id}.json`);
   if (!file) throw new Error('Refusing to save outside users/');
 
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
@@ -59,22 +59,26 @@ async function saveSubmission(record) {
 // before it's used in a path, so a crafted id can't reach other files.
 const SUBMISSION_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
 
-function submissionsDir() {
-  return path.join(USERS_DIR, CURRENT_USER, 'submissions');
+// email is whoever the request is from (server.js, req.userEmail). Checked
+// again here before it becomes part of a path, whatever the caller did.
+function submissionsDir(email) {
+  const dir = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email, 'submissions');
+  if (!dir) throw new Error('Invalid user');
+  return dir;
 }
 
-async function readSubmission(id) {
-  const record = JSON.parse(await fs.promises.readFile(path.join(submissionsDir(), `${id}.json`), 'utf8'));
+async function readSubmission(email, id) {
+  const record = JSON.parse(await fs.promises.readFile(path.join(submissionsDir(email), `${id}.json`), 'utf8'));
   return { id, ...record };
 }
 
 // Every saved Submit for the current user, newest first (ids sort by time).
 // No folder yet means no submissions. A file that can't be read or parsed is
 // skipped with a warning rather than breaking the whole list.
-async function listSubmissions() {
+async function listSubmissions(email) {
   let names;
   try {
-    names = await fs.promises.readdir(submissionsDir());
+    names = await fs.promises.readdir(submissionsDir(email));
   } catch (err) {
     if (err.code === 'ENOENT') return [];
     throw err;
@@ -89,7 +93,7 @@ async function listSubmissions() {
   const records = [];
   for (const id of ids) {
     try {
-      records.push(await readSubmission(id));
+      records.push(await readSubmission(email, id));
     } catch (err) {
       console.warn(`Skipping unreadable submission ${id}: ${err.message}`);
     }
@@ -98,14 +102,14 @@ async function listSubmissions() {
 }
 
 // One saved Submit, or null if the id is malformed or there's no such file.
-async function loadSubmission(id) {
+async function loadSubmission(email, id) {
   if (!SUBMISSION_ID_PATTERN.test(id)) return null;
   try {
-    return await readSubmission(id);
+    return await readSubmission(email, id);
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     throw err;
   }
 }
 
-module.exports = { USERS_DIR, CURRENT_USER, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission };
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission };
