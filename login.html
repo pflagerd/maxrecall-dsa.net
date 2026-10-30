@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MaxRecall DSA — Sign in</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>MaxRecall DSA</h1>
+    <p class="tagline">Practice data structures &amp; algorithms problems</p>
+  </header>
+
+  <main class="auth-wrap">
+    <!-- Both forms live here; #register in the address shows the second
+         (login-page.js), so the ?next= destination survives switching. -->
+    <form id="login-form" class="auth-card">
+      <h2>Log in</h2>
+      <label>Email
+        <input name="email" type="email" autocomplete="username" required />
+      </label>
+      <label>Password
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit">Log in</button>
+      <p class="auth-switch">No account yet? <a href="#register">Register</a></p>
+    </form>
+
+    <form id="register-form" class="auth-card" hidden>
+      <h2>Register</h2>
+      <label>Email
+        <input name="email" type="email" autocomplete="username" required />
+      </label>
+      <label>Password
+        <input name="password" type="password" autocomplete="new-password" minlength="15" required />
+      </label>
+      <label>Confirm password
+        <input name="confirm" type="password" autocomplete="new-password" minlength="15" required />
+      </label>
+      <p class="auth-hint">At least 15 characters.</p>
+      <button type="submit">Register</button>
+      <p class="auth-switch">Already registered? <a href="#login">Log in</a></p>
+    </form>
+
+    <p id="auth-error" class="auth-error" role="alert"></p>
+  </main>
+
+  <script src="login-page.js"></script>
+</body>
+</html>

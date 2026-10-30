@@ -15,6 +15,7 @@ try {
 const { runSubmission } = require('./judge/runner');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, CURRENT_USER, saveSubmission, listSubmissions, loadSubmission } = require('./users');
+const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +28,110 @@ const QUESTIONS_DIR = path.join(__dirname, 'questions');
 const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 
 app.use(express.json());
+
+// --- Signing in ---------------------------------------------------------------
+// Every request first works out who it's from (req.userEmail) using the
+// session cookie. The gate further down then lets through only signed-in
+// requests, plus what the login page itself needs.
+
+const SESSION_COOKIE = 'maxrecall_session';
+
+function readCookie(req, name) {
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1 || part.slice(0, eq).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+// HttpOnly: page scripts can't read it. SameSite=Lax: sent when following a
+// link to the app from elsewhere, but not with cross-site POSTs. Secure
+// whenever the request came over HTTPS.
+function setSessionCookie(req, res, token) {
+  res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_LIFETIME_MS, secure: req.secure });
+}
+
+app.use(async (req, res, next) => {
+  try {
+    req.userEmail = await sessionEmail(readCookie(req, SESSION_COOKIE));
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Every POST to the API must be JSON. A form on another site can't send JSON
+// here without a CORS preflight, which this server never approves, so this
+// (with SameSite=Lax) stops cross-site request forgery, logout included.
+app.use('/api', (req, res, next) => {
+  if (req.method === 'POST' && !req.is('application/json')) {
+    return res.status(415).json({ error: 'Send JSON (Content-Type: application/json)' });
+  }
+  next();
+});
+
+function sendAuthResult(req, res, result, refusedStatus) {
+  if (!result.ok) {
+    if (result.retryAfterMs) {
+      res.set('Retry-After', String(Math.ceil(result.retryAfterMs / 1000)));
+      return res.status(429).json({ error: result.error });
+    }
+    return res.status(refusedStatus).json({ error: result.error });
+  }
+  setSessionCookie(req, res, result.token);
+  res.json({ email: result.email });
+}
+
+// Register and log in both start a new session, ending any the browser
+// already had (a fresh token after every sign-in).
+async function signIn(req, res, attempt, refusedStatus) {
+  const { email, password } = req.body || {};
+  if (typeof email !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'email and password are required' });
+  }
+  try {
+    const result = await attempt(email, password);
+    if (result.ok) await endSession(readCookie(req, SESSION_COOKIE));
+    sendAuthResult(req, res, result, refusedStatus);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Sign-in failed' });
+  }
+}
+
+app.post('/api/auth/register', (req, res) => signIn(req, res, register, 400));
+app.post('/api/auth/login', (req, res) => signIn(req, res, login, 401));
+
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    await endSession(readCookie(req, SESSION_COOKIE));
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Logout failed' });
+  }
+  res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/' });
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.userEmail) return res.status(401).json({ error: 'Not signed in' });
+  res.json({ email: req.userEmail });
+});
+
+// The gate. Not signed in: pages redirect to the login page (which comes
+// back here afterwards via ?next=), API calls get 401.
+const PUBLIC_PATHS = new Set(['/login.html', '/login-page.js', '/style.css']);
+app.use((req, res, next) => {
+  if (req.userEmail || PUBLIC_PATHS.has(req.path)) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not signed in' });
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    return res.redirect(302, `/login.html?next=${encodeURIComponent(req.originalUrl)}`);
+  }
+  res.status(401).end();
+});
 
 // --- Problem data -----------------------------------------------------
 
@@ -188,7 +293,7 @@ app.all('/api/*', (req, res) => {
 
 // Explicitly serve only the front-end assets (project root also holds server
 // source and config, so we avoid a blanket express.static(__dirname)).
-const STATIC_FILES = ['index.html', 'style.css', 'problem.html', 'problems-list.js', 'problem-page.js', 'labels.json', 'bubbles.js'];
+const STATIC_FILES = ['index.html', 'style.css', 'problem.html', 'problems-list.js', 'problem-page.js', 'labels.json', 'bubbles.js', 'login.html', 'login-page.js', 'account.js'];
 for (const file of STATIC_FILES) {
   app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 }
@@ -201,4 +306,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, HOST, () => {
   const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
   console.log(`Server listening on ${where}, http://localhost:${PORT} (recording Submits for ${CURRENT_USER} in ${USERS_DIR})`);
+  console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${CURRENT_USER} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
 });

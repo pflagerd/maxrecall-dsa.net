@@ -632,3 +632,86 @@ button.primary:hover {
   white-space: pre-wrap;
   color: #f87171;
 }
+
+/* --- Sign-in page (login.html) and the header's account control ------------- */
+
+.auth-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+}
+
+.auth-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  width: 100%;
+  max-width: 22rem;
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.auth-card[hidden] {
+  display: none;
+}
+
+.auth-card h2 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 1.2rem;
+}
+
+.auth-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.auth-card input {
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.auth-hint,
+.auth-switch {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.auth-switch a {
+  color: var(--accent);
+}
+
+.auth-error {
+  color: #f87171;
+  min-height: 1.2rem;
+  margin: 0.8rem 0 0;
+}
+
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.problem-header .account {
+  margin: 0;
+}
+
+.account button {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+}

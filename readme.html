@@ -117,6 +117,8 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>index.html</code>, <code>problems-list.js</code></td><td>Problem list page.</td></tr>
   <tr><td><code>problem.html</code>, <code>problem-page.js</code></td><td>Problem page: header (title, difficulty, source and topic bubbles), description/learning/submissions tabs, CodeMirror editor, Run/Submit/Skip, console.</td></tr>
   <tr><td><code>bubbles.js</code></td><td>Browser script shared by both pages: loads <code>labels.json</code> and draws source (outlined) and topic (filled) bubbles. Builds them with <code>textContent</code> and <code>element.style</code>, applying only colours <code>CSS.supports</code> accepts. If <code>labels.json</code> can't be loaded, bubbles use the default colours.</td></tr>
+  <tr><td><code>login.html</code>, <code>login-page.js</code></td><td>The sign-in page: Log in, or Register (<code>#register</code> in the address). Afterwards it goes back to <code>?next=</code>, but only if that's a path on this site.</td></tr>
+  <tr><td><code>account.js</code></td><td>Shows the signed-in email and a Log out button in the header of the problem list and problem page.</td></tr>
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
@@ -128,12 +130,17 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
 <h2 id="api">4. HTTP API</h2>
 <table>
   <tr><th>Method &amp; path</th><th>Behaviour</th></tr>
+  <tr><td><code>POST /api/auth/register</code></td><td>Body <code>{email, password}</code>. Succeeds only for <code>MAXRECALL_USER</code> with exactly <code>MAXRECALL_PASSWORD</code>, and only once; any refusal is <code>400</code> with one generic message. On success, sets the session cookie and returns <code>{email}</code>.</td></tr>
+  <tr><td><code>POST /api/auth/login</code></td><td>Body <code>{email, password}</code>. <code>401</code> with "Invalid email or password." for any failure. After 5 failures for an email, <code>429</code> with <code>Retry-After</code> until the wait (doubling, up to 15 minutes) is over. On success, ends any session the browser had and sets a new cookie.</td></tr>
+  <tr><td><code>POST /api/auth/logout</code></td><td>Ends the session and clears the cookie.</td></tr>
+  <tr><td><code>GET /api/auth/me</code></td><td><code>{email}</code> if signed in, otherwise <code>401</code>.</td></tr>
   <tr><td><code>GET /api/questions</code></td><td>List of <code>{slug, title, difficulty, topics, sources}</code>, sorted by title.</td></tr>
   <tr><td><code>GET /api/questions/:slug</code></td><td>The problem with hidden test cases removed: <code>visibleTestCases</code> plus a <code>hiddenCount</code>.</td></tr>
   <tr><td><code>POST /api/questions/:slug/run</code></td><td>Body <code>{language, code}</code>. Judges against <em>visible</em> test cases only.</td></tr>
   <tr><td><code>POST /api/questions/:slug/submit</code></td><td>Same body. Judges against <em>all</em> test cases, hidden included, then saves a record (see <a href="#state">Where data lives</a>). The response adds <code>saved: true</code> and <code>submissionId</code> (the record's timestamp), or <code>saved: false</code> and <code>saveError</code> if the save failed. The judged result is returned either way, and the page shows a “not saved” warning.</td></tr>
   <tr><td><code>GET /api/submissions</code></td><td>The current user's saved Submits, newest first, as summaries: <code>{id, submittedAt, question, language, status, passed, total, runtimeMs}</code> (no <code>code</code>, <code>stdout</code> or <code>stderr</code>). <code>?question=&lt;slug&gt;</code> keeps only that question's; giving it twice is a <code>400</code>. Unreadable files are skipped with a warning in the server log.</td></tr>
   <tr><td><code>GET /api/submissions/:id</code></td><td>One saved Submit in full, including <code>code</code>, <code>stdout</code> and <code>stderr</code>. <code>:id</code> is the file's timestamp, e.g. <code>2026-10-29T04-05-29.199Z</code>, and must match that pattern exactly; otherwise, or if there's no such file, <code>404</code>.</td></tr>
+  <tr><td>(all of the above)</td><td><strong>Sign-in gate:</strong> without a valid session cookie, every URL except <code>/login.html</code>, <code>/login-page.js</code>, <code>/style.css</code> and the login/register endpoints is refused: pages redirect to <code>/login.html?next=…</code>, API calls get <code>401</code>. Every <code>POST</code> to <code>/api/</code> must be JSON, or it's <code>415</code>. A form on another site can't send JSON without a CORS preflight, which the server never approves, so this and <code>SameSite=Lax</code> are the cross-site request forgery defence. The cookie is <code>maxrecall_session</code>: <code>HttpOnly</code>, <code>SameSite=Lax</code>, <code>Path=/</code>, 360 days, and <code>Secure</code> when the request came over HTTPS.</td></tr>
   <tr><td>any other <code>/api/…</code></td><td><code>404</code> with <code>{error}</code> JSON. The API was at <code>/api/problems/…</code> until 2026-10-29.</td></tr>
   <tr><td><code>GET /&lt;file&gt;</code></td><td>Only the files in the <code>STATIC_FILES</code> list are served; anything else falls back to <code>index.html</code>.</td></tr>
 </table>
@@ -197,6 +204,7 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <code>maxrecall-dsa:default-language</code>,
   <code>maxrecall-dsa:available-languages</code>.</li>
   <li>The Skip button is a placeholder that only shows an alert.</li>
+  <li>Every page needs you to be signed in (see the API section's sign-in gate). The header shows your email and a <strong>Log out</strong> button (<code>account.js</code>).</li>
   <li>The <strong>Submissions</strong> tab lists this question's saved Submits, newest first (local time, language, verdict, tests passed, run time), from <code>GET /api/submissions?question=</code>. It refreshes after each saved Submit. <strong>Load</strong> switches to that submission's language and puts its code in the editor. It asks first only if that language's code has been edited, and explains if the language is turned off in the language menu. Loading switches the editor's language but, unlike the dropdown, doesn't change your default language. It also adds <code>&amp;submission=&lt;id&gt;</code> to the page address (<code>history.replaceState</code>, no reload), so reloading or bookmarking reopens that submission's language and code; edits made since are not kept. A saved Submit puts its own id there, so a reload reopens what was just submitted (Run, or a Submit that failed to save, leaves the address alone). Choosing a language yourself (dropdown or language menu) removes it from the address. If the address names a submission that's missing, belongs to another question, or is in a language that's turned off, the page opens normally, drops it from the address, and the Submissions tab says why.</li>
   <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>. The problem list shows the same bubbles in its “Sources &amp; topics” column.</li>
 </ul>
@@ -281,6 +289,11 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json">npm's docs</a>
   say it's meant to be committed.</li>
   <li>There are no automated tests yet.</li>
+  <li><strong>Sign-in limits:</strong> no password reset or change (with one user, delete
+  <code>auth/accounts/&lt;email&gt;.json</code> and register again); throttling is in memory, so a restart clears it;
+  if a session expires while a page is open, its requests fail with "Not signed in" instead of going back to the
+  login page; and behind a future HTTPS reverse proxy, Express's <code>trust proxy</code> setting will be needed for
+  <code>req.secure</code>, and so the cookie's <code>Secure</code> flag, to work.</li>
   <li>No D compiler in the cloud environment (see <a href="#envs">Environments</a>).</li>
   <li><strong>The problem page needs internet access.</strong> <code>problem.html</code> loads
   CodeMirror 5.65.16 and KaTeX 0.16.9 from <code>cdnjs.cloudflare.com</code>. Without them
@@ -311,6 +324,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
   <tr><td>2026-10-29</td><td><strong>Done</strong> (plan step 4): the Submissions tab lists a question's saved Submits and can load one's code back into the editor. Multi-user step 1 is complete.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> test on the owner's Hostinger VPS (Ubuntu 24.04, nothing else on it), reachable <em>only</em> through an SSH tunnel (option A), because submitted code isn't sandboxed. Added the <code>HOST</code> and <code>MAXRECALL_USERS_DIR</code> settings, <code>deploy/maxrecall-dsa.test.service</code> and <code>docs/deploy-vps.md</code>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Renamed</strong> (owner's request): the service is <code>maxrecall-dsa.test.service</code> (file <code>deploy/maxrecall-dsa.test.service</code>). The <code>maxrecall</code> user and <code>/srv/maxrecall/…</code> paths are unchanged.</td></tr>
+  <tr><td>2026-10-30</td><td><strong>Decided and built:</strong> a sign-in gate (login, register, logout). Register only for <code>MAXRECALL_USER</code> with the fixed <code>MAXRECALL_PASSWORD</code>; 360-day sessions; required on Kubuntu too; the signed-in email becomes the current user. The VPS's SSH tunnel will bypass it through a separate trusted port (option a), not by trusting <code>127.0.0.1</code>, which a future reverse proxy would make everyone.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> topics and sources become coloured bubbles (next to the difficulty on the problem page, and in the problem list). Colours live in one shared file, not in each question; topics and sources are kept apart, and each will be able to have an optional link. Details still to decide: <a href="docs/plans/topics-and-sources.md"><code>docs/plans/topics-and-sources.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Done</strong> (topics plan steps 1–4): <code>tags</code> renamed to <code>topics</code>, <code>sources</code> added, <code>labels.json</code> holds the colours, and bubbles show on the problem page and in the problem list. Later: step 5, clickable <code>link</code>s.</td></tr>
 </table>
