@@ -1,6 +1,7 @@
 .DS_Store
 .env
 /auth/
+/users/
 /.idea/
 node_modules/
 npm-debug.log*

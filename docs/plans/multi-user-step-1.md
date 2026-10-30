@@ -7,7 +7,8 @@ Started 2026-10-29. Linked from `readme.html` → Decisions & plans.
 
 - Each user's directory is named by email address: `users/daniel.pflager@gmail.com/`.
 - `users/` is committed to git. The repository is public, so this data is
-  public, and that's fine.
+  public, and that's fine. **Changed 2026-10-30:** `users/` is now gitignored
+  and the owner manages it by hand, for testing.
 - The submitted code is stored.
 - Only Submit is recorded (not Run, not Skip).
 - nodemon ignores `users/` (`package.json` → `nodemonConfig`), so saving a

@@ -3,7 +3,8 @@ const path = require('path');
 
 const { resolveInside } = require('./paths');
 
-// Where user data lives. Defaults to users/ in the repo (committed by hand).
+// Where user data lives. Defaults to users/ in the repo, which is gitignored:
+// the owner manages it by hand (2026-10-30).
 // MAXRECALL_USERS_DIR moves it elsewhere, e.g. outside the checkout on the
 // VPS, so records written there never collide with a later git pull.
 const USERS_DIR = process.env.MAXRECALL_USERS_DIR

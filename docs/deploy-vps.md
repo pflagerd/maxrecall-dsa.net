@@ -290,10 +290,11 @@ code.
 If `deploy/maxrecall-dsa.test.service` itself changed, copy it again (step 5) and
 run `sudo systemctl daemon-reload` before restarting.
 
-## 9. Bringing VPS submissions into the repo [Kubuntu]
+## 9. Copying VPS submissions to Kubuntu (optional) [Kubuntu]
 
-The VPS has no GitHub credentials, and it doesn't need any. Copy its records
-into your Kubuntu checkout and commit them there:
+The VPS has no GitHub credentials, and it doesn't need any. `users/` is
+gitignored (since 2026-10-30), so submissions aren't committed anywhere. If you
+want the VPS's records on Kubuntu too, copy them into your checkout:
 
 ```bash
 cd ~/path/to/maxrecall-dsa.net
@@ -306,13 +307,6 @@ rsync -av --ignore-existing root@VPS_IP:/srv/maxrecall/data/users/ users/
 - The trailing `/` on the source means "the contents of this folder".
 
 See [rsync(1)](https://download.samba.org/pub/rsync/rsync.1).
-
-```bash
-git add users
-git commit -m "Add submissions from the VPS"
-git push
-```
-Then commit and push as usual. The repo is public, so these records are too.
 
 If you log in as a user other than root, `/srv/maxrecall` may not be readable
 by you, since `adduser` makes home folders private by default (my guess for
