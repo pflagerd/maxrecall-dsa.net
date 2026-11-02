@@ -148,6 +148,15 @@ where bwrap was moved into the restricted profile. Then came
 comm="bwrap"` for `capname="net_admin"` (the loopback setup) and
 `capname="setpcap"`.
 
+**Toolchains must be system-wide.** Sandboxes run as the service's user
+(`maxrecall`), or as `nobody` if you run the server or `make` as root. They
+can only use compilers and interpreters that user can read. One installed
+in a home folder, such as `/root/.local/share/...`, can't be used. Then the
+`Sandbox:` line says `toolchains the sandbox can't reach: … in <folder>`.
+Install them as §1 and §2 do (`apt`, and Node in `/usr/local`), and take
+the private copy off `PATH`. Seen on this VPS on 2026-11-02 with a DMD and a
+Node 18 in `/root/.local/share`.
+
 If the profile route fails, the fallbacks (plan §4) are a profile of our
 own for the service, or turning the restriction off. **Don't** turn it off
 without deciding to: it's machine-wide.

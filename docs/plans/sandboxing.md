@@ -573,6 +573,37 @@ The owner ran `make sandbox-test |& tee output.lst` as **root** in
 - Next on the VPS: install the JDK (§1) and Node 22 (§2), take Node 18 off
   root's `PATH`, pull, then `make sandbox-test |& tee output.lst`.
 
+### Step 5, VPS part: second run (2026-11-02, owner's run)
+
+- The AppArmor fix worked as intended. `sandbox-deps.sh` logged the
+  restriction, installed `apparmor-profiles` (apt upgraded `apparmor` and
+  `libapparmor1` from …24.04.3 to …24.04.9 alongside, because the package
+  needs the matching version), and loaded `bwrap-userns-restrict`. The
+  `net_admin` failure was gone. (Reloading printed `rc.apparmor.functions:
+  line 148: [: yes: integer expression expected`; I'm guessing that's a
+  harmless quirk of Ubuntu's reload script, and the load succeeded.
+  `aa-status | grep bwrap` would confirm it.)
+- **Next failure:** `bwrap: Can't find source path
+  /root/.local/share/dmd2/linux: Permission denied`. `toolchainArgs` binds
+  the install folder of every toolchain outside `/usr` that's on `PATH`.
+  Root's `PATH` has a DMD and a Node 18 under `/root/.local/share`. Since
+  the server (here `make`) ran as root, sandboxes run as `nobody`, which
+  can't enter `/root` (`drwx------`).
+- **Changed:** `sandboxUserCanReach` checks each toolchain folder before
+  binding it. As root, it checks the “others” permission bits along the
+  path, since that's what `nobody` gets; otherwise `fs.accessSync` checks
+  the server's own user. Folders that can't be reached aren't bound, and the
+  self-test fails with `toolchains the sandbox can't reach: dmd in <folder>
+  … Install them system-wide (world-readable, e.g. under /usr/local or
+  /opt), or take them off PATH`. The check stays strict, rather than leaving
+  that language broken inside the sandbox: otherwise the sandbox could find a
+  *different* copy than the server did, or none. Tested with a fake `dmd` in
+  `/root/.local/share`: as root, that reason; as `nobody`, which can't see
+  it at all, the system DMD is used and it works; moved to `/opt`, it's
+  bound and works.
+- Still to do on the VPS: the JDK, Node 22, and fixing root's `PATH`.
+
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).

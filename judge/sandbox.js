@@ -121,18 +121,65 @@ function etcArgs() {
 // Install folders of toolchains outside /usr, bound read-only at the same
 // path so PATH finds them inside too. For /opt/node22/bin/node that's
 // /opt/node22. Never a top-level folder like / or /opt itself.
-function toolchainArgs() {
-  const roots = new Set();
+function toolchainRoots() {
+  const roots = new Map(); // install folder -> the commands found in it
   for (const command of TOOLCHAIN_COMMANDS) {
     const found = findOnPath(command);
     if (!found) continue;
     for (const file of new Set([found, fs.realpathSync(found)])) {
       if (file.startsWith('/usr/')) continue;
       const root = path.dirname(path.dirname(file));
-      if (root.split('/').filter(Boolean).length >= 2) roots.add(root);
+      if (root.split('/').filter(Boolean).length < 2) continue;
+      if (!roots.has(root)) roots.set(root, new Set());
+      roots.get(root).add(command);
     }
   }
-  return [...roots].sort().flatMap((root) => ['--ro-bind', root, root]);
+  return roots;
+}
+
+// Whether the user sandboxes run as can open folder `dir`: search (x) on
+// every folder on the way, and read and search (r-x) on dir itself. When
+// the server is root that user is nobody, which owns nothing and is in no
+// groups (setpriv --clear-groups), so only the "others" permission bits
+// count. They're read from the mode; ACLs aren't considered. Otherwise it's
+// the server's own user, which fs.accessSync checks directly.
+// Found on the VPS on 2026-11-02: root ran the server with DMD and Node in
+// /root/.local/share, which nobody can't enter (/root is private), and
+// bwrap failed with "Can't find source path …: Permission denied".
+function sandboxUserCanReach(dir) {
+  if (!RUNNING_AS_ROOT) {
+    try {
+      fs.accessSync(dir, fs.constants.R_OK | fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const parts = dir.split('/').filter(Boolean);
+  let current = '/';
+  for (let i = 0; i < parts.length; i++) {
+    current = path.join(current, parts[i]);
+    let mode;
+    try {
+      mode = fs.statSync(current).mode;
+    } catch {
+      return false;
+    }
+    const needed = i === parts.length - 1 ? 0o005 : 0o001;
+    if ((mode & needed) !== needed) return false;
+  }
+  return true;
+}
+
+// Toolchain install folders, split into those the sandbox can use (bound in
+// read-only, at the same path) and those it can't reach. The self-test
+// fails on the latter with a reason that names them (runSelfTest).
+const TOOLCHAIN_ROOTS = toolchainRoots();
+const REACHABLE_TOOLCHAIN_ROOTS = [...TOOLCHAIN_ROOTS.keys()].filter(sandboxUserCanReach).sort();
+const UNREACHABLE_TOOLCHAIN_ROOTS = [...TOOLCHAIN_ROOTS.keys()].filter((root) => !sandboxUserCanReach(root)).sort();
+
+function toolchainArgs() {
+  return REACHABLE_TOOLCHAIN_ROOTS.flatMap((root) => ['--ro-bind', root, root]);
 }
 
 // Computed once: the toolchains don't move while the server runs.
@@ -214,6 +261,16 @@ function runSelfTest() {
 
   const version = spawnSync(bwrap, ['--version'], { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 5000 });
   const versionText = (version.stdout || '').trim() || 'bubblewrap, version unknown';
+
+  if (UNREACHABLE_TOOLCHAIN_ROOTS.length) {
+    const who = RUNNING_AS_ROOT ? 'nobody (sandboxes run as nobody when the server is root)' : "the server's user";
+    const which = UNREACHABLE_TOOLCHAIN_ROOTS.map((root) => `${[...TOOLCHAIN_ROOTS.get(root)].join(', ')} in ${root}`).join('; ');
+    return {
+      ok: false,
+      version: versionText,
+      reason: `toolchains the sandbox can't reach: ${which}. ${who} can't read that folder. Install them system-wide (world-readable, e.g. under /usr/local or /opt), or take them off PATH`,
+    };
+  }
 
   const toolchains = TOOLCHAIN_COMMANDS.filter((c) => findOnPath(c));
   const { command, args } = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains]);
