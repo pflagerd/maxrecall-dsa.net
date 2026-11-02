@@ -7,13 +7,15 @@
 // each later step should turn some of them into "contained".
 //
 // It never touches real secrets or the internet's content. Instead it plants
-// canaries: an environment variable, a private file (with a C++ header next
+// canaries: an environment variable (in its starting environment, see
+// ENV_CANARY below), a private file (with a C++ header next
 // to it), and a TCP listener on 127.0.0.1 standing in for the VPS's trusted
 // port. A probe "escapes" if it can see or reach one.
 //
 // Run: node judge/sandbox-selftest.js   (or: make sandbox-test)
 // Exit status: 0 if every probe was contained, 1 otherwise.
 
+const { spawnSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const net = require('net');
@@ -23,6 +25,22 @@ const { runSubmission } = require('./runner');
 
 const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
+
+// The G1 canary must be in this process's *starting* environment, like a
+// MAXRECALL_PASSWORD that systemd's EnvironmentFile= gives the VPS service:
+// /proc/<pid>/environ shows only the environment a process was started
+// with, not variables set later (process.env.X = ..., or .env files read by
+// process.loadEnvFile). So without it, this script runs itself again once,
+// with the canary set.
+const ENV_CANARY_NAME = 'MAXRECALL_SELFTEST_CANARY';
+const ENV_CANARY = process.env[ENV_CANARY_NAME];
+if (!ENV_CANARY) {
+  const rerun = spawnSync(process.execPath, [__filename], {
+    stdio: 'inherit',
+    env: { ...process.env, [ENV_CANARY_NAME]: TOKEN },
+  });
+  process.exit(rerun.status === null ? 2 : rerun.status);
+}
 
 // Function-mode Python probes return one string starting with "ESCAPED:" or
 // "contained:". One visible test case, so the judge echoes `actual` back.
@@ -40,15 +58,15 @@ function pythonProbes({ canaryDir, secretFile, listenerPort }) {
       code: `
 import os
 def probe():
-    if os.environ.get('MAXRECALL_SELFTEST_CANARY') == ${py(TOKEN)}:
+    if os.environ.get(${py(ENV_CANARY_NAME)}) == ${py(ENV_CANARY)}:
         return 'ESCAPED: canary is in os.environ (%d variables in all)' % len(os.environ)
     for pid in os.listdir('/proc'):
         if not pid.isdigit():
             continue
         try:
             with open('/proc/%s/environ' % pid, 'rb') as f:
-                if ${py(TOKEN)}.encode() in f.read():
-                    return 'ESCAPED: canary readable in /proc/%s/environ' % pid
+                if ${py(ENV_CANARY)}.encode() in f.read():
+                    return 'ESCAPED: own env is clean (%s), but the canary is readable in /proc/%s/environ' % (sorted(os.environ), pid)
         except OSError:
             pass
     return 'contained: canary not in own env or any readable /proc/*/environ; env has %s' % sorted(os.environ)
@@ -316,7 +334,6 @@ async function main() {
   fs.writeFileSync(secretFile, `${TOKEN}\n`, { mode: 0o600 });
   const canaryHeader = path.join(canaryDir, 'canary.h');
   fs.writeFileSync(canaryHeader, '#define SELFTEST_CANARY 1\n', { mode: 0o600 });
-  process.env.MAXRECALL_SELFTEST_CANARY = TOKEN;
 
   const listener = net.createServer((socket) => socket.destroy());
   await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));

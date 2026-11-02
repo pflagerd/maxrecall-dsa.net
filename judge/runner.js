@@ -28,6 +28,15 @@ const MAX_CAPTURED_OUTPUT = 200_000;
 // occurrence of this marker is the user's stdout, everything after is ours.
 const RESULT_MARKER = '###JUDGE_RESULT###';
 
+// The whole environment compilers and submissions get, instead of a copy of
+// the server's (spawn's default), which can hold secrets such as
+// MAXRECALL_PASSWORD. PATH is how they find node/python3/g++/java/dmd. LANG
+// makes text output UTF-8 everywhere: without it, Java falls back to ASCII
+// and prints "café" as "caf?" (Python coerces the C locale to UTF-8 on its
+// own, PEP 538). C.UTF-8 is built into glibc, so it exists on every machine.
+// Step 1 of docs/plans/sandboxing.md.
+const SUBMISSION_ENV = Object.freeze({ PATH: process.env.PATH, LANG: 'C.UTF-8' });
+
 const CPP_DIR = path.join(__dirname, 'cpp');
 const CPP_JSON_HELPER = fs.readFileSync(path.join(CPP_DIR, 'judge_json.hpp'), 'utf8');
 const CPP_JSON_OBJECT = path.join(CPP_DIR, 'judge_json.o');
@@ -95,7 +104,9 @@ const D_PARAM_EXTRACTORS = {
 
 // Harness code appended after the user's submitted function definition.
 // Test case args (never the expected answers) are piped in over stdin,
-// so the sandboxed process never sees expected outputs.
+// so the submission isn't handed the expected outputs. Until it's
+// sandboxed, though, it can still read them from questions/*.json on disk
+// (gap G2 in docs/plans/sandboxing.md).
 function buildJavascriptSource(userCode, functionName) {
   return `${userCode}
 process.on('unhandledRejection', (__judge_err) => { console.error(__judge_err); process.exit(1); });
@@ -333,6 +344,7 @@ void main() {
 function compileCpp(sourceFile, binaryFile) {
   return new Promise((resolve) => {
     const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile, CPP_JSON_OBJECT], {
+      env: SUBMISSION_ENV,
       timeout: CPP_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
@@ -359,6 +371,7 @@ function compileCpp(sourceFile, binaryFile) {
 function compileJava(sourceFile, outDir) {
   return new Promise((resolve) => {
     const child = spawn('javac', ['-cp', JAVA_DIR, '-d', outDir, sourceFile], {
+      env: SUBMISSION_ENV,
       timeout: JAVA_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
@@ -386,6 +399,7 @@ function compileJava(sourceFile, outDir) {
 function compileD(sourceFile, binaryFile, outDir) {
   return new Promise((resolve) => {
     const child = spawn('dmd', [`-of=${binaryFile}`, `-od=${outDir}`, sourceFile], {
+      env: SUBMISSION_ENV,
       timeout: D_COMPILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
@@ -442,6 +456,7 @@ function deepEqual(a, b) {
 function spawnJudged(command, args, stdinPayload) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
+      env: SUBMISSION_ENV,
       timeout: TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });

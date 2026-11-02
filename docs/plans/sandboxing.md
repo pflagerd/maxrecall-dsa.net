@@ -1,7 +1,7 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Step 0 done
-2026-11-02; step 1 next.**
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0 and 1
+done 2026-11-02; step 2 next.**
 Linked from `readme.html` → Decisions & plans.
 
 ## 1. The problem today
@@ -251,7 +251,7 @@ Notes:
 | Step | What | Check |
 |---|---|---|
 | 0 | **Done 2026-11-02.** An escape test: `judge/sandbox-selftest.js` (`make sandbox-test`) runs hostile submissions through `runSubmission` and reports each of G1–G8 as *contained* or *ESCAPED*. Run it after each step. | Cloud, 2026-11-02: 10 ESCAPED, 1 contained (G6c, the existing memory cap). See “Step 0 results” below. |
-| 1 | Pass `env: { PATH }` to every `spawn` in the runner. It's needed for bwrap too (§5), not only as a quick win. | G1's own-env check is contained. `/proc/<pid>/environ` of the *server* is still readable until step 3, so G1 still says ESCAPED until then. |
+| 1 | **Done 2026-11-02.** Every `spawn` in the runner gets `env: SUBMISSION_ENV` (`PATH`, `LANG=C.UTF-8`). It's needed for bwrap too (§5). | G1 now says “own env is clean (['LANG', 'PATH']), but the canary is readable in /proc/<pid>/environ”: still ESCAPED, as expected, until step 3. See “Step 1 notes”. |
 | 2 | `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to `docs/deploy-vps.md` §1 and the cloud SessionStart hook. | The self-test passes in the cloud. The server refuses to judge if bwrap is removed. |
 | 3 | Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Every existing question still passes its starter solution; selftest G2–G6, G8 contained. |
 | 4 | Compile step under bwrap. | G7 contained; C++/Java/D still compile. |
@@ -288,6 +288,32 @@ the Python run step through bwrap and `prlimit --nproc=64 --fsize=10M`, as
 because the compiler wasn't wrapped. G1 still escaped through
 `/proc/1/environ`, the finding in §5. So the probes can report both
 outcomes, and they caught a gap in the design.
+
+### Step 1 notes (2026-11-02)
+
+- **Why `LANG=C.UTF-8`, not just `PATH`.** With no `LANG`, Java's
+  `stdout.encoding` was `ANSI_X3.4-1968` (ASCII) and it printed `café` as
+  `caf?`. With `LANG=C.UTF-8` it was `UTF-8` (measured). The cloud server
+  has no `LANG`, so Java printed `?` there before this step too. Python
+  printed UTF-8 either way, because it coerces the C locale to UTF-8
+  ([PEP 538](https://peps.python.org/pep-0538/)).
+- **Regression check.** Every question's starter code, in all five
+  languages (D via the SessionStart hook's DMD 2.113.0), got the same
+  verdict before and after. The only difference: cloud Java compile errors
+  no longer start with `Picked up JAVA_TOOL_OPTIONS: …`, the cloud's proxy
+  settings, which had been the first line a learner saw. A correct `café`
+  program was Accepted in every language.
+- **Correction to the escape test.** At first G1 said *contained* after this
+  step, not the ESCAPED I'd predicted. The test set its canary with
+  `process.env.X = …` after starting, and `/proc/<pid>/environ` shows only
+  a process's **starting** environment, so the canary never appeared there.
+  The test now runs itself again with the canary in its starting
+  environment. That's how the VPS gets `MAXRECALL_PASSWORD` (systemd
+  `EnvironmentFile=`), so it's the case that matters. The other way round,
+  a password read from `.env` by `process.loadEnvFile` at runtime is *not*
+  visible in `/proc/<pid>/environ`. That's a narrower exposure than §1's G1
+  row suggests: the leak there was through inheritance, which this step
+  ends.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

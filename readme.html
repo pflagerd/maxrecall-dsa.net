@@ -197,10 +197,12 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
 </table>
 <p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s. Only the direct
 child is killed, though: a submission's own forked processes survive it (see Known gaps).
+Compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code> as their environment, not a copy of the server's
+(<code>SUBMISSION_ENV</code>). <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
 Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
 separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.
 <span class="src">Source: <code>judge/runner.js</code> (constants at the top,
-<code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>).</span></p>
+<code>SUBMISSION_ENV</code>, <code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>).</span></p>
 
 <h2 id="frontend">7. Front end</h2>
 <ul>
@@ -296,8 +298,11 @@ network. That's acceptable on your own machine, but it has to be solved (for exa
 with containers or seccomp/namespaces) before this is hosted for other people.
 <span class="src">Source: <code>spawnJudged</code> in <code>judge/runner.js</code>.</span></p>
 <p>Found while planning the fix on 2026-11-02 (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a> §1):
-submissions inherit the server's whole environment, including <code>MAXRECALL_PASSWORD</code>
-(<code>spawn</code> passes <code>process.env</code> on by default); they can read
+submissions inherited the server's whole environment, including <code>MAXRECALL_PASSWORD</code>
+(<code>spawn</code> passes <code>process.env</code> on by default). Since sandboxing step 1 they get only
+<code>PATH</code> and <code>LANG</code>, but they can still read the server's <em>starting</em> environment from
+<code>/proc/&lt;pid&gt;/environ</code>. That includes a password the VPS gets from <code>EnvironmentFile=</code>,
+though not one read from <code>.env</code> at runtime. Sandboxing step 3 closes it. They can also read
 <code>questions/*.json</code>, so hidden test cases' expected answers too; and a process a
 submission forks <strong>outlives the timeout</strong>. A Python submission that forked and called
 <code>setsid()</code> kept running after the judge gave up, and the judge reported 8042 ms instead
@@ -332,6 +337,7 @@ of 5000, because the orphan held the output pipe open.</p>
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 1): compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code>. Every question's starter code gets the same verdict as before in all five languages. Java compile errors in the cloud no longer start with a <code>Picked up JAVA_TOOL_OPTIONS</code> line, and Java now prints UTF-8 there (<code>café</code> was <code>caf?</code>). The escape test's G1 canary now sits in its starting environment, like a VPS password, because <code>/proc/&lt;pid&gt;/environ</code> shows only that.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner, sandboxing D1–D6, all as recommended): bubblewrap; refuse to judge if the sandbox is unavailable, unless <code>MAXRECALL_UNSANDBOXED=1</code>; on the VPS, Ubuntu's <code>bwrap-userns-restrict</code> AppArmor profile; a seccomp denylist built with libseccomp; cgroup v2 limits on the VPS as step 7; all sandboxes share the server's uid for now. <strong>Done:</strong> step 0, the escape test (<code>make sandbox-test</code>). On the cloud on 2026-11-02 it reported 10 of 11 probes ESCAPED (all but the memory cap). A throwaway trial routing Python runs through bubblewrap contained 9 of 11. It also showed that <code>--clearenv</code> isn't enough: bubblewrap's own PID 1 keeps the environment it was started with, and a submission can read it from <code>/proc/1/environ</code>, so the judge must also start bubblewrap with an empty environment.</td></tr>
   <tr><td>2026-11-02</td><td><strong>In planning:</strong> sandboxing submitted code (compile and run). Options compared: bubblewrap, nsjail, firejail, hand-rolled namespaces and seccomp, systemd-run, containers, isolate, gVisor. Recommended: bubblewrap plus rlimits, then seccomp and (on the VPS) cgroup v2. On Ubuntu 24.04, bubblewrap needs an AppArmor allowance for user namespaces. Six decisions are waiting for the owner. Plan: <a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>.</td></tr>
   <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>

@@ -24,7 +24,11 @@ It listens on two ports, both on `127.0.0.1`:
 
 That's containment, not a real sandbox. A submission can still read
 world-readable files on the VPS, use CPU and memory, and connect to
-`127.0.0.1:3001`, so a submission could act as you. With you as the only
+`127.0.0.1:3001`, so a submission could act as you. It can also read the
+service's starting environment from `/proc/<pid>/environ`, including
+`MAXRECALL_PASSWORD` if `test.env` sets it. Root-only `test.env` keeps the
+file private, not the value once the service has it. Sandboxing step 3
+(`docs/plans/sandboxing.md`) closes this. With you as the only
 user, that's no worse than you running it yourself; it would matter with
 other users.
 
