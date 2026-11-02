@@ -42,6 +42,12 @@ const CGROUP_LIMITS = Object.freeze({
 const CONTROLLERS = ['memory', 'pids', 'cpu'];
 const MEMORY_LIMIT_MB = 768;
 const MEMORY_LIMIT_MESSAGE = `Memory limit exceeded (${MEMORY_LIMIT_MB} MB for the whole submission, compiling and running together).`;
+// At memory.max the kernel first reclaims memory and kills only if that
+// fails, so a submission can also crawl at the limit until it runs out of
+// time (first seen on the VPS on 2026-11-02, probe G12: 4 x 200 MB timed
+// out instead of being killed). memory.events' "max" counter shows the
+// limit was reached.
+const MEMORY_LIMIT_SLOWED_MESSAGE = `Memory limit reached (${MEMORY_LIMIT_MB} MB for the whole submission, compiling and running together), which slowed it down until it ran out of time.`;
 
 // The cgroup systemd delegated to the unit: the parent of the server's own
 // cgroup, which must be named "server" (DelegateSubgroup=server). Read from
@@ -94,13 +100,29 @@ function createSubmissionCgroup(parentDir) {
   return {
     dir,
     procs: path.join(dir, 'cgroup.procs'),
+    // Counters from memory.events: limitHits ("max": times usage was about
+    // to go over memory.max) and oomKills ("oom_kill": processes the OOM
+    // killer ended); peakMb from memory.peak (Linux 5.19+). 0 if unreadable.
+    memory() {
+      const read = (file) => {
+        try {
+          return fs.readFileSync(path.join(dir, file), 'utf8');
+        } catch {
+          return '';
+        }
+      };
+      const events = Object.fromEntries(read('memory.events').split('\n').filter(Boolean).map((line) => {
+        const [name, value] = line.split(' ');
+        return [name, Number(value)];
+      }));
+      return {
+        limitHits: events.max || 0,
+        oomKills: events.oom_kill || 0,
+        peakMb: Math.round(Number(read('memory.peak')) / (1024 * 1024)) || 0,
+      };
+    },
     oomKills() {
-      try {
-        const line = fs.readFileSync(path.join(dir, 'memory.events'), 'utf8').split('\n').find((l) => l.startsWith('oom_kill '));
-        return line ? Number(line.split(' ')[1]) : 0;
-      } catch {
-        return 0;
-      }
+      return this.memory().oomKills;
     },
     destroy() {
       try {
@@ -160,4 +182,4 @@ function forSubmission() {
   return status.ok ? createSubmissionCgroup(status.parent) : null;
 }
 
-module.exports = { CGROUP_LIMITS, MEMORY_LIMIT_MB, MEMORY_LIMIT_MESSAGE, cgroupStatus: status, prepareParent, createSubmissionCgroup, forSubmission, wrap };
+module.exports = { CGROUP_LIMITS, MEMORY_LIMIT_MB, MEMORY_LIMIT_MESSAGE, MEMORY_LIMIT_SLOWED_MESSAGE, cgroupStatus: status, prepareParent, createSubmissionCgroup, forSubmission, wrap };

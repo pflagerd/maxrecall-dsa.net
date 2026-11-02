@@ -254,7 +254,9 @@ one cgroup (Linux control group v2), with limits for the whole group rather than
   <li>one CPU's worth of CPU time (<code>cpu.max</code> 100000/100000).</li>
 </ul>
 <p>Past the memory limit the kernel kills a process. That's reported with the usual status (Runtime Error, or Compile Error while
-compiling) and the message “Memory limit exceeded (768 MB for the whole submission…)”. The cgroup is killed and removed afterwards.
+compiling) and the message “Memory limit exceeded (768 MB for the whole submission…)”. At the limit the kernel first tries to reclaim memory, so a
+submission can also crawl until it runs out of time; if the cgroup's <code>memory.events</code> shows the limit was reached, the Time Limit
+Exceeded message says “Memory limit reached …, which slowed it down until it ran out of time”. The cgroup is killed and removed afterwards.
 It's on only when <code>MAXRECALL_REQUIRE_CGROUPS=1</code>, which the VPS's unit sets together with <code>Delegate=yes</code> and
 <code>DelegateSubgroup=server</code>; there the server refuses to judge if it can't set it up. Elsewhere (the cloud, <code>make dev</code>
 on Kubuntu) the server doesn't touch cgroups, and the <code>Sandbox:</code> line says so.

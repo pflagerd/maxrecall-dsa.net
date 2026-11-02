@@ -871,9 +871,32 @@ io_uring_setup, kcmp, keyctl, ptrace`.
   judge reports the memory message; skipped where cgroups aren't in use (it
   allocates nothing then). Its Python, run without a cgroup at 20 MB each,
   reports ESCAPED, so the probe can fail.
-- **Still to test on the VPS:** the real enforcement (G12 contained, plus a
-  look at `judge-…` cgroups coming and going), then the service itself
-  after the merge.
+- **First real run on the VPS** (owner, root's checkout on `cgroup-limits`,
+  `systemd-run -p Delegate=yes -p DelegateSubgroup=server -E
+  MAXRECALL_REQUIRE_CGROUPS=1 … node judge/sandbox-selftest.js`):
+  - the `Sandbox:` line said `cgroup limits per submission: 768 MB, no
+    swap, 128 tasks, 1 CPU`. The startup self-test ran in its test cgroup
+    and its `memory.peak` check passed, so placement works;
+  - 13 contained, G6d skipped (2 cores), and **G12 inconclusive**: the run
+    hit the 5 s time limit instead of being OOM-killed. So the 800 MB
+    didn't get through, but the probe couldn't show it was the memory
+    limit.
+  - **Hypothesis (not proven):** at `memory.max` the kernel reclaims
+    before it kills ("if the cgroup's memory usage can't be reduced by
+    reclaim", cgroup-v2 docs). With no swap only file-backed pages can go,
+    so the processes thrash until the clock runs out.
+  - **Changed:** `cgroups.js` reads `memory.events` `max` (“times usage was
+    about to go over the max boundary”), `oom_kill` and `memory.peak`. A run
+    or compile that times out *after* reaching the limit now says “Memory
+    limit reached (768 MB …), which slowed it down until it ran out of
+    time”; the status stays Time Limit Exceeded. G12 counts either memory
+    message as contained, and shows the cgroup's peak, limit-reached count
+    and OOM kills, read by the escape test just before the cgroup is
+    removed, so the next run shows what happened. Checked with a fake
+    cgroup: limit reached then timed out gives the new message; timed out
+    without reaching it gives plain “Time limit exceeded.”.
+- **Still to test on the VPS:** a second run of the above, then the
+  service itself after the merge.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

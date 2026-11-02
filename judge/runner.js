@@ -540,7 +540,7 @@ function compileSubmission(language, workDir, cg = null) {
   const compile = compileCommand(language, judgePaths(workDir));
   if (!compile) return Promise.resolve(null);
   const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes, cg });
-  const oomBefore = cg ? cg.oomKills() : 0;
+  const before = cg ? cg.memory() : null;
   return new Promise((resolve) => {
     const child = startProcess(proc, {
       env: SUBMISSION_ENV,
@@ -556,12 +556,14 @@ function compileSubmission(language, workDir, cg = null) {
       if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
     });
     child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut, memoryExceeded: false });
+      resolve({ success: false, stderr: String(err.message || err), timedOut, memoryExceeded: false, memoryLimitHit: false });
     });
     child.on('close', (code, signal) => {
-      const memoryExceeded = Boolean(cg) && cg.oomKills() > oomBefore;
+      const after = cg ? cg.memory() : null;
+      const memoryExceeded = Boolean(cg) && after.oomKills > before.oomKills;
+      const memoryLimitHit = Boolean(cg) && after.limitHits > before.limitHits;
       if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE)) timedOut = true;
-      resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded });
+      resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded, memoryLimitHit });
     });
   });
 }
@@ -571,7 +573,7 @@ function compileSubmission(language, workDir, cg = null) {
 // cgroup when there is one. memoryExceeded: its OOM killer ended a process.
 function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = null) {
   const proc = sandboxedArgs(argv, workDir, { cg });
-  const oomBefore = cg ? cg.oomKills() : 0;
+  const before = cg ? cg.memory() : null;
   return new Promise((resolve) => {
     const child = startProcess(proc, {
       env: SUBMISSION_ENV,
@@ -592,13 +594,15 @@ function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = n
     });
 
     child.on('error', (err) => {
-      resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null, memoryExceeded: false });
+      resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null, memoryExceeded: false, memoryLimitHit: false });
     });
 
     child.on('close', (code, signal) => {
-      const memoryExceeded = Boolean(cg) && cg.oomKills() > oomBefore;
+      const after = cg ? cg.memory() : null;
+      const memoryExceeded = Boolean(cg) && after.oomKills > before.oomKills;
+      const memoryLimitHit = Boolean(cg) && after.limitHits > before.limitHits;
       if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM')) timedOut = true;
-      resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded });
+      resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded, memoryLimitHit });
     });
 
     child.stdin.write(stdinPayload);
@@ -636,7 +640,7 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
     if (compileResult) {
       if (!compileResult.success) {
         const errorText = (compileResult.memoryExceeded ? cgroups.MEMORY_LIMIT_MESSAGE : compileResult.timedOut
-          ? 'Compilation timed out.'
+          ? (compileResult.memoryLimitHit ? `Compilation timed out. ${cgroups.MEMORY_LIMIT_SLOWED_MESSAGE}` : 'Compilation timed out.')
           : compileResult.stderr || 'Compilation failed.'
         ).slice(0, 2000);
         return {
@@ -670,7 +674,8 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
     }
 
     if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
-      const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
+      let errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
+      if (outcome.timedOut && outcome.memoryLimitHit) errorText = `Time limit exceeded. ${cgroups.MEMORY_LIMIT_SLOWED_MESSAGE}`;
       return {
         status: 'Time Limit Exceeded',
         passed: 0,
@@ -773,7 +778,7 @@ async function runProgramSubmission({ language, code, testCases }) {
     if (compileResult) {
       if (!compileResult.success) {
         const errorText = (compileResult.memoryExceeded ? cgroups.MEMORY_LIMIT_MESSAGE : compileResult.timedOut
-          ? 'Compilation timed out.'
+          ? (compileResult.memoryLimitHit ? `Compilation timed out. ${cgroups.MEMORY_LIMIT_SLOWED_MESSAGE}` : 'Compilation timed out.')
           : compileResult.stderr || 'Compilation failed.'
         ).slice(0, 2000);
         return {
@@ -825,6 +830,7 @@ async function runProgramSubmission({ language, code, testCases }) {
         if (outcome.timedOut && timeoutMs < TIMEOUT_MS) {
           errorText = `Time limit exceeded: all test cases together may take at most ${PROGRAM_TOTAL_RUN_MS / 1000} s.`;
         }
+        if (outcome.timedOut && outcome.memoryLimitHit) errorText = `${errorText} ${cgroups.MEMORY_LIMIT_SLOWED_MESSAGE}`;
         results.push(tc.hidden
           ? { index, hidden: true, passed: false }
           : { index, hidden: false, passed: false, input: tc.input, error: errorText });

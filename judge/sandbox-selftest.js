@@ -29,7 +29,25 @@ const os = require('os');
 const path = require('path');
 const { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
 const { sandboxStatus, describeSandbox, RUN_LIMITS } = require('./sandbox');
-const { cgroupStatus, MEMORY_LIMIT_MB } = require('./cgroups');
+const cgroupsModule = require('./cgroups');
+const { cgroupStatus, MEMORY_LIMIT_MB } = cgroupsModule;
+
+// For G12's report: the last submission cgroup's memory figures (peak,
+// times the limit was reached, OOM kills), read just before the runner
+// removes it. Only this test wraps forSubmission; the server doesn't.
+let lastCgroupMemory = null;
+const originalForSubmission = cgroupsModule.forSubmission;
+cgroupsModule.forSubmission = () => {
+  const cg = originalForSubmission();
+  if (cg) {
+    const destroy = cg.destroy.bind(cg);
+    cg.destroy = () => {
+      lastCgroupMemory = cg.memory();
+      destroy();
+    };
+  }
+  return cg;
+};
 
 const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
@@ -462,11 +480,17 @@ async function runMemoryProbe() {
   if (!cgroupStatus.ok) {
     return { verdict: 'skipped', detail: "cgroup limits aren't in use here (only in the VPS service, MAXRECALL_REQUIRE_CGROUPS=1); per-process memory caps still apply", runtimeMs: 0 };
   }
+  lastCgroupMemory = null;
   const result = await runSubmission({ language: 'python', code: MEMORY_PROBE, functionName: 'probe', testCases: PYTHON_CASE, judgeMode: 'function' });
-  if (/Memory limit exceeded/.test(result.error || '')) {
-    return { verdict: 'contained', detail: `the submission's cgroup stopped it: ${result.error}`, runtimeMs: result.runtimeMs };
+  const m = lastCgroupMemory;
+  const figures = m ? ` [cgroup: peak ${m.peakMb} MB, limit reached ${m.limitHits} time(s), ${m.oomKills} OOM kill(s)]` : '';
+  // Contained either way the limit shows: an OOM kill ("exceeded"), or
+  // crawling at the limit until the time ran out ("reached").
+  if (/Memory limit (exceeded|reached)/.test(result.error || '')) {
+    return { verdict: 'contained', detail: `the submission's cgroup stopped it: ${result.error}${figures}`, runtimeMs: result.runtimeMs };
   }
-  return { ...readVerdict(result), runtimeMs: result.runtimeMs };
+  const verdict = readVerdict(result);
+  return { ...verdict, detail: `${verdict.detail}${figures}`, runtimeMs: result.runtimeMs };
 }
 
 // G10: a compile that takes longer than the compile timeout. g++ is only a
