@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test deploy-server
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -73,5 +73,10 @@ deploy-server: toolchain-deps sandbox-deps
 clean:
 	rm -rf node_modules
 
+# Opens the SSH tunnel to the VPS's trusted port (docs/deploy-vps.md §7),
+# then browse http://localhost:3005. Ctrl-C closes it. Port 3005 so it
+# doesn't clash with make dev on 3000. Override the host with
+# make open-ssh-3005 VPS_HOST=...
+VPS_HOST ?= srv702017.hstgr.cloud
 open-ssh-3005:
-    ssh -N -L 3005:127.0.0.1:3001 root@srv702017.hstgr.cloud
+	ssh -N -L 3005:127.0.0.1:3001 root@$(VPS_HOST)
