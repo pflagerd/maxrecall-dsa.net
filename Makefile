@@ -72,3 +72,6 @@ deploy-server: toolchain-deps sandbox-deps
 # Remove installed dependencies
 clean:
 	rm -rf node_modules
+
+open-ssh-3005:
+    ssh -N -L 3005:127.0.0.1:3001 root@srv702017.hstgr.cloud
