@@ -2,9 +2,18 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
+const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+
+// Shown when a run is stopped by the CPU-time limit rather than the clock.
+const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
 
 const TIMEOUT_MS = 5000;
+// Program judging runs one process per test case, each allowed TIMEOUT_MS,
+// so without a total a question with 20 cases would allow 100 s. This caps
+// all of a submission's runs together (not counting compiling). Java starts
+// a JVM per case, about 0.3 to 0.7 s each with the sandbox, so 20 s leaves
+// room for about 30 cases.
+const PROGRAM_TOTAL_RUN_MS = 20000;
 const NODE_MEMORY_MB = 128;
 const PYTHON_MEMORY_MB = 256;
 const CPP_MEMORY_MB = 128;
@@ -18,6 +27,13 @@ const JAVA_COMPILE_TIMEOUT_MS = 10000;
 // overhead, so it gets the same cap as C++.
 const D_MEMORY_MB = 128;
 const D_COMPILE_TIMEOUT_MS = 10000;
+// The D compiler: LDC (ldc2) if it's installed, else DMD. LDC is in
+// Ubuntu's own archive (package ldc), so scripts/toolchain-deps.sh installs
+// it on Kubuntu and the VPS alike; DMD comes from the third-party d-apt
+// (docs/d-compiler.md) and stays as the fallback. Both use the DMD
+// frontend, so error messages look alike; they accept the same -of=/-od=.
+// Chosen once, at startup, like the other toolchains' paths.
+const D_COMPILER = findOnPath('ldc2') ? 'ldc2' : 'dmd';
 // Caps how much stdout/stderr get buffered, both to bound this server's own
 // memory if a submission spams output and to keep the response payload sane.
 const MAX_CAPTURED_OUTPUT = 200_000;
@@ -64,6 +80,29 @@ function ensureJudgeJsonClassBuilt() {
 }
 ensureJudgeJsonClassBuilt();
 
+// Copies the prebuilt helpers into HELPER_DIR (judge/sandbox.js), which
+// every sandbox sees read-only at /judge: cpp/judge_json.o and java/*.class.
+// Not bound from the checkout, which the sandbox's user may not be able to
+// enter (/root on the VPS). Permissions are set explicitly, because a copy
+// can keep a strict mode from the checkout.
+function stageHelpers() {
+  const cppDir = path.join(HELPER_DIR, 'cpp');
+  const javaDir = path.join(HELPER_DIR, 'java');
+  for (const dir of [cppDir, javaDir]) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.chmodSync(dir, 0o755);
+  }
+  const copy = (from, to) => {
+    fs.copyFileSync(from, to);
+    fs.chmodSync(to, 0o644);
+  };
+  copy(CPP_JSON_OBJECT, path.join(cppDir, 'judge_json.o'));
+  for (const name of fs.readdirSync(JAVA_DIR).filter((n) => n.endsWith('.class'))) {
+    copy(path.join(JAVA_DIR, name), path.join(javaDir, name));
+  }
+}
+stageHelpers();
+
 // Maps a C++ parameter type (as written in a problem's signature.cpp.params)
 // to the judge_json.hpp helper that extracts it from a JsonValue.
 const CPP_PARAM_EXTRACTORS = {
@@ -95,7 +134,9 @@ const D_PARAM_EXTRACTORS = {
 
 // Harness code appended after the user's submitted function definition.
 // Test case args (never the expected answers) are piped in over stdin,
-// so the sandboxed process never sees expected outputs.
+// so the submission isn't handed the expected outputs. Until it's
+// sandboxed, though, it can still read them from questions/*.json on disk
+// (gap G2 in docs/plans/sandboxing.md).
 function buildJavascriptSource(userCode, functionName) {
   return `${userCode}
 process.on('unhandledRejection', (__judge_err) => { console.error(__judge_err); process.exit(1); });
@@ -327,85 +368,6 @@ void main() {
 `;
 }
 
-// Compiles a .cpp file to a binary with its own timeout, separate from the
-// run timeout below (compilation can legitimately take longer than running
-// trivial test cases, especially for templates).
-function compileCpp(sourceFile, binaryFile) {
-  return new Promise((resolve) => {
-    const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile, CPP_JSON_OBJECT], {
-      timeout: CPP_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
-// Compiles Main.java to outDir/Main.class (plus Solution.class and any other
-// top-level classes spliced into the same file), with JudgeJson.class found
-// on the classpath rather than recompiled alongside it.
-function compileJava(sourceFile, outDir) {
-  return new Promise((resolve) => {
-    const child = spawn('javac', ['-cp', JAVA_DIR, '-d', outDir, sourceFile], {
-      timeout: JAVA_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
-// Compiles main.d to a binary in its own tmpDir (given its own directory,
-// like Java, so the stray .o object file dmd leaves alongside -of lands
-// somewhere that gets cleaned up automatically rather than littering the
-// system tmp dir).
-function compileD(sourceFile, binaryFile, outDir) {
-  return new Promise((resolve) => {
-    const child = spawn('dmd', [`-of=${binaryFile}`, `-od=${outDir}`, sourceFile], {
-      timeout: D_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
 // For a submission that fails before/without producing any usable output at
 // all (compile error, timeout, no valid JSON produced): every test case
 // fails identically, so only the first gets input/error attached — the
@@ -439,10 +401,165 @@ function deepEqual(a, b) {
   return false;
 }
 
-function spawnJudged(command, args, stdinPayload) {
+// Each submission gets its own folder (fs.mkdtempSync, owner-only), with
+// fixed file names inside. javac needs the public class's file to be named
+// after it (Main.java); the rest just keep the same shape.
+const SOURCE_FILE_NAMES = { javascript: 'main.js', python: 'main.py', cpp: 'main.cpp', java: 'Main.java', d: 'main.d' };
+const BINARY_FILE_NAME = 'main';
+
+function makeWorkDir() {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-'));
+  prepareWorkDir(workDir);
+  return workDir;
+}
+
+// Where the submission's folder and the judge's helpers appear to the
+// compiler and the running submission: fixed paths inside the sandbox, or
+// their real paths when judging without one (MAXRECALL_UNSANDBOXED=1).
+// Inside, the helpers are read-only, and /work is writable only while
+// compiling (sandboxedArgs).
+const SANDBOX_PATHS = Object.freeze({
+  work: '/work',
+  javaHelpers: path.posix.join(HELPER_SANDBOX_PATH, 'java'),
+  cppHelperObject: path.posix.join(HELPER_SANDBOX_PATH, 'cpp', 'judge_json.o'),
+});
+function judgePaths(workDir) {
+  return sandboxStatus.ok
+    ? SANDBOX_PATHS
+    : { work: workDir, javaHelpers: JAVA_DIR, cppHelperObject: CPP_JSON_OBJECT };
+}
+
+// Memory caps for compilers, which had none (a 257-byte C++ source of
+// exponential templates took cc1plus to 2 GB in 20 s). g++ and the D compiler get an
+// address-space cap (RLIMIT_AS), which their child processes (cc1plus, as,
+// ld) inherit; the harness compiles fine under 512 MB (measured), so 1 GB
+// leaves room. javac is a JVM, which reserves more address space than it
+// uses, so like java at run time it gets a heap cap (-J passes -Xmx to the
+// JVM running javac) instead.
+const COMPILER_ADDRESS_SPACE_BYTES = 1024 * 1024 * 1024;
+const JAVAC_HEAP_MB = 256;
+
+// How to compile a submission: { argv, timeoutMs, addressSpaceBytes }, in
+// the paths the compiler sees, or null for interpreted languages.
+function compileCommand(language, paths) {
+  const file = (name) => path.posix.join(paths.work, name);
+  switch (language) {
+    case 'cpp':
+      // judge_json.o is the precompiled JSON helper (ensureCppJsonObjectBuilt).
+      return {
+        argv: ['g++', '-std=c++17', '-O2', '-o', file(BINARY_FILE_NAME), file(SOURCE_FILE_NAMES.cpp), paths.cppHelperObject],
+        timeoutMs: CPP_COMPILE_TIMEOUT_MS,
+        addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
+      };
+    case 'java':
+      // Writes Main.class, Solution.class and any other top-level classes
+      // into the work folder; JudgeJson.class is found on the classpath.
+      return {
+        argv: ['javac', `-J-Xmx${JAVAC_HEAP_MB}m`, '-cp', paths.javaHelpers, '-d', paths.work, file(SOURCE_FILE_NAMES.java)],
+        timeoutMs: JAVA_COMPILE_TIMEOUT_MS,
+      };
+    case 'd':
+      // -of names the binary; -od puts the object file the compiler leaves
+      // behind in the work folder too. ldc2 and dmd take the same flags.
+      return {
+        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d)],
+        timeoutMs: D_COMPILE_TIMEOUT_MS,
+        addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
+      };
+    default:
+      return null;
+  }
+}
+
+// What to spawn for a compiler or a submission: inside the sandbox when it
+// works, with workDir at /work (writable only for compiling), the helpers
+// read-only, and RUN_LIMITS; otherwise the command itself, started in
+// workDir. Killing the result kills bwrap, and with it everything inside.
+function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes } = {}) {
+  if (!sandboxStatus.ok) return { command, args, cwd: workDir };
+  return sandboxedRun(command, args, {
+    binds: [
+      { hostPath: workDir, sandboxPath: SANDBOX_PATHS.work, writable: writableWork },
+      { hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH },
+    ],
+    cwd: SANDBOX_PATHS.work,
+    addressSpaceBytes,
+  });
+}
+
+// The command line ([command, ...args]) that runs a submission, in the
+// paths it sees (judgePaths).
+function runCommand(language, judgeMode, paths) {
+  const file = (name) => path.posix.join(paths.work, name);
+  switch (language) {
+    case 'javascript':
+      return ['node', `--max-old-space-size=${NODE_MEMORY_MB}`, file(SOURCE_FILE_NAMES.javascript)];
+    case 'python':
+      // Function judging's harness caps its own memory (resource.setrlimit,
+      // in buildPythonSource). Program judging has no harness, so the cap is
+      // applied the way the compiled languages' is: ulimit, then exec.
+      return judgeMode === 'program'
+        ? ['bash', '-c', `ulimit -v ${PYTHON_MEMORY_MB * 1024}; exec python3 "$0"`, file(SOURCE_FILE_NAMES.python)]
+        : ['python3', file(SOURCE_FILE_NAMES.python)];
+    case 'cpp':
+    case 'd': {
+      // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
+      // way the Python harness caps its own interpreter via resource.setrlimit.
+      const memoryMb = language === 'cpp' ? CPP_MEMORY_MB : D_MEMORY_MB;
+      return ['bash', '-c', `ulimit -v ${memoryMb * 1024}; exec "$0"`, file(BINARY_FILE_NAME)];
+    }
+    case 'java':
+      // Function judging's generated Main uses JudgeJson; program judging's
+      // Main is the submission's own, so only its folder is on the classpath.
+      return ['java', `-Xmx${JAVA_MEMORY_MB}m`, '-cp', judgeMode === 'program' ? paths.work : `${paths.work}${path.delimiter}${paths.javaHelpers}`, 'Main'];
+    default:
+      throw new Error(`Unsupported language: ${language}`);
+  }
+}
+
+// Compiles the submission in workDir, for compiled languages, with its own
+// timeout (compiling can legitimately take longer than running trivial test
+// cases). Resolves to { success, stderr, timedOut }, or null for interpreted
+// languages. Hitting the CPU-time limit counts as timing out. Since the
+// compiler runs inside the sandbox, killing it on timeout kills all of it:
+// g++'s child cc1plus used to survive and hold the judge's pipe open.
+function compileSubmission(language, workDir) {
+  const compile = compileCommand(language, judgePaths(workDir));
+  if (!compile) return Promise.resolve(null);
+  const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes });
   return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      timeout: TIMEOUT_MS,
+    const child = spawn(proc.command, proc.args, {
+      env: SUBMISSION_ENV,
+      cwd: proc.cwd,
+      timeout: compile.timeoutMs,
+      killSignal: 'SIGKILL',
+    });
+
+    let stderr = '';
+    let timedOut = false;
+
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
+    child.on('error', (err) => {
+      resolve({ success: false, stderr: String(err.message || err), timedOut });
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE) timedOut = true;
+      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+    });
+  });
+}
+
+// Runs one submission process: inside the sandbox when it works, with its
+// folder read-only at /work (sandboxedArgs).
+function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS) {
+  const proc = sandboxedArgs(argv, workDir);
+  return new Promise((resolve) => {
+    const child = spawn(proc.command, proc.args, {
+      env: SUBMISSION_ENV,
+      cwd: proc.cwd,
+      timeout: timeoutMs,
       killSignal: 'SIGKILL',
     });
 
@@ -479,57 +596,24 @@ function spawnJudged(command, args, stdinPayload) {
 // compiled/statically-typed languages (cpp, java, d) that need to know
 // argument/return types to generate a harness that compiles.
 async function runFunctionSubmission({ language, code, functionName, testCases, signature }) {
-  const id = crypto.randomUUID();
   const started = Date.now();
 
-  let source;
-  let command;
-  let args;
-  let tmpFile;
-  let tmpBinary;
-  let tmpDir;
+  const SOURCE_BUILDERS = {
+    javascript: () => buildJavascriptSource(code, functionName),
+    python: () => buildPythonSource(code, functionName),
+    cpp: () => buildCppSource(code, functionName, signature || {}),
+    java: () => buildJavaSource(code, functionName, signature || {}),
+    d: () => buildDSource(code, functionName, signature || {}),
+  };
+  if (!SOURCE_BUILDERS[language]) throw new Error(`Unsupported language: ${language}`);
+  const source = SOURCE_BUILDERS[language]();
 
-  if (language === 'javascript') {
-    source = buildJavascriptSource(code, functionName);
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.js`);
-    command = 'node';
-    args = [`--max-old-space-size=${NODE_MEMORY_MB}`, tmpFile];
-  } else if (language === 'python') {
-    source = buildPythonSource(code, functionName);
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.py`);
-    command = 'python3';
-    args = [tmpFile];
-  } else if (language === 'cpp') {
-    source = buildCppSource(code, functionName, signature || {});
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.cpp`);
-    tmpBinary = path.join(os.tmpdir(), `judge-${id}`);
-  } else if (language === 'java') {
-    source = buildJavaSource(code, functionName, signature || {});
-    // Unlike the other languages, javac requires the file holding a public
-    // class to be named exactly after that class (Main.java), so this needs
-    // its own per-submission directory rather than a uniquely-named temp file.
-    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
-    fs.mkdirSync(tmpDir);
-    tmpFile = path.join(tmpDir, 'Main.java');
-  } else if (language === 'd') {
-    source = buildDSource(code, functionName, signature || {});
-    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
-    fs.mkdirSync(tmpDir);
-    tmpFile = path.join(tmpDir, 'main.d');
-    tmpBinary = path.join(tmpDir, 'main');
-  } else {
-    throw new Error(`Unsupported language: ${language}`);
-  }
-
-  fs.writeFileSync(tmpFile, source);
+  const workDir = makeWorkDir();
+  fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), source);
 
   try {
-    if (language === 'cpp' || language === 'java' || language === 'd') {
-      const compileResult = language === 'cpp'
-        ? await compileCpp(tmpFile, tmpBinary)
-        : language === 'java'
-          ? await compileJava(tmpFile, tmpDir)
-          : await compileD(tmpFile, tmpBinary, tmpDir);
+    const compileResult = await compileSubmission(language, workDir);
+    if (compileResult) {
       if (!compileResult.success) {
         const errorText = (compileResult.timedOut
           ? 'Compilation timed out.'
@@ -546,24 +630,14 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
           results: buildFailureResults(testCases, errorText),
         };
       }
-      if (language === 'cpp' || language === 'd') {
-        // Cap the compiled binary's address space (RLIMIT_AS, in KB) the same
-        // way the Python harness caps its own interpreter via resource.setrlimit.
-        const memoryMb = language === 'cpp' ? CPP_MEMORY_MB : D_MEMORY_MB;
-        command = 'bash';
-        args = ['-c', `ulimit -v ${memoryMb * 1024}; exec "$0"`, tmpBinary];
-      } else {
-        command = 'java';
-        args = [`-Xmx${JAVA_MEMORY_MB}m`, '-cp', `${tmpDir}${path.delimiter}${JAVA_DIR}`, 'Main'];
-      }
     }
 
     const stdinPayload = JSON.stringify(testCases.map((tc) => ({ args: tc.args })));
-    const outcome = await spawnJudged(command, args, stdinPayload);
+    const outcome = await spawnJudged(runCommand(language, 'function', judgePaths(workDir)), stdinPayload, workDir);
     const runtimeMs = Date.now() - started;
 
-    if (outcome.timedOut) {
-      const errorText = 'Time limit exceeded.';
+    if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
+      const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
       return {
         status: 'Time Limit Exceeded',
         passed: 0,
@@ -634,9 +708,7 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
       results,
     };
   } finally {
-    if (tmpDir) fs.rm(tmpDir, { recursive: true, force: true }, () => {});
-    else fs.unlink(tmpFile, () => {});
-    if (tmpBinary) fs.unlink(tmpBinary, () => {});
+    fs.rm(workDir, { recursive: true, force: true }, () => {});
   }
 }
 
@@ -651,54 +723,18 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 // trailing newline from println/cout/writeln doesn't cause a false Wrong
 // Answer.
 async function runProgramSubmission({ language, code, testCases }) {
-  const id = crypto.randomUUID();
   const started = Date.now();
+  if (!SOURCE_FILE_NAMES[language]) throw new Error(`Unsupported language: ${language}`);
 
-  let command;
-  let args;
-  let tmpFile;
-  let tmpBinary;
-  let tmpDir;
-
-  if (language === 'javascript') {
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.js`);
-    command = 'node';
-    args = [`--max-old-space-size=${NODE_MEMORY_MB}`, tmpFile];
-  } else if (language === 'python') {
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.py`);
-    // Unlike function judging, there's no injected wrapper to set the
-    // memory cap via resource.setrlimit, so it's applied the same way as
-    // the compiled languages instead: wrapping the interpreter in ulimit.
-    command = 'bash';
-    args = ['-c', `ulimit -v ${PYTHON_MEMORY_MB * 1024}; exec python3 "$0"`, tmpFile];
-  } else if (language === 'cpp') {
-    tmpFile = path.join(os.tmpdir(), `judge-${id}.cpp`);
-    tmpBinary = path.join(os.tmpdir(), `judge-${id}`);
-  } else if (language === 'java') {
-    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
-    fs.mkdirSync(tmpDir);
-    // Program judging gives the submission full control of its own class,
-    // so (unlike function judging's generated Main) the submission must
-    // define `public class Main` itself.
-    tmpFile = path.join(tmpDir, 'Main.java');
-  } else if (language === 'd') {
-    tmpDir = path.join(os.tmpdir(), `judge-${id}`);
-    fs.mkdirSync(tmpDir);
-    tmpFile = path.join(tmpDir, 'main.d');
-    tmpBinary = path.join(tmpDir, 'main');
-  } else {
-    throw new Error(`Unsupported language: ${language}`);
-  }
-
-  fs.writeFileSync(tmpFile, code);
+  // Program judging gives the submission full control of its own source
+  // file, so for Java (unlike function judging's generated Main) the
+  // submission must define `public class Main` itself.
+  const workDir = makeWorkDir();
+  fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), code);
 
   try {
-    if (language === 'cpp' || language === 'java' || language === 'd') {
-      const compileResult = language === 'cpp'
-        ? await compileCpp(tmpFile, tmpBinary)
-        : language === 'java'
-          ? await compileJava(tmpFile, tmpDir)
-          : await compileD(tmpFile, tmpBinary, tmpDir);
+    const compileResult = await compileSubmission(language, workDir);
+    if (compileResult) {
       if (!compileResult.success) {
         const errorText = (compileResult.timedOut
           ? 'Compilation timed out.'
@@ -715,30 +751,39 @@ async function runProgramSubmission({ language, code, testCases }) {
           results: buildFailureResults(testCases, errorText, (tc) => tc.input),
         };
       }
-      if (language === 'cpp' || language === 'd') {
-        const memoryMb = language === 'cpp' ? CPP_MEMORY_MB : D_MEMORY_MB;
-        command = 'bash';
-        args = ['-c', `ulimit -v ${memoryMb * 1024}; exec "$0"`, tmpBinary];
-      } else {
-        command = 'java';
-        args = [`-Xmx${JAVA_MEMORY_MB}m`, '-cp', tmpDir, 'Main'];
-      }
     }
+    const command = runCommand(language, 'program', judgePaths(workDir));
 
     let passedCount = 0;
     let anyTimedOut = false;
     let anyCrashed = false;
     const results = [];
 
+    const runsStarted = Date.now();
     for (let index = 0; index < testCases.length; index++) {
       const tc = testCases[index];
-      const outcome = await spawnJudged(command, args, tc.input || '');
-
-      if (outcome.timedOut) {
+      // Each case gets TIMEOUT_MS, or what's left of the total if less.
+      // Cases still waiting when the total is used up aren't run.
+      const remainingMs = PROGRAM_TOTAL_RUN_MS - (Date.now() - runsStarted);
+      if (remainingMs <= 0) {
         anyTimedOut = true;
         results.push(tc.hidden
           ? { index, hidden: true, passed: false }
-          : { index, hidden: false, passed: false, input: tc.input, error: 'Time limit exceeded.' });
+          : { index, hidden: false, passed: false, input: tc.input, error: `Not run: all test cases together may take at most ${PROGRAM_TOTAL_RUN_MS / 1000} s, and that time was used up.` });
+        continue;
+      }
+      const timeoutMs = Math.min(TIMEOUT_MS, remainingMs);
+      const outcome = await spawnJudged(command, tc.input || '', workDir, timeoutMs);
+
+      if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
+        anyTimedOut = true;
+        let errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
+        if (outcome.timedOut && timeoutMs < TIMEOUT_MS) {
+          errorText = `Time limit exceeded: all test cases together may take at most ${PROGRAM_TOTAL_RUN_MS / 1000} s.`;
+        }
+        results.push(tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.input, error: errorText });
         continue;
       }
       if (outcome.exitCode !== 0) {
@@ -775,19 +820,20 @@ async function runProgramSubmission({ language, code, testCases }) {
       results,
     };
   } finally {
-    if (tmpDir) fs.rm(tmpDir, { recursive: true, force: true }, () => {});
-    else fs.unlink(tmpFile, () => {});
-    if (tmpBinary) fs.unlink(tmpBinary, () => {});
+    fs.rm(workDir, { recursive: true, force: true }, () => {});
   }
 }
 
 // Dispatches to function or program judging. judgeMode defaults to
 // 'function' so existing problems (which predate this option, and so have
 // no judgeMode field at all) keep behaving exactly as before.
+// Throws SandboxUnavailableError (err.code 'SANDBOX_UNAVAILABLE') first if
+// the sandbox isn't working and MAXRECALL_UNSANDBOXED=1 isn't set.
 function runSubmission({ language, code, functionName, testCases, signature, judgeMode }) {
+  assertJudgingAllowed();
   return judgeMode === 'program'
     ? runProgramSubmission({ language, code, testCases })
     : runFunctionSubmission({ language, code, functionName, testCases, signature });
 }
 
-module.exports = { runSubmission };
+module.exports = { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS, D_COMPILER };

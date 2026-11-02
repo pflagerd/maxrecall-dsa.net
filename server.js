@@ -14,6 +14,7 @@ try {
 }
 
 const { runSubmission } = require('./judge/runner');
+const { describeSandbox } = require('./judge/sandbox');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
@@ -258,7 +259,10 @@ async function handleExecution(req, res, { onlyVisible }) {
     }
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Execution failed' });
+    // 503 Service Unavailable: the server is fine, but judging is turned
+    // off until its sandbox works (judge/sandbox.js).
+    const httpStatus = err.code === 'SANDBOX_UNAVAILABLE' ? 503 : 500;
+    res.status(httpStatus).json({ error: err.message || 'Execution failed' });
   }
 }
 
@@ -332,6 +336,7 @@ app.listen(PORT, HOST, () => {
   const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
   console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
   console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
+  console.log(`Sandbox: ${describeSandbox()}`);
 });
 
 if (TRUSTED_PORT !== null) {

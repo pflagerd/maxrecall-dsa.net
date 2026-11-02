@@ -13,8 +13,10 @@ It listens on two ports, both on `127.0.0.1`:
   what a reverse proxy would point at, if the app is ever made public, and it
   must never point at 3001.
 
-**Why it's set up this way.** Submitted code isn't sandboxed (`readme.html`
-§10). It runs as the server's user. To limit the damage, the server:
+**Why it's set up this way.** Since 2026-11-02 (sandboxing step 3),
+submitted code is compiled and run inside the judge's own bubblewrap
+sandbox (`readme.html` §6; compilers since step 4), but there are no
+seccomp or cgroup limits yet (steps 6–7). As an outer layer, the server:
 
 - runs as its own unprivileged user, `maxrecall`;
 - is reachable only through your SSH login;
@@ -22,16 +24,27 @@ It listens on two ports, both on `127.0.0.1`:
   network except the VPS itself, a read-only file system apart from three
   folders, and a private `/tmp`.
 
-That's containment, not a real sandbox. A submission can still read
-world-readable files on the VPS, use CPU and memory, and connect to
-`127.0.0.1:3001`, so a submission could act as you. With you as the only
-user, that's no worse than you running it yourself; it would matter with
-other users.
+Before step 3, that containment was all there was. A submission could
+read world-readable files on the VPS and connect to `127.0.0.1:3001`, and
+so act as you. It could also read the service's starting environment from
+`/proc/<pid>/environ`, including `MAXRECALL_PASSWORD` if `test.env` sets it.
+Inside the sandbox, a running submission sees none of that: it has its own
+network (loopback only), its own process list and its own file view. It
+still uses CPU and memory within its limits. The compilers run in the same
+kind of sandbox.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
 your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.
 
 ## 1. Packages [VPS]
+
+**Shortcut (since 2026-11-02):** once `git` and `make` are installed and the
+repo is cloned, `make toolchain-deps` in the checkout does §1 and §2 for
+you: the packages below, and Node 22.23.4 into `/usr/local` with both
+checksum checks. It does this only for what's missing, and runs as root, or
+asks for `sudo`. It stops with an explanation if an older `node` is still
+first on your `PATH` (`scripts/toolchain-deps.sh`). The manual steps stay
+here, explained, because they're what the script does.
 
 ```bash
 sudo apt update
@@ -39,18 +52,124 @@ sudo apt update
 Refreshes the list of available packages.
 
 ```bash
-sudo apt install -y git make g++ default-jdk-headless python3 curl xz-utils
+sudo apt install -y git make g++ default-jdk-headless python3 ldc curl xz-utils
 ```
 - `-y` answers "yes" to the confirmation prompt.
 - `g++` 13.2 compiles C++ submissions.
+- `ldc` (LDC 1.36.0, the LLVM-based D compiler, in Ubuntu's universe
+  section) compiles D submissions with `ldc2`. Added 2026-11-02.
 - `default-jdk-headless` (OpenJDK 21) compiles and runs Java. "Headless"
   means no desktop GUI libraries.
 - `xz-utils` unpacks the Node download.
 
 These versions were checked against Ubuntu 24.04's repositories on 2026-10-29.
 
-Not covered: **D**. Ubuntu has no `dmd` package, and the judge runs `dmd`
-specifically, so D submissions will fail here, as in the cloud sandbox.
+**D** is covered by `ldc` above: since 2026-11-02 the judge uses `ldc2` when
+it's installed, and `dmd` otherwise. Ubuntu has no `dmd` package; the cloud
+sessions get DMD from d-apt (`docs/d-compiler.md`).
+
+## 1a. The judge's sandbox: bubblewrap and AppArmor [VPS]
+
+Added 2026-11-02 (sandboxing step 2, `docs/plans/sandboxing.md`). The
+server checks at startup that bubblewrap works. If it doesn't, the server
+**refuses Run and Submit** (HTTP 503) until it's fixed. Submissions don't run
+inside bubblewrap yet; that's step 3. **I couldn't test this section**: the
+cloud sessions have no AppArmor. The server's startup log (step 5 below)
+says whether it worked.
+
+```bash
+sudo apt install -y bubblewrap apparmor-profiles
+```
+- `bubblewrap` provides `bwrap`, the sandbox. It's in Ubuntu's main
+  archive, which gets security updates from Canonical.
+- `apparmor-profiles` holds extra AppArmor profiles that aren't loaded by
+  default, including the one below.
+
+**Why AppArmor is involved.** Ubuntu 24.04 sets
+`kernel.apparmor_restrict_unprivileged_userns = 1`
+(`/usr/lib/sysctl.d/10-apparmor.conf`, in the `apparmor` package). An
+unprivileged program may then create a *user namespace* (bubblewrap's
+starting point) only if an AppArmor profile allows it. Without one, the
+kernel lets it create the namespace but takes away the capabilities inside
+it that bubblewrap needs. Ubuntu's background page:
+[Understanding AppArmor user namespace restriction](https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007).
+Ubuntu ships a profile for bubblewrap, but doesn't load it:
+
+```bash
+sudo cp /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
+sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+```
+- `cp` into `/etc/apparmor.d/` makes AppArmor load it at every boot.
+- `apparmor_parser -r` loads it into the kernel now. `-r` replaces it if
+  it's already loaded. See
+  [apparmor_parser(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/apparmor_parser.8.html).
+
+What it does: it allows `/usr/bin/bwrap` to create user namespaces.
+Everything bubblewrap then starts runs under the profile's `unpriv_bwrap`
+part, which denies all capabilities. That's an extra layer on top of the
+judge's own `--cap-drop ALL`. It applies to anyone running `bwrap` on the
+VPS, which here is only you and the `maxrecall` user.
+
+Check it:
+```bash
+sysctl kernel.apparmor_restrict_unprivileged_userns
+```
+`sysctl NAME` prints a kernel setting. It should print `= 1`. If it prints
+`= 0`, the restriction is off and bubblewrap needs no profile.
+
+```bash
+sudo aa-status | grep -E 'bwrap'
+```
+`aa-status` lists loaded AppArmor profiles. It should list `bwrap` and
+`unpriv_bwrap`. See [aa-status(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/aa-status.8.html).
+
+```bash
+sudo -u maxrecall bwrap --unshare-all --unshare-user --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 -- true && echo sandbox ok
+```
+Tries a minimal sandbox as the service's user. It should print
+`sandbox ok`.
+- `--unshare-all --unshare-user` asks for new namespaces, including a user
+  namespace.
+- `--ro-bind /usr /usr` and the `--symlink`s give it the programs.
+- `true` is a command that does nothing and succeeds.
+
+If AppArmor is still in the way, the error is (seen on this VPS on
+2026-11-02, before the profile was loaded):
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. bubblewrap
+creates the namespaces, but the capability it needs to set up the sandbox's
+loopback network has been taken away. (Before that run I had guessed a
+different message, `setting up uid map` or `Failed to make / slave`; this is
+the real one.) From the checkout, `make sandbox-deps` recognises this and
+loads the profile itself, asking for `sudo` if you're not root.
+
+To see AppArmor's side of it:
+```bash
+journalctl -k -b | grep -iE 'apparmor.*(bwrap|unprivileged_userns)' | tail -5
+```
+- `-k` shows kernel messages only, and `-b` only this boot. See
+  [journalctl(1)](https://www.freedesktop.org/software/systemd/man/latest/journalctl.html).
+- `grep -iE` matches, ignoring case, lines about AppArmor and bwrap.
+- `tail -5` keeps the last five.
+
+On this VPS on 2026-11-02 it showed `apparmor="AUDIT"
+operation="userns_create" … comm="bwrap" … target="unprivileged_userns"`,
+where bwrap was moved into the restricted profile. Then came
+`apparmor="DENIED" operation="capable" … profile="unprivileged_userns"
+comm="bwrap"` for `capname="net_admin"` (the loopback setup) and
+`capname="setpcap"`.
+
+**Toolchains must be system-wide.** Sandboxes run as the service's user
+(`maxrecall`), or as `nobody` if you run the server or `make` as root. They
+can only use compilers and interpreters that user can read. One installed
+in a home folder, such as `/root/.local/share/...`, can't be used. Then the
+`Sandbox:` line says `toolchains the sandbox can't reach: … in <folder>`.
+Install them as §1 and §2 do (`apt`, and Node in `/usr/local`), and take
+the private copy off `PATH`. Seen on this VPS on 2026-11-02 with a DMD and a
+Node 18 in `/root/.local/share`.
+
+If the profile route fails, the fallbacks (plan §4) are a profile of our
+own for the service, or turning the restriction off. **Don't** turn it off
+without deciding to: it's machine-wide.
 
 ## 2. Node 22 [VPS]
 
@@ -204,10 +323,17 @@ Should say `active (running)`.
 journalctl -u maxrecall-dsa.test.service -n 20
 ```
 Shows the service's last 20 log lines (`-u` selects the unit, `-n` sets how
-many lines). The latest start should show three lines:
+many lines). The latest start should show four lines:
 `Server listening on 127.0.0.1:3000 only, … (submissions in /srv/maxrecall/data/users)`,
-`Sign-in data in /srv/maxrecall/data/auth; registration …`, and
+`Sign-in data in /srv/maxrecall/data/auth; registration …`,
+`Sandbox: bubblewrap 0.9.0 works (self-test passed); …`, and
 `Trusted listener on 127.0.0.1:3001 only: every request there is …`.
+
+If the `Sandbox:` line says `UNAVAILABLE (…)`, Run and Submit are refused.
+The text in brackets is the reason, often bwrap's own error. Go back to §1a.
+I'm guessing the service's systemd containment (`PrivateDevices=`,
+`ProtectSystem=` and so on) won't get in bubblewrap's way, but that's
+untested, and this line is where it would show.
 
 ## 6. Check it's private and contained [VPS, then Kubuntu]
 
@@ -289,6 +415,10 @@ code.
 
 If `deploy/maxrecall-dsa.test.service` itself changed, copy it again (step 5) and
 run `sudo systemctl daemon-reload` before restarting.
+
+**Updating to a version with the sandbox check (2026-11-02 or later)** for the
+first time: do §1a before restarting, or Run and Submit will be refused.
+Check the `Sandbox:` line with `journalctl` (step 5).
 
 ## 9. Copying VPS submissions to Kubuntu (optional) [Kubuntu]
 

@@ -1,4 +1,4 @@
-.PHONY: all install build run dev clean
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -17,14 +17,29 @@ OPEN_BROWSER = ( deadline=$$(( $$(date +%s) + $(OPEN_WAIT) )); \
 
 all: build
 
+# Install the toolchains from docs/deploy-vps.md §1–§2 if missing: g++, a
+# JDK, python3, curl, xz-utils (apt) and Node 22 (nodejs.org, into
+# /usr/local). Asks for sudo only when it has something to install; stops
+# make if it can't fix things. See scripts/toolchain-deps.sh.
+toolchain-deps:
+	./scripts/toolchain-deps.sh
+
 # Install dependencies
 install: node_modules
 
-node_modules: package.json
+# toolchain-deps is order-only (after the |): it runs first, since npm needs
+# node, but doesn't make node_modules count as out of date.
+node_modules: package.json | toolchain-deps
 	npm install
 
+# Install the judge's sandbox (bubblewrap, and Ubuntu's AppArmor profile for
+# it if AppArmor is what's in the way) if missing, then check it works. Asks
+# for sudo only when it has something to install. See scripts/sandbox-deps.sh.
+sandbox-deps: toolchain-deps
+	./scripts/sandbox-deps.sh
+
 # "Build" step: just ensure dependencies are installed (static HTML/CSS/JS needs no compile)
-build: install
+build: install sandbox-deps
 
 # Run the server in the foreground (so Ctrl-C stops it) and open it in the browser
 run: build
@@ -35,6 +50,13 @@ run: build
 dev: build
 	$(OPEN_BROWSER)
 	PORT=$(PORT) npx nodemon server.js
+
+# Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
+# code and reports each probe as contained, ESCAPED, skipped (this machine
+# can't test it) or inconclusive (it didn't run as intended). Fails, with
+# make's "Error 1", unless every probe is contained or skipped.
+sandbox-test: sandbox-deps
+	node judge/sandbox-selftest.js
 
 # Remove installed dependencies
 clean:

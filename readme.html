@@ -75,9 +75,17 @@ system. <span class="src">Source: <code>THOUGHTS</code>, <code>TODO</code>.</spa
 <h2 id="run">2. Running it</h2>
 <table>
   <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>make toolchain-deps</code></td><td>Runs <code>scripts/toolchain-deps.sh</code>, which every target that needs Node runs first (<code>install</code>, <code>run</code>, <code>dev</code>, <code>sandbox-test</code>). It installs what <code>docs/deploy-vps.md</code> §1–§2 list, plus LDC for D, if it's missing:
+  <ul>
+    <li><code>g++</code>, <code>default-jdk-headless</code>, <code>python3</code>, <code>ldc</code>, <code>curl</code> and <code>xz-utils</code> from apt;</li>
+    <li>Node 22.23.4 from nodejs.org into <code>/usr/local</code>, checked against nodejs.org's <code>SHASUMS256.txt</code> <em>and</em> the hash recorded in the script, but only if the <code>node</code> your <code>PATH</code> finds first is older than 22 (Node 20 reached end-of-life in April 2026).</li>
+  </ul>
+  It uses <code>sudo</code> only when it has something to install. Unlike <code>sandbox-deps</code>, it <strong>stops make</strong> if it can't fix things, because the server can't start without these. One case it can't fix: an older <code>node</code> still first on your <code>PATH</code>. It says which one and where to look.</td></tr>
   <tr><td><code>make install</code></td><td>Runs <code>npm install</code> if <code>node_modules</code> is older than <code>package.json</code>.</td></tr>
+  <tr><td><code>make sandbox-deps</code></td><td>Runs <code>scripts/sandbox-deps.sh</code>, which <code>make run</code> and <code>make dev</code> also run first. It checks that the judge's sandbox works (about 0.1 s, no root). If it doesn't, it fixes what it can, using <code>sudo</code>, which may ask for your password, and saying what it runs. It installs <code>bubblewrap</code> if missing. If Ubuntu's AppArmor restriction on user namespaces is what stops bubblewrap, it installs <code>apparmor-profiles</code> and loads Ubuntu's <code>bwrap-userns-restrict</code> profile. That's a machine-wide change, made only in that case: afterwards any user's <code>bwrap</code> may create user namespaces. If it can't fix things, it warns and lets the server start, and the server then refuses to judge. Run as root, it checks as <code>nobody</code>, like the server does when it's root, because root may create user namespaces even where AppArmor blocks everyone else. Until 2026-11-02 its second check ran as root, so on the VPS it blamed something other than AppArmor and didn't load the profile.</td></tr>
   <tr><td><code>make run</code></td><td>Starts the server in the foreground (<code>PORT=3000 node server.js</code>; Ctrl-C stops it). In the background it polls the server with <code>curl</code> every 0.2&nbsp;s until it answers, then opens it with <code>xdg-open</code> (your default browser). If the server hasn't answered within about <code>OPEN_WAIT</code> seconds (±1&nbsp;s) (default 30; e.g. <code>make run OPEN_WAIT=60</code>), it prints a message and gives up on the browser. Override the port with <code>make run PORT=8080</code>. Needs <code>curl</code> and <code>xdg-open</code> (package <code>xdg-utils</code>); the cloud environment has no <code>xdg-open</code>, so there the browser step fails and the server still runs.</td></tr>
   <tr><td><code>make dev</code></td><td>Starts the server under <code>nodemon</code>, which restarts it whenever a <code>.js</code>, <code>.mjs</code>, <code>.cjs</code> or <code>.json</code> file changes, except under <code>users/</code> (set in <code>package.json</code> → <code>nodemonConfig</code>). Opens the browser once at startup, the same way as <code>make run</code>; restarts don't open it again.</td></tr>
+  <tr><td><code>make sandbox-test</code></td><td>Runs <code>judge/sandbox-selftest.js</code>, the judge's escape test (about 30 s). Each probe is a hostile submission, and the result says whether it was <em>contained</em> or <em>ESCAPED</em>. A probe can also say <em>skipped</em>, when this machine can't test it (G6d on 1–2 cores, where the 5&nbsp;s clock always comes before the 10&nbsp;s CPU limit), or <em>inconclusive</em>, when it didn't run as intended, for example because the judge failed. The make target passes only if every probe is contained or skipped. Since sandboxing step 4, all 13 are contained here and on Kubuntu; on the 2-core VPS, G6d is skipped. It needs no server and no <code>npm install</code>, only the toolchains.</td></tr>
   <tr><td><code>make clean</code></td><td>Deletes <code>node_modules</code>.</td></tr>
 </table>
 <p>Both open <code>http://localhost:3000/</code> for you. There is no compile step for the
@@ -100,6 +108,12 @@ data out of the repo's gitignored <code>auth/</code>.</p>
 variable says otherwise. With <code>HOST=127.0.0.1</code> it accepts connections only from the same
 machine, which is how it runs on the VPS behind an SSH tunnel (see Environments). The first line it prints
 says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the repo's <code>users/</code> (see Where data lives). <span class="src">Source: <code>server.js</code>, <code>users.js</code>.</span></p>
+
+<p>At startup the server checks that the judge's sandbox, bubblewrap, works, and prints a <code>Sandbox:</code>
+line saying so. If it doesn't, Run and Submit are refused with HTTP 503 and the reason, unless
+<code>MAXRECALL_UNSANDBOXED=1</code> is set, which allows judging without a sandbox (for setting up your own machine,
+never a shared server). <code>make run</code> and <code>make dev</code> install what's missing first (<code>make sandbox-deps</code>, above).
+<span class="src">Source: <code>judge/sandbox.js</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
 <code>PORT ?= 3000</code> default — see the
 <a href="https://www.gnu.org/software/make/manual/html_node/Overriding.html">GNU Make manual, “Overriding Variables”</a>.</p>
@@ -115,6 +129,8 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>users/</code></td><td>Saved submissions, one JSON file per Submit (see Where data lives). <strong>Gitignored</strong>: the owner manages it by hand.</td></tr>
   <tr><td><code>paths.js</code></td><td><code>resolveInside(baseDir, ...parts)</code>: builds a path and returns <code>null</code> if it would land outside <code>baseDir</code> (path traversal). Used by <code>loadProblem</code>; <code>users/</code> code will use it too.</td></tr>
   <tr><td><code>judge/runner.js</code></td><td>Builds a harness around submitted code, runs it in a child process, compares results.</td></tr>
+  <tr><td><code>judge/sandbox.js</code></td><td>The judge's sandbox: builds bubblewrap command lines (<code>sandboxedCommand</code>), self-tests bubblewrap once at startup, and refuses judging if that fails (<code>assertJudgingAllowed</code>), unless <code>MAXRECALL_UNSANDBOXED=1</code>. Also holds <code>SUBMISSION_ENV</code>.</td></tr>
+  <tr><td><code>judge/sandbox-selftest.js</code></td><td>Escape test for the judge (<code>make sandbox-test</code>). It plants canaries (an environment variable, an owner-only file and C++ header, a listener on <code>127.0.0.1</code>) and submits code through <code>runSubmission</code> that tries to reach them, leave processes behind, fork 300 processes, write 100&nbsp;MB, allocate 1&nbsp;GB and use the network. Probes G1–G8 match <code>docs/plans/sandboxing.md</code> §1.</td></tr>
   <tr><td><code>judge/cpp/judge_json.{hpp,cpp}</code></td><td>JSON parser/serializer linked into C++ submissions. Compiled once to <code>judge_json.o</code> (gitignored) at server start.</td></tr>
   <tr><td><code>judge/java/JudgeJson.java</code></td><td>Same role for Java. Compiled to <code>JudgeJson.class</code> (gitignored) at server start.</td></tr>
   <tr><td><code>questions/*.json</code></td><td>One file per problem. Every <code>.json</code> here is listed automatically.</td></tr>
@@ -127,9 +143,11 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
+  <tr><td><code>scripts/toolchain-deps.sh</code></td><td>Installs the toolchains from <code>docs/deploy-vps.md</code> §1–§2 if missing (<code>make toolchain-deps</code>).</td></tr>
+  <tr><td><code>scripts/sandbox-deps.sh</code></td><td>Installs and checks the judge's sandbox dependencies (<code>make sandbox-deps</code>). Used by <code>make</code> and by the cloud SessionStart hook.</td></tr>
   <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecall-dsa.test.service</code></td><td>Step-by-step guide and systemd service for running the app on the VPS (Ubuntu 24.04), reachable only through an SSH tunnel.</td></tr>
-  <tr><td><code>docs/d-compiler.md</code></td><td>How to install DMD in a cloud session, from d-apt (the D community's APT repository on SourceForge), with the key fingerprint to check.</td></tr>
-  <tr><td><code>.claude/settings.json</code>, <code>.claude/hooks/session-start.sh</code></td><td>Claude Code project settings: a SessionStart hook that installs DMD from d-apt in cloud sessions only (see <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>).</td></tr>
+  <tr><td><code>docs/d-compiler.md</code></td><td>How to install DMD from d-apt (the D community's APT repository on SourceForge), with the key fingerprint to check. Not used by the hook since 2026-11-02; DMD is now only the judge's fallback when <code>ldc2</code> isn't installed.</td></tr>
+  <tr><td><code>.claude/settings.json</code>, <code>.claude/hooks/session-start.sh</code></td><td>Claude Code project settings: a SessionStart hook that, in cloud sessions only, runs <code>scripts/toolchain-deps.sh</code> and <code>scripts/sandbox-deps.sh</code>, the same scripts <code>make</code> runs. That installs LDC, bubblewrap and anything else missing from Ubuntu's archive.</td></tr>
   <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
   <tr><td><code>readme.html</code></td><td>This file.</td></tr>
 </table>
@@ -191,13 +209,43 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
   <tr><td>Python</td><td><code>python3</code></td><td>256 MB</td><td><code>RLIMIT_AS</code> via <code>resource.setrlimit</code> or <code>ulimit -v</code></td></tr>
   <tr><td>C++</td><td><code>g++ -std=c++17 -O2</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
   <tr><td>Java</td><td><code>javac</code> / <code>java</code></td><td>256 MB</td><td><code>-Xmx</code> (heap only)</td></tr>
-  <tr><td>D</td><td><code>dmd</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
+  <tr><td>D</td><td><code>ldc2</code> (LDC) if installed, else <code>dmd</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
 </table>
-<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s.
+<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s. In program mode, where each test case is its own run,
+all of a submission's runs together may take at most 20&nbsp;s (<code>PROGRAM_TOTAL_RUN_MS</code>, not counting compiling). A case is
+cut short if less than 5&nbsp;s is left, and cases still waiting when the time is used up aren't run; both count as Time Limit Exceeded.
+Compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code> as their environment, not a copy of the server's
+(<code>SUBMISSION_ENV</code>, in <code>judge/sandbox.js</code>). <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
+<code>runSubmission</code> refuses to judge if the sandbox failed its startup check (see Running it).</p>
+<p><strong>Compiling and running are sandboxed</strong> with bubblewrap (since 2026-11-02, sandboxing steps 3 and 4).
+Each submission gets its own folder (<code>/tmp/judge-XXXXXX</code>, owner-only, deleted afterwards). The compiler sees it as <code>/work</code>,
+writable, so it can write the binary or classes. The run sees it <strong>read-only</strong> as <code>/work</code>: <code>main.js</code>, <code>main.py</code>, <code>Main.java</code> and its classes, or the
+binary <code>main</code>. The judge's helpers are read-only at <code>/judge/java</code> and <code>/judge/cpp/judge_json.o</code>. They're copies, made at startup in a
+<code>/tmp/judge-helpers-XXXXXX</code> folder that's removed on exit, not binds from the checkout, so the checkout can live where the sandbox's
+user can't go, such as <code>/root</code>.
+Compilers get a memory cap too: 1&nbsp;GB of address space for <code>g++</code> (with its <code>cc1plus</code>, <code>as</code> and <code>ld</code>) and the D compiler,
+and a 256&nbsp;MB heap for <code>javac</code> (<code>-J-Xmx256m</code>, because a JVM reserves more address space than it uses).
+A compile that runs out reports “virtual memory exhausted” as a Compile Error. So error messages show paths such as
+<code>/work/main.py</code>. Inside the sandbox there's:</p>
+<ul>
+  <li>a read-only <code>/usr</code> and the few <code>/etc</code> files the toolchains need;</li>
+  <li>a private 64&nbsp;MB <code>/tmp</code>;</li>
+  <li>no network but its own loopback;</li>
+  <li>its own process list, an empty environment apart from <code>PATH</code> and <code>LANG</code>, and no capabilities.</li>
+</ul>
+<p>Limits are set with <code>prlimit</code> <em>inside</em> the sandbox (<code>RUN_LIMITS</code>): 128 processes and threads, 16&nbsp;MB per
+file, no core dumps, and 10&nbsp;s of CPU time per process (all its threads together; <code>SIGKILL</code> at 11&nbsp;s). The CPU limit is a
+backstop to the 5&nbsp;s wall-clock timeout, which on its own allows 5&nbsp;s × cores of CPU. A run it stops is reported as
+<em>Time Limit Exceeded</em> with “CPU time limit exceeded”. The judge recognises it by bwrap's exit code 152, which is 128 + <code>SIGXCPU</code>. They're inside because the process count is per user namespace there; set outside, it would count every
+process the server's user owns. Killing a run on timeout kills everything in its sandbox. When the server runs as root (the cloud),
+sandboxes run as <code>nobody</code>, because root ignores the process limit.
+<code>make sandbox-test</code> checks all of this.</p>
+<p>
 Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
 separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.
-<span class="src">Source: <code>judge/runner.js</code> (constants at the top,
-<code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>).</span></p>
+<span class="src">Source: <code>judge/runner.js</code> (constants at the top, <code>runCommand</code>,
+<code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>) and <code>judge/sandbox.js</code>
+(<code>BASE_ARGS</code>, <code>RUN_LIMITS</code>, <code>sandboxedRun</code>).</span></p>
 
 <h2 id="frontend">7. Front end</h2>
 <ul>
@@ -262,11 +310,13 @@ switching, pull after.</p>
   <tr><th></th><th>Claude Code cloud session</th><th>Kubuntu 26.04 / WebStorm</th></tr>
   <tr><td>Lifetime</td><td>Temporary container; unpushed work is lost when it's reclaimed</td><td>Persistent</td></tr>
   <tr><td>Branch</td><td>A <code>claude/…</code> branch per session</td><td>Whatever you check out</td></tr>
-  <tr><td>Node</td><td>22.22.0</td><td><em>fill in</em></td></tr>
+  <tr><td>Node</td><td>22.23.4 (was 22.22.0 on 2026-10-28)</td><td><em>fill in</em></td></tr>
   <tr><td>g++</td><td>13.3.0</td><td><em>fill in</em></td></tr>
   <tr><td>Python</td><td>3.13.17</td><td><em>fill in</em></td></tr>
   <tr><td>Java</td><td>installed (version not recorded)</td><td><em>fill in</em></td></tr>
-  <tr><td>D (<code>dmd</code>)</td><td><strong>not installed</strong> to begin with; the SessionStart hook installs it from d-apt at the start of each session (2.113.0 on 2026-11-02). See <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>.</td><td><em>fill in</em></td></tr>
+  <tr><td>bubblewrap (<code>bwrap</code>)</td><td>not installed to begin with; the SessionStart hook installs it from Ubuntu's archive (0.9.0 on 2026-11-02). It works there without AppArmor changes, because the cloud has no AppArmor.</td><td>0.11.1. On 2026-11-02 the self-test passed and <code>make sandbox-test</code> reported 13 of 13 contained. Whether AppArmor needed the profile isn't recorded yet.</td></tr>
+  <tr><td>D (<code>ldc2</code>, preferred)</td><td><strong>not installed</strong> to begin with; the SessionStart hook installs it from Ubuntu's archive at the start of each session, through <code>scripts/toolchain-deps.sh</code> (1.36.0 on 2026-11-02, about 6&nbsp;s in a bare container).</td><td><em>fill in</em> (<code>ldc2 --version</code>)</td></tr>
+  <tr><td>D (<code>dmd</code>, fallback)</td><td><strong>not installed</strong>. Until 2026-11-02 the hook installed it from d-apt (2.113.0); see <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a> to install it by hand.</td><td><em>fill in</em></td></tr>
 </table>
 <p>To fill in the Kubuntu column, run each of these and note the version:</p>
 <pre><code>node --version; g++ --version | head -1; python3 --version; java -version; dmd --version | head -1</code></pre>
@@ -283,31 +333,54 @@ sign-in. You reach the trusted port with <code>ssh -N -L 3000:127.0.0.1:3001 roo
 <code>MAXRECALL_PASSWORD</code>, needed only to register on port 3000. It runs as the
 <code>maxrecall</code> user under systemd containment: no network except loopback, and a read-only file
 system apart from its data and the judge's helper folders. Its submissions are copied to Kubuntu with
-<code>rsync</code> and committed there. That's containment, not a sandbox (see Known gaps).</p>
+<code>rsync</code> and committed there. That containment is now an outer layer around the judge's own sandbox (see Judging).
+Since sandboxing step 2 it also needs bubblewrap and Ubuntu's <code>bwrap-userns-restrict</code> AppArmor profile
+(<code>docs/deploy-vps.md</code> §1a), or it refuses to judge. That section is untested.</p>
 
 <h2 id="gaps">10. Known gaps &amp; caveats</h2>
 <div class="note">
-<p><strong>Submitted code is not sandboxed.</strong> It runs as the same OS user as the
-server, with only time and memory limits. It can read and write files and reach the
-network. That's acceptable on your own machine, but it has to be solved (for example
-with containers or seccomp/namespaces) before this is hosted for other people.
-<span class="src">Source: <code>spawnJudged</code> in <code>judge/runner.js</code>.</span></p>
+<p><strong>Submitted code is sandboxed, but not fully hardened yet</strong> (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>).
+Since step 4, compiling and running are both inside bubblewrap (see Judging), and <code>make sandbox-test</code> reports all 13 probes contained.
+Step 4 closed three gaps: compilers reading host files (<code>#include</code>, G7); the C++ compile timeout leaving <code>cc1plus</code> running
+(G10, measured at 137&nbsp;s with a 1&nbsp;s timeout before the fix); and compilers with no memory limit (a 257-byte template source went
+from 2&nbsp;GB and growing to a Compile Error after 6.6&nbsp;s). What's still open:</p>
+<ul>
+  <li><strong>No seccomp filter</strong> (step 6).</li>
+  <li><strong>No cgroup limits</strong> (step 7). Memory is capped per language, as before, and the 64&nbsp;MB <code>/tmp</code> is kernel memory.
+  The CPU limit is per process, so a submission that forks gets 10&nbsp;s of CPU per process.</li>
+  <li><strong>The reported runtime includes compiling</strong> and sandbox start-up, because <code>runtimeMs</code> is measured from before the compile.</li>
+  <li><strong>No limit on concurrent judgings</strong> (step 8).</li>
+  <li><strong>The kernel is shared</strong> with the host, as with any namespace sandbox.</li>
+</ul>
+<p>That's fine for the owner alone, and it's the remaining work before others are let in.
+<span class="src">Source: <code>judge/runner.js</code>, <code>judge/sandbox.js</code>.</span></p>
+<p>Found while planning the fix on 2026-11-02 (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a> §1):
+submissions inherited the server's whole environment, including <code>MAXRECALL_PASSWORD</code>
+(<code>spawn</code> passes <code>process.env</code> on by default). Since sandboxing step 1 they get only
+<code>PATH</code> and <code>LANG</code>, but they can still read the server's <em>starting</em> environment from
+<code>/proc/&lt;pid&gt;/environ</code>. That includes a password the VPS gets from <code>EnvironmentFile=</code>,
+though not one read from <code>.env</code> at runtime. They could also read
+<code>questions/*.json</code>, so hidden test cases' expected answers too; and a process a
+submission forked <strong>outlived the timeout</strong>. A Python submission that forked and called
+<code>setsid()</code> kept running after the judge gave up, and the judge reported 8042 ms instead
+of 5000, because the orphan held the output pipe open. <strong>Step 3 closed all three for runs</strong>
+(probes G1, G2, G5a and G5b contained).</p>
 </div>
 <ul>
   <li><code>package-lock.json</code> is gitignored, so the cloud and Kubuntu can
   install different dependency versions.
   <a href="https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json">npm's docs</a>
   say it's meant to be committed.</li>
-  <li>There are no automated tests yet.</li>
+  <li>There are no automated tests yet, apart from the judge's escape test (<code>make sandbox-test</code>), which is a security check rather than a test of features.</li>
   <li><strong>Sign-in limits:</strong> no password reset or change (with one user, delete
   <code>auth/accounts/&lt;email&gt;.json</code> and register again); throttling is in memory, so a restart clears it;
   if a session expires while a page is open, its requests fail with "Not signed in" instead of going back to the
   login page; and behind a future HTTPS reverse proxy, Express's <code>trust proxy</code> setting will be needed for
   <code>req.secure</code>, and so the cookie's <code>Secure</code> flag, to work.</li>
-  <li>The cloud environment has no D compiler of its own. The SessionStart hook installs DMD from d-apt on
-  SourceForge, because the official downloads on <code>dlang.org</code> are blocked there by the network policy.
-  If SourceForge is down or d-apt's key changes, the hook fails (the session still starts) and D submissions
-  fail in that session (see <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>).</li>
+  <li>The cloud environment has no D compiler of its own. The SessionStart hook installs LDC from Ubuntu's archive
+  (<code>scripts/toolchain-deps.sh</code>). If that fails, the hook reports an error (the session still starts) and D
+  submissions fail in that session. Until 2026-11-02 it installed DMD from d-apt on SourceForge instead, since
+  <code>dlang.org</code>'s downloads are blocked by the cloud's network policy.</li>
   <li><strong>The problem page needs internet access.</strong> <code>problem.html</code> loads
   CodeMirror 5.65.16 and KaTeX 0.16.9 from <code>cdnjs.cloudflare.com</code>. Without them
   (offline, or where the CDN is blocked, as in the cloud sandbox), <code>CodeMirror</code> is
@@ -322,6 +395,24 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>VPS, fifth run: passes</strong> (owner, as root in <code>/root/maxrecall-dsa.net</code>, system-only <code>PATH</code>): toolchains present (Node 22.23.4 in <code>/usr/local</code>, JDK 21, LDC 1.36.0), the sandbox works, and <code>make sandbox-test</code> gave <strong>12 contained, 1 skipped</strong> (G6d, 2 cores) and exited 0. With Kubuntu (13 contained) and the cloud (13 contained), the judge's sandbox now works on all three machines. Left for step 5: the systemd service, whose checkout is on <code>master</code>.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Changed</strong> (owner's choice): the cloud SessionStart hook installs LDC from Ubuntu's archive instead of DMD from d-apt. The hook now just runs <code>scripts/toolchain-deps.sh</code> and <code>scripts/sandbox-deps.sh</code>, the same as <code>make</code>, so all three machines get their tools the same way. This replaces the 2026-10-30 decision to use d-apt in the cloud, and drops the SourceForge keyring, the fingerprint check and the extra apt source. Tested as a bare container would see it (no LDC, DMD or d-apt, empty package lists): installed in 6.3&nbsp;s, then 0.09&nbsp;s on a second run, and nothing at all outside the cloud. D answers Accepted with <code>ldc2</code>; escape test 13 of 13.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>VPS, fourth run</strong> (owner, as root in <code>/root/maxrecall-dsa.net</code>, system-only <code>PATH</code>): toolchains and sandbox fine, and <strong>12 of 13 probes contained</strong>. G6d was <em>inconclusive</em>: on 2 cores the 5&nbsp;s wall-clock limit allows at most 10&nbsp;s of CPU time, the CPU limit itself, so the clock always stops it first. <strong>Changed:</strong> the escape test has a <em>skipped</em> verdict for “this machine can't test it” (G6d in that case, and G10 when GCC ends the compile itself before the limit). <code>make sandbox-test</code> passes on contained or skipped, and still fails on ESCAPED or inconclusive. Checked pinned to one core (<code>taskset -c 0</code>): G6d skipped, 12 contained, exit 0.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>VPS, third run</strong> (owner, as root in <code>/root/maxrecall-dsa.net</code>, with <code>PATH</code> cut down to the system folders). <code>toolchain-deps</code> installed JDK 21, LDC 1.36.0 and Node 22.23.4, and the sandbox's startup self-test passed. But every run failed with <code>bwrap: Can't find source path /root/maxrecall-dsa.net/judge/java: Permission denied</code>: the helpers were bound from the checkout, which <code>nobody</code> can't enter. <strong>Fixed:</strong> the helpers are now copied into a <code>/tmp/judge-helpers-…</code> folder at startup and bound from there, and the startup self-test binds that folder too, so an unreachable one fails at startup. <strong>Also fixed, in the escape test:</strong> G5a, G5b and G7 had said <em>contained</em> although nothing ran (no orphan was found because none was started, and bwrap's “Permission denied” was taken for the compiler's). They now need proof the submission ran, and report <em>inconclusive</em> otherwise. Reproduced with a copy of the checkout under this container's <code>/root</code>: the old judge gives 13 inconclusive with the new test, the new judge 13 of 13 contained.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong> (owner's request): LDC for D. <code>toolchain-deps</code> apt-installs <code>ldc</code> (Ubuntu's archive, universe: 1.36.0 on 24.04), and the judge uses <code>ldc2</code> when it's installed, otherwise <code>dmd</code> (<code>D_COMPILER</code>, chosen at startup). The sandbox exposes <code>/etc/ldc2.conf</code>. Both take <code>-of=</code>/<code>-od=</code> and share the DMD frontend, so D starter code gave the same verdicts and error text with <code>ldc2</code> as with <code>dmd</code>. Correct D answers were Accepted (sandboxed, as root and as <code>nobody</code>), the harness compiled within the 1&nbsp;GB compiler cap, and the escape test stayed 13 of 13. The cloud hook still installs DMD from d-apt; whether to drop that is the owner's call.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong> (owner's request): the toolchains from <code>docs/deploy-vps.md</code> §1–§2 are installed by <code>make</code> (<code>scripts/toolchain-deps.sh</code>, <code>make toolchain-deps</code>), in the same check-first, <code>sudo</code>-only-when-needed way as <code>sandbox-deps</code>, but it stops make when it can't fix things. Tested in the cloud: real, nothing to do (18&nbsp;ms). Simulating the VPS as an ordinary user, with fake <code>sudo</code> and <code>apt-get</code> and a real download from nodejs.org into a test folder: it installed the JDK, downloaded and verified Node 22.23.4 twice and unpacked it, then stopped with the name of the Node&nbsp;18 still first on <code>PATH</code>. With that off <code>PATH</code> it passed. With a wrong pinned hash it refused and unpacked nothing.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>VPS, second run</strong> (owner): the fixed <code>scripts/sandbox-deps.sh</code> recognised AppArmor, installed <code>apparmor-profiles</code> (apt also upgraded <code>apparmor</code> and <code>libapparmor1</code> to match), and loaded <code>bwrap-userns-restrict</code>. The <code>net_admin</code> failure was gone. The next failure: <code>bwrap: Can't find source path /root/.local/share/dmd2/linux: Permission denied</code>. A DMD (and a Node 18) installed under <code>/root</code> were bound into the sandbox, which runs as <code>nobody</code> when the server is root, and <code>nobody</code> can't enter <code>/root</code>. <strong>Changed:</strong> <code>judge/sandbox.js</code> now checks that the sandbox's user can reach each toolchain folder (<code>sandboxUserCanReach</code>), and if not, the self-test fails with a reason that names it and says to install it system-wide. <code>javac</code> was still missing, and the steps to install the JDK and Node 22 hadn't been done yet.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>VPS, first run</strong> (sandboxing step 5, VPS part; owner ran <code>make sandbox-test</code> as root in <code>/root/maxrecall-dsa.net</code>). The script installed bubblewrap 0.9.0, then the self-test failed with <code>bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted</code>, which is AppArmor's restriction: the kernel log shows <code>apparmor="DENIED" … profile="unprivileged_userns" comm="bwrap"</code> for <code>net_admin</code> and <code>setpcap</code>. <strong>Bug, fixed:</strong> the script's “is it AppArmor?” check ran bubblewrap as root, which the restriction doesn't apply to, so it never loaded the profile. It now runs that check as <code>nobody</code> when it's root. Reproduced with stand-ins: the old script gives the VPS's exact line, and the fixed one loads the profile. The escape test then crashed because <code>javac</code> wasn't found, and <code>node</code> there was 18.17.0, which can't run the server (<code>process.loadEnvFile</code> needs Node 20.12 or later). Both are setup issues on the VPS, still to sort out.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Checked on Kubuntu 26.04</strong> (sandboxing step 5, Kubuntu part; owner's run): bubblewrap 0.11.1, the startup self-test passed, and <code>make sandbox-test</code> reported 13 of 13 contained. G6d was stopped after 1.0&nbsp;s (2.6&nbsp;s in the cloud), so about 10 cores were busy. Not yet known: whether <code>scripts/sandbox-deps.sh</code> installed anything or loaded the AppArmor profile (its notes go to stderr, which wasn't in the saved output), and whether Java fits within the 128-thread limit on that many cores.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong>: a 20&nbsp;s total for all of a program-mode submission's runs (<code>PROGRAM_TOTAL_RUN_MS</code>); it was 5&nbsp;s per test case with no total. Checked with ten cases that each sleep 3&nbsp;s: 6 passed, the 7th was cut off at 20&nbsp;s, and the last 3 weren't run. The whole thing took 20.0&nbsp;s instead of 50&nbsp;s. Only Hello World uses program mode so far, with 1 case.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 4): <code>g++</code>, <code>javac</code> and <code>dmd</code> run inside bubblewrap with the run limits. The work folder is writable at <code>/work</code> only while compiling, and the helpers are read-only. Compilers also get memory caps: 1&nbsp;GB of address space for <code>g++</code> and <code>dmd</code>, and a 256&nbsp;MB heap for <code>javac</code>. Real harness compiles fit in 512&nbsp;MB (measured). The three compile functions became one (<code>compileCommand</code>, <code>compileSubmission</code>, <code>sandboxedArgs</code>). When the server is root, the work folder is handed to <code>nobody</code> so the compiler can write to it. Escape test: 13 of 13 contained, as root and as <code>nobody</code>. Correct answers are Accepted in all five languages, sandboxed and with the override. Starter-code verdicts are unchanged in all 65 runs, and compile errors now show <code>/work/…</code> paths.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong> (owner asked how time is limited): a CPU-time limit per run process, 10&nbsp;s soft and 11&nbsp;s hard, reported as <em>Time Limit Exceeded</em>. There are two new escape-test probes. G6d (one process busy on every core) is contained: stopped after 2.6&nbsp;s of wall-clock time on 4 cores, and without the limit it ran the full 5&nbsp;s. G10 (a compile longer than the limit) is ESCAPED until step 4. Found while answering: the C++ compile timeout leaves <code>cc1plus</code> running, and compilers have no memory limit (see Known gaps).</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 3): every run, in all five languages and both judge modes, runs inside bubblewrap. Its folder is read-only at <code>/work</code>, and <code>prlimit</code> sets 128 processes, 16&nbsp;MB per file and no core dumps <em>inside</em> the sandbox. Measured: set outside, with 150 of the user's processes already running, bwrap couldn't even start. When the server is root, sandboxes run as <code>nobody</code>: root ignored a 64-process limit. Escape test: 10 of 11 contained, both as root and as <code>nobody</code>; G7 (compile time) is left for step 4. Correct Two Sum and Hello World answers are Accepted in every language, and starter-code verdicts are unchanged in all 65 runs.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner): <code>make run</code> and <code>make dev</code> install the sandbox's dependencies themselves (option c, over an explicit-only target), via <code>scripts/sandbox-deps.sh</code>. The cloud hook uses the same script. It only touches AppArmor if a minimal bubblewrap fails <em>and</em> the restriction is on. In the cloud, as root, it installed bubblewrap when missing and did nothing when present. Its AppArmor branch was checked only with stand-in commands (fake <code>sudo</code>, <code>apt-get</code>, <code>apparmor_parser</code>, <code>bwrap</code>), because the cloud has no AppArmor.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 2): <code>judge/sandbox.js</code> builds the bubblewrap command and self-tests it at startup. It checks that the sandbox can't see the repo, has only loopback networking, that bwrap's process 1 has only <code>PATH</code> and <code>LANG</code>, and that every installed toolchain is visible inside. If any check fails, Run and Submit get HTTP 503, unless <code>MAXRECALL_UNSANDBOXED=1</code>. The cloud hook installs bubblewrap. <strong>Moved from step 5:</strong> the VPS's AppArmor setup (<code>docs/deploy-vps.md</code> §1a), because the refusal would otherwise stop the VPS judging. It's untested; the VPS's startup log will show whether it works.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 1): compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code>. Every question's starter code gets the same verdict as before in all five languages. Java compile errors in the cloud no longer start with a <code>Picked up JAVA_TOOL_OPTIONS</code> line, and Java now prints UTF-8 there (<code>café</code> was <code>caf?</code>). The escape test's G1 canary now sits in its starting environment, like a VPS password, because <code>/proc/&lt;pid&gt;/environ</code> shows only that.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner, sandboxing D1–D6, all as recommended): bubblewrap; refuse to judge if the sandbox is unavailable, unless <code>MAXRECALL_UNSANDBOXED=1</code>; on the VPS, Ubuntu's <code>bwrap-userns-restrict</code> AppArmor profile; a seccomp denylist built with libseccomp; cgroup v2 limits on the VPS as step 7; all sandboxes share the server's uid for now. <strong>Done:</strong> step 0, the escape test (<code>make sandbox-test</code>). On the cloud on 2026-11-02 it reported 10 of 11 probes ESCAPED (all but the memory cap). A throwaway trial routing Python runs through bubblewrap contained 9 of 11. It also showed that <code>--clearenv</code> isn't enough: bubblewrap's own PID 1 keeps the environment it was started with, and a submission can read it from <code>/proc/1/environ</code>, so the judge must also start bubblewrap with an empty environment.</td></tr>
+  <tr><td>2026-11-02</td><td><strong>In planning:</strong> sandboxing submitted code (compile and run). Options compared: bubblewrap, nsjail, firejail, hand-rolled namespaces and seccomp, systemd-run, containers, isolate, gVisor. Recommended: bubblewrap plus rlimits, then seccomp and (on the VPS) cgroup v2. On Ubuntu 24.04, bubblewrap needs an AppArmor allowance for user namespaces. Six decisions are waiting for the owner. Plan: <a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>.</td></tr>
   <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>
   <tr><td>2026-10-28</td><td><strong>In planning:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. The four open questions were decided on 2026-10-29 (below). Plan, with decisions still needed on layout, record contents, identity and committing: <a href="docs/plans/multi-user-step-1.md"><code>docs/plans/multi-user-step-1.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> each user's directory is named by email address, e.g. <code>users/daniel.pflager@gmail.com/</code>. There's one user for now. Before anyone else can sign up, the address must be lower-cased and checked against a strict pattern: <a href="https://www.rfc-editor.org/rfc/rfc5322#section-3.2.3">RFC&nbsp;5322 §3.2.3</a> allows <code>/</code> in the part before the <code>@</code>, so an unchecked address could reach outside <code>users/</code> (path traversal).</td></tr>
