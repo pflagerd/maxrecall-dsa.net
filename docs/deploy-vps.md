@@ -15,8 +15,10 @@ It listens on two ports, both on `127.0.0.1`:
 
 **Why it's set up this way.** Since 2026-11-02 (sandboxing step 3),
 submitted code is compiled and run inside the judge's own bubblewrap
-sandbox (`readme.html` §6; compilers since step 4), but there are no
-seccomp or cgroup limits yet (steps 6–7). As an outer layer, the server:
+sandbox (`readme.html` §6; compilers since step 4), under a seccomp filter
+(step 6), with cgroup limits per submission in this service (step 7,
+`Delegate=yes` in the unit, which therefore leaves out
+`ProtectControlGroups=`). As an outer layer, the server:
 
 - runs as its own unprivileged user, `maxrecall`;
 - is reachable only through your SSH login;

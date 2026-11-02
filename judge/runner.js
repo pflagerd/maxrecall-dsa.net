@@ -2,6 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const cgroups = require('./cgroups');
 const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, spawnSandboxed, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
@@ -475,7 +476,9 @@ function compileCommand(language, paths) {
 // works, with workDir at /work (writable only for compiling), the helpers
 // read-only, and RUN_LIMITS; otherwise the command itself, started in
 // workDir. Killing the result kills bwrap, and with it everything inside.
-function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes } = {}) {
+// With a submission cgroup (cg, judge/cgroups.js), the command starts inside
+// it, so its limits cover everything the sandbox runs.
+function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes, cg = null } = {}) {
   if (!sandboxStatus.ok) return { command, args, cwd: workDir, sandboxed: false };
   const proc = sandboxedRun(command, args, {
     binds: [
@@ -485,7 +488,7 @@ function sandboxedArgs([command, ...args], workDir, { writableWork = false, addr
     cwd: SANDBOX_PATHS.work,
     addressSpaceBytes,
   });
-  return { ...proc, sandboxed: true };
+  return { ...(cg ? cgroups.wrap(proc, cg, SUBMISSION_ENV) : proc), sandboxed: true };
 }
 
 // The command line ([command, ...args]) that runs a submission, in the
@@ -532,10 +535,12 @@ function startProcess(proc, options) {
 // languages. Hitting the CPU-time limit counts as timing out. Since the
 // compiler runs inside the sandbox, killing it on timeout kills all of it:
 // g++'s child cc1plus used to survive and hold the judge's pipe open.
-function compileSubmission(language, workDir) {
+// memoryExceeded: the cgroup's OOM killer ended a process meanwhile.
+function compileSubmission(language, workDir, cg = null) {
   const compile = compileCommand(language, judgePaths(workDir));
   if (!compile) return Promise.resolve(null);
-  const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes });
+  const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes, cg });
+  const oomBefore = cg ? cg.oomKills() : 0;
   return new Promise((resolve) => {
     const child = startProcess(proc, {
       env: SUBMISSION_ENV,
@@ -551,19 +556,22 @@ function compileSubmission(language, workDir) {
       if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
     });
     child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
+      resolve({ success: false, stderr: String(err.message || err), timedOut, memoryExceeded: false });
     });
     child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE) timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+      const memoryExceeded = Boolean(cg) && cg.oomKills() > oomBefore;
+      if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE)) timedOut = true;
+      resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded });
     });
   });
 }
 
 // Runs one submission process: inside the sandbox when it works, with its
-// folder read-only at /work (sandboxedArgs).
-function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS) {
-  const proc = sandboxedArgs(argv, workDir);
+// folder read-only at /work (sandboxedArgs), and inside the submission's
+// cgroup when there is one. memoryExceeded: its OOM killer ended a process.
+function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = null) {
+  const proc = sandboxedArgs(argv, workDir, { cg });
+  const oomBefore = cg ? cg.oomKills() : 0;
   return new Promise((resolve) => {
     const child = startProcess(proc, {
       env: SUBMISSION_ENV,
@@ -584,12 +592,13 @@ function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS) {
     });
 
     child.on('error', (err) => {
-      resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null });
+      resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null, memoryExceeded: false });
     });
 
     child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ stdout, stderr, timedOut, exitCode: code });
+      const memoryExceeded = Boolean(cg) && cg.oomKills() > oomBefore;
+      if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM')) timedOut = true;
+      resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded });
     });
 
     child.stdin.write(stdinPayload);
@@ -619,12 +628,14 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 
   const workDir = makeWorkDir();
   fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), source);
+  // One cgroup for the compile and every run (null without cgroup limits).
+  const cg = cgroups.forSubmission();
 
   try {
-    const compileResult = await compileSubmission(language, workDir);
+    const compileResult = await compileSubmission(language, workDir, cg);
     if (compileResult) {
       if (!compileResult.success) {
-        const errorText = (compileResult.timedOut
+        const errorText = (compileResult.memoryExceeded ? cgroups.MEMORY_LIMIT_MESSAGE : compileResult.timedOut
           ? 'Compilation timed out.'
           : compileResult.stderr || 'Compilation failed.'
         ).slice(0, 2000);
@@ -642,8 +653,21 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
     }
 
     const stdinPayload = JSON.stringify(testCases.map((tc) => ({ args: tc.args })));
-    const outcome = await spawnJudged(runCommand(language, 'function', judgePaths(workDir)), stdinPayload, workDir);
+    const outcome = await spawnJudged(runCommand(language, 'function', judgePaths(workDir)), stdinPayload, workDir, TIMEOUT_MS, cg);
     const runtimeMs = Date.now() - started;
+
+    if (outcome.memoryExceeded) {
+      return {
+        status: 'Runtime Error',
+        passed: 0,
+        total: testCases.length,
+        runtimeMs,
+        error: cgroups.MEMORY_LIMIT_MESSAGE,
+        stdout: outcome.stdout,
+        stderr: outcome.stderr,
+        results: buildFailureResults(testCases, cgroups.MEMORY_LIMIT_MESSAGE),
+      };
+    }
 
     if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
       const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
@@ -717,6 +741,7 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
       results,
     };
   } finally {
+    if (cg) cg.destroy();
     fs.rm(workDir, { recursive: true, force: true }, () => {});
   }
 }
@@ -740,12 +765,14 @@ async function runProgramSubmission({ language, code, testCases }) {
   // submission must define `public class Main` itself.
   const workDir = makeWorkDir();
   fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), code);
+  // One cgroup for the compile and every test case's run.
+  const cg = cgroups.forSubmission();
 
   try {
-    const compileResult = await compileSubmission(language, workDir);
+    const compileResult = await compileSubmission(language, workDir, cg);
     if (compileResult) {
       if (!compileResult.success) {
-        const errorText = (compileResult.timedOut
+        const errorText = (compileResult.memoryExceeded ? cgroups.MEMORY_LIMIT_MESSAGE : compileResult.timedOut
           ? 'Compilation timed out.'
           : compileResult.stderr || 'Compilation failed.'
         ).slice(0, 2000);
@@ -782,7 +809,15 @@ async function runProgramSubmission({ language, code, testCases }) {
         continue;
       }
       const timeoutMs = Math.min(TIMEOUT_MS, remainingMs);
-      const outcome = await spawnJudged(command, tc.input || '', workDir, timeoutMs);
+      const outcome = await spawnJudged(command, tc.input || '', workDir, timeoutMs, cg);
+
+      if (outcome.memoryExceeded) {
+        anyCrashed = true;
+        results.push(tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.input, expected: tc.expected, error: cgroups.MEMORY_LIMIT_MESSAGE });
+        continue;
+      }
 
       if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
         anyTimedOut = true;
@@ -829,6 +864,7 @@ async function runProgramSubmission({ language, code, testCases }) {
       results,
     };
   } finally {
+    if (cg) cg.destroy();
     fs.rm(workDir, { recursive: true, force: true }, () => {});
   }
 }

@@ -260,7 +260,7 @@ Notes:
 | 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
 | 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
 | 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 in the cloud (as root and as `nobody`) and on Kubuntu 26.04; the VPS service reports `works` with the filter checked. All languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
-| 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
+| 7 | **Built 2026-11-02, branch `cgroup-limits`; VPS test pending.** cgroup v2 per submission in the VPS service (D5). | G12 (memory across processes) contained on the VPS; `judge-…` cgroups appear and vanish; all languages still Accepted. See “Step 7 notes”. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
 
 Each step updates `readme.html` (Judging, Known gaps, Environments,
@@ -804,6 +804,76 @@ io_uring_setup, kcmp, keyctl, ptrace`.
     `Sandbox: bubblewrap 0.9.0 works (self-test passed)`. The self-test
     fails without `Seccomp: 2`, so the service's sandboxes run filtered,
     under the unit's systemd containment. Ports are still 127.0.0.1 only.
+
+### Step 7 notes (2026-11-02, branch `cgroup-limits`)
+
+- **Why:** the limits so far are per process (memory per language, CPU time
+  per process), so a submission that forks gets them per process. A cgroup
+  caps a whole group of processes: here, everything one submission runs.
+- **Mechanism:**
+  - the unit sets `Delegate=yes` and `DelegateSubgroup=server` (systemd ≥
+    254; the VPS has 255). systemd hands the unit's cgroup to the service
+    and starts the server in `…/server`;
+  - `judge/cgroups.js` finds that parent from `/proc/self/cgroup`, switches
+    on the memory, pids and cpu controllers for its children
+    (`cgroup.subtree_control`), and creates `judge-<random>` next to
+    `server` for each submission. Kernel interface:
+    https://docs.kernel.org/admin-guide/cgroup-v2.html;
+  - limits: `memory.max` 768 MiB (page cache and the tmpfs `/tmp`
+    included), `memory.swap.max` 0, `pids.max` 128, `cpu.max` `100000
+    100000` (one CPU);
+  - placement: a shell outside the sandbox writes its PID into the cgroup's
+    `cgroup.procs`, then execs, through `env -i` with `SUBMISSION_ENV`, the
+    bwrap command. That inherits the cgroup, and the seccomp fd 3 passes
+    through;
+  - afterwards: `cgroup.kill`, then `rmdir`;
+  - out-of-memory: the cgroup's `memory.events` `oom_kill` count rising
+    during a compile or run is reported as “Memory limit exceeded (768 MB
+    for the whole submission…)”, with the existing statuses.
+- **Owner's decisions:**
+  - remove `ProtectControlGroups=yes` (it makes all of `/sys/fs/cgroup`
+    read-only);
+  - `MAXRECALL_REQUIRE_CGROUPS=1` in the unit, so the server refuses to
+    judge without cgroups.
+
+  Elsewhere cgroups are never touched. On a desktop, the server's cgroup
+  sits in the session tree that systemd's user manager owns.
+- **Tested on the VPS before building,** with `systemd-run` as `maxrecall`,
+  `Delegate=yes` and `DelegateSubgroup=server`:
+  - with `ProtectControlGroups=yes`: “Read-only file system” on the unit's
+    `cgroup.subtree_control`;
+  - with `=no`: a `judge-test` cgroup with `memory.max` 104857600 worked;
+  - `=private`: “Failed to parse” (systemd 255).
+
+  My first test command was wrong: systemd substitutes `${…}` in a unit's
+  command line itself, so the shell's `${c%/server}` came out empty. It was
+  redone with `dirname`.
+- **The startup self-test,** when required, runs inside a test cgroup and
+  checks afterwards that `memory.peak` is above 0, so it was counted there.
+  If not, the server refuses to judge.
+- **Tested in the cloud**, which has no cgroup v2 controllers (`hugetlb`
+  only), so not the kernel's enforcement:
+  - against a fake cgroup folder: controllers switched on, the four limits
+    written, the wrapper's PID written to `cgroup.procs`, `oom_kill` read,
+    `cgroup.kill` written;
+  - the runner, with a fake cgroup whose OOM count rises mid-run: Runtime
+    Error in function and program mode and Compile Error while compiling,
+    each with the memory message;
+  - **this found a bug:** the wrapper shell (dash) exported `PWD` to bwrap,
+    and the startup self-test rejected it (“bwrap's process 1 has
+    environment variables besides PATH and LANG”). Fixed with `env -i`;
+  - without `MAXRECALL_REQUIRE_CGROUPS`: no change. Escape test 14
+    contained plus G12 skipped, all languages Accepted (as root and as
+    `nobody`), starter verdicts unchanged. With it, here: refuses to judge
+    (“not in a "server" subgroup”).
+- **Probe G12:** 4 processes × 200 MB, pages actually written, each under
+  Python's 256 MB per-process cap, together over 768 MB. Contained when the
+  judge reports the memory message; skipped where cgroups aren't in use (it
+  allocates nothing then). Its Python, run without a cgroup at 20 MB each,
+  reports ESCAPED, so the probe can fail.
+- **Still to test on the VPS:** the real enforcement (G12 contained, plus a
+  look at `judge-…` cgroups coming and going), then the service itself
+  after the merge.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

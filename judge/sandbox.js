@@ -11,6 +11,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const cgroups = require('./cgroups');
 
 // The whole environment compilers and submissions get, instead of a copy of
 // the server's (spawn's default), which can hold secrets such as
@@ -405,12 +406,37 @@ function runSelfTest() {
   }
 
   const toolchains = TOOLCHAIN_COMMANDS.filter((c) => findOnPath(c));
+  // cgroup limits (sandboxing step 7), when the unit requires them: the
+  // self-test runs inside a test cgroup like a submission's, and its
+  // memory.peak afterwards shows it really was counted there.
+  if (cgroups.cgroupStatus.required && !cgroups.cgroupStatus.ok) {
+    return { ok: false, version: versionText, reason: `cgroup limits are required (MAXRECALL_REQUIRE_CGROUPS=1) but unavailable: ${cgroups.cgroupStatus.reason}` };
+  }
+  let testCgroup = null;
+  try {
+    testCgroup = cgroups.forSubmission();
+  } catch (err) {
+    return { ok: false, version: versionText, reason: `couldn't create a submission cgroup: ${err.message}` };
+  }
+
   // Binds the helper folder the way every run does, so a folder the
   // sandbox's user can't reach fails here, at startup, not on every Run.
-  const { command, args } = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains], {
+  let proc = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains], {
     binds: [{ hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH }],
   });
+  if (testCgroup) proc = cgroups.wrap(proc, testCgroup, SUBMISSION_ENV);
+  const { command, args } = proc;
   const result = spawnSandboxed(spawnSync, command, args, { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 10000 });
+  let cgroupProblem = null;
+  if (testCgroup) {
+    try {
+      const peak = Number(fs.readFileSync(path.join(testCgroup.dir, 'memory.peak'), 'utf8'));
+      if (!(peak > 0)) cgroupProblem = `the self-test's processes weren't counted in its cgroup (memory.peak ${peak})`;
+    } catch {
+      // memory.peak needs Linux 5.19; without it, the placement isn't checked.
+    }
+    testCgroup.destroy();
+  }
   if (result.error) return { ok: false, version: versionText, reason: `couldn't run bwrap: ${result.error.message}` };
   if (result.status !== 0 || result.stdout.trim() !== 'ok') {
     // bwrap's own errors (e.g. AppArmor's user-namespace restriction on
@@ -418,6 +444,7 @@ function runSelfTest() {
     const why = `${result.stderr || ''}\n${result.stdout || ''}`.trim().split('\n').filter(Boolean).slice(-1)[0];
     return { ok: false, version: versionText, reason: `self-test failed: ${why || `exit status ${result.status}`}` };
   }
+  if (cgroupProblem) return { ok: false, version: versionText, reason: cgroupProblem };
   return { ok: true, version: versionText };
 }
 
@@ -427,7 +454,10 @@ const status = Object.freeze({ ...runSelfTest(), unsandboxedOverride: UNSANDBOXE
 function describeSandbox() {
   if (status.ok) {
     const who = RUNNING_AS_ROOT ? ', as nobody because the server is root' : '';
-    return `${status.version} works (self-test passed); compilers and submissions run inside it${who}`;
+    const limits = cgroups.cgroupStatus.ok
+      ? `; cgroup limits per submission: ${cgroups.MEMORY_LIMIT_MB} MB, no swap, ${cgroups.CGROUP_LIMITS['pids.max']} tasks, 1 CPU`
+      : '; no cgroup limits (MAXRECALL_REQUIRE_CGROUPS isn\'t set)';
+    return `${status.version} works (self-test passed); compilers and submissions run inside it${who}${limits}`;
   }
   if (status.unsandboxedOverride) {
     return `UNAVAILABLE (${status.reason}), but MAXRECALL_UNSANDBOXED=1, so judging is allowed WITHOUT a sandbox`;

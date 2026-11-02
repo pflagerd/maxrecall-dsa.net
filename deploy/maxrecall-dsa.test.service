@@ -68,9 +68,30 @@ RestrictSUIDSGID=yes
 # as an unprivileged user with NoNewPrivileges, so it can't write kernel
 # tunables anyway, and submissions get their own /proc inside the sandbox.
 ProtectKernelModules=yes
-ProtectControlGroups=yes
 LockPersonality=yes
 # Not MemoryDenyWriteExecute: Node's and Java's JIT compilers need it off.
+
+# --- cgroup limits per submission (sandboxing step 7) -----------------------
+# systemd hands this unit's cgroup over to the service (Delegate=) and starts
+# the server in a "server" subgroup of it (DelegateSubgroup=, systemd 254 or
+# later). The server then gives each submission a cgroup of its own next to
+# it, capping memory, processes and CPU for the whole submission
+# (judge/cgroups.js). MAXRECALL_REQUIRE_CGROUPS=1 makes the server refuse to
+# judge if it can't (owner's decision, 2026-11-02).
+Delegate=yes
+DelegateSubgroup=server
+Environment=MAXRECALL_REQUIRE_CGROUPS=1
+# Not ProtectControlGroups (owner's decision, 2026-11-02): it makes
+# /sys/fs/cgroup read-only for the whole unit, delegated subtree included,
+# so the server couldn't create submission cgroups. Tested on the VPS with
+# systemd-run as maxrecall: with ProtectControlGroups=yes, writing the
+# unit's cgroup.subtree_control failed with "Read-only file system"; without
+# it, a judge-test cgroup with its own memory.max worked. The "private"
+# variant (a private writable view) needs a newer systemd than 24.04's 255
+# ("Failed to parse ProtectControlGroups: private"). Outside its own
+# delegated subtree, the cgroup tree belongs to root, so the service still
+# can't change it (tested: "Permission denied"), and the sandbox doesn't
+# mount /sys at all.
 
 [Install]
 WantedBy=multi-user.target

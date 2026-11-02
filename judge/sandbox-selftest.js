@@ -29,6 +29,7 @@ const os = require('os');
 const path = require('path');
 const { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
 const { sandboxStatus, describeSandbox, RUN_LIMITS } = require('./sandbox');
+const { cgroupStatus, MEMORY_LIMIT_MB } = require('./cgroups');
 
 const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
@@ -430,6 +431,44 @@ async function runCpuProbe() {
   return { verdict: 'inconclusive', detail: `judge said ${result.status} on ${cores} core(s): ${error.split('\n')[0]}`, runtimeMs: result.runtimeMs };
 }
 
+// G12: memory used by several processes together, each staying under the
+// per-process caps (Python's 256 MB address-space limit): 4 x 200 MB, over
+// the submission cgroup's 768 MB. Only cgroups cap that (sandboxing step 7).
+// Pages are written to, not just reserved, so they really count. Where
+// cgroups aren't in use (anywhere but the VPS service) it's skipped and
+// allocates nothing.
+const MEMORY_PROBE = `
+import os
+def probe():
+    n = 200 * 1024 * 1024
+    children = []
+    for i in range(4):
+        pid = os.fork()
+        if pid == 0:
+            b = bytearray(n)
+            b[::4096] = b'\\x01' * len(range(0, n, 4096))
+            import time
+            time.sleep(2)
+            os._exit(0)
+        children.append(pid)
+    statuses = [os.waitpid(pid, 0)[1] for pid in children]
+    killed = sum(1 for st in statuses if os.WIFSIGNALED(st))
+    if killed:
+        return 'contained: %d of 4 processes were killed' % killed
+    return 'ESCAPED: 4 processes held 800 MB together'
+`;
+
+async function runMemoryProbe() {
+  if (!cgroupStatus.ok) {
+    return { verdict: 'skipped', detail: "cgroup limits aren't in use here (only in the VPS service, MAXRECALL_REQUIRE_CGROUPS=1); per-process memory caps still apply", runtimeMs: 0 };
+  }
+  const result = await runSubmission({ language: 'python', code: MEMORY_PROBE, functionName: 'probe', testCases: PYTHON_CASE, judgeMode: 'function' });
+  if (/Memory limit exceeded/.test(result.error || '')) {
+    return { verdict: 'contained', detail: `the submission's cgroup stopped it: ${result.error}`, runtimeMs: result.runtimeMs };
+  }
+  return { ...readVerdict(result), runtimeMs: result.runtimeMs };
+}
+
 // G10: a compile that takes longer than the compile timeout. g++ is only a
 // driver; the compiler proper is its child, cc1plus. Killing the driver on
 // timeout used to leave cc1plus running, holding the judge's pipe open, so
@@ -531,6 +570,10 @@ async function main() {
     const cpuOutcome = await runCpuProbe();
     process.stdout.write(`${cpuOutcome.verdict}\n`);
     outcomes.push({ id: 'G6d', what: 'keep every core busy from one process (takes up to 5 s)', ...cpuOutcome });
+    process.stdout.write('G12 ... ');
+    const memoryOutcome = await runMemoryProbe();
+    process.stdout.write(`${memoryOutcome.verdict}\n`);
+    outcomes.push({ id: 'G12', what: `use more than ${MEMORY_LIMIT_MB} MB in several processes together (cgroup limit)`, ...memoryOutcome });
     process.stdout.write('G7 ... ');
     const compileOutcome = await runCompileProbe(canaryHeader);
     process.stdout.write(`${compileOutcome.verdict}\n`);
