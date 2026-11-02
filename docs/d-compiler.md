@@ -5,6 +5,10 @@ Written 2026-10-30. The judge compiles D submissions by running `dmd`
 it, so D submissions fail there until it's installed. This note installs it
 from **d-apt**, the D community's APT repository on SourceForge.
 
+Since 2026-11-02 a SessionStart hook does this automatically (see
+[Automatically, at session start](#automatically-at-session-start)), so you
+only need the steps by hand if the hook failed.
+
 On Kubuntu you don't need this: use the official downloads at
 <https://dlang.org/download.html>. (d-apt may work there too, but that's
 untested on 26.04.)
@@ -168,8 +172,42 @@ With DMD 2.113.0 from d-apt, on 2026-10-30, through the real judge
   first on `PATH`, makes the judge use it. It's a different compiler (LDC 1.36
   is based on DMD's 2.106 front end), so prefer real DMD.
 
-## Later
+## Automatically, at session start
 
-A cloud session forgets all of this when its container is reclaimed. Steps 1
-to 5 could become a SessionStart hook, so every cloud session gets DMD
-automatically. That isn't decided yet.
+A cloud session forgets all of this when its container is reclaimed, so
+`.claude/hooks/session-start.sh` runs steps 1 to 5 whenever a session starts,
+resumes, clears or compacts. `.claude/settings.json` registers it as a
+SessionStart hook. Claude Code runs it from whichever branch the session has
+checked out, so it applies to sessions on `master` and on branches made from
+it. What it does:
+
+- **Only in cloud sessions.** It does nothing unless `CLAUDE_CODE_REMOTE` is
+  `true`, so on Kubuntu it never touches apt.
+- **Skips work already done.** If `dmd-compiler` is installed, the key file has
+  the pinned fingerprint and the source line is unchanged, it stops there
+  (24 ms when tested).
+- **Refuses a changed key.** The fingerprint above is written into the script.
+  If the keyring's key differs, it installs nothing and exits 1.
+- **Keeps Claude's context clean.** On success a SessionStart hook's standard
+  output becomes context for Claude, so it prints one line
+  (`D compiler: DMD64 D Compiler v2.113.0, from d-apt (docs/d-compiler.md).`)
+  and sends the installer's output to standard error.
+- **Runs synchronously**, with a 300-second limit set in `settings.json` (the
+  default for a command hook is 600). Claude's first reply waits for it, so
+  DMD is there before the judge is used. A fresh install took 9 seconds.
+
+If it fails (SourceForge down, the key changed, the keyring package renamed),
+the session still starts: Claude Code treats an exit code other than 0 or 2 as
+a non-blocking error and shows a hook error notice. D submissions then fail
+until the cause is fixed, by hand with the steps above or by updating the
+script. Reference: [Hooks reference](https://code.claude.com/docs/en/hooks)
+(SessionStart, exit codes, `timeout`), read 2026-11-02.
+
+To run it by hand in a cloud session:
+
+```bash
+CLAUDE_CODE_REMOTE=true ./.claude/hooks/session-start.sh
+```
+
+- `CLAUDE_CODE_REMOTE=true`: set the variable for this one command, as Claude
+  Code does in a cloud session, so the script doesn't exit straight away.
