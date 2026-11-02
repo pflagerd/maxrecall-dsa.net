@@ -37,7 +37,9 @@ Environment=MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth
 EnvironmentFile=-/etc/maxrecall-dsa/test.env
 
 # --- Containment -----------------------------------------------------------
-# Submitted code runs as this service, so these limit what it can do.
+# An outer layer around the judge's own sandbox (bubblewrap, judge/
+# sandbox.js), which compiles and runs every submission: these limit what
+# the server, and anything that got out of a sandbox, can do.
 # See systemd.exec(5) and systemd.resource-control(5).
 
 # No network except this machine itself: the server only needs to answer the
@@ -56,7 +58,15 @@ PrivateDevices=yes
 
 NoNewPrivileges=yes
 RestrictSUIDSGID=yes
-ProtectKernelTunables=yes
+# Not ProtectKernelTunables (owner's decision, 2026-11-02): it mounts over
+# parts of /proc (/proc/sys, /proc/kcore, /proc/kallsyms, ...), and the
+# kernel then refuses the fresh /proc each bubblewrap sandbox mounts ("Mount
+# too revealing", fs/namespace.c, mnt_already_visible). On the VPS the
+# sandbox failed with "bwrap: Can't mount proc on /newroot/proc: Operation
+# not permitted"; a systemd-run test with every setting below and above
+# worked once ProtectKernelTunables=yes alone was left out. This service runs
+# as an unprivileged user with NoNewPrivileges, so it can't write kernel
+# tunables anyway, and submissions get their own /proc inside the sandbox.
 ProtectKernelModules=yes
 ProtectControlGroups=yes
 LockPersonality=yes

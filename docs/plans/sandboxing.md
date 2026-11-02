@@ -683,6 +683,44 @@ look at its `Sandbox:` log line, because the unit's own containment
 (`PrivateDevices=`, `ProtectSystem=strict`, `IPAddressDeny=`…) hasn't been
 tried with bubblewrap.
 
+### Step 5, the service (2026-11-02, branch `deploy-server`)
+
+- The VPS had never been set up per `docs/deploy-vps.md`, so the owner
+  asked for `make deploy-server`. Its first real run there:
+  - created the user, cloned `master` and installed the packages;
+  - installed and started the unit;
+  - then stopped on `Sandbox: UNAVAILABLE (self-test failed: bwrap: Can't
+    mount proc on /newroot/proc: Operation not permitted)`. It's designed
+    to stop there.
+- **Cause, from primary sources.** The kernel refuses a fresh proc mount in
+  a user namespace unless an existing one is “fully visible”, meaning no
+  locked child mounts over anything but empty directories (`fs/namespace.c`,
+  `mnt_already_visible`, called from `mount_too_revealing`, which returns
+  `-EPERM`, “Mount too revealing”). `ProtectKernelTunables=` makes `/proc/sys`,
+  `/proc/sysrq-trigger`, `/proc/acpi`, `/proc/fs`, `/proc/irq` and others
+  read-only, and `/proc/kallsyms` and `/proc/kcore` inaccessible, by mounting
+  over them (systemd.exec(5)).
+- **Confirmed on the VPS** by two `systemd-run` runs of the server's
+  sandbox check as `maxrecall`, with the unit's settings:
+  - all of them: `UNAVAILABLE`, the same error;
+  - all but `ProtectKernelTunables=yes`: `works`.
+
+  So every other setting in the unit is compatible with bubblewrap, except
+  the `IPAddress…` rules, which weren't in the test and filter traffic
+  rather than files.
+- **Decided (owner): removed `ProtectKernelTunables=yes`** from the unit,
+  with a comment saying why. The alternatives don't work:
+  - binding the service's `/proc` into each sandbox would let submissions
+    see the server's processes and their environments, reopening G1;
+  - `ProtectProc=`/`ProcSubset=` are refused by the same kernel check
+    (restricted proc variants).
+
+  What's lost: protection against the service writing kernel tunables. It
+  runs unprivileged with `NoNewPrivileges=yes`, so it can't anyway.
+- Next: get `deploy-server` onto `master` (pull request), then rerun
+  `make deploy-server` on the VPS. It re-copies the changed unit, reloads,
+  restarts and checks the `Sandbox:` line.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).

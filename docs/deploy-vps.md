@@ -96,8 +96,10 @@ was real:
 - a second run took the update path;
 - with bubblewrap broken, it failed on the `UNAVAILABLE` line.
 
-**Not tested:** the unit's own systemd containment around bubblewrap. Its
-`Sandbox:` line on the VPS is that test.
+**On the VPS** (2026-11-02), the first real run installed everything, then
+stopped on `Sandbox: UNAVAILABLE (… bwrap: Can't mount proc on /newroot/proc:
+Operation not permitted)`. The unit's `ProtectKernelTunables=yes` was the
+cause, and it has been removed (see §5).
 
 The sections below are what it does, step by step, with each command
 explained.
@@ -397,9 +399,36 @@ many lines). The latest start should show four lines:
 
 If the `Sandbox:` line says `UNAVAILABLE (…)`, Run and Submit are refused.
 The text in brackets is the reason, often bwrap's own error. Go back to §1a.
-I'm guessing the service's systemd containment (`PrivateDevices=`,
-`ProtectSystem=` and so on) won't get in bubblewrap's way, but that's
-untested, and this line is where it would show.
+**The unit's containment and bubblewrap.** On 2026-11-02 the service's
+sandbox failed with `bwrap: Can't mount proc on /newroot/proc: Operation not
+permitted`. Each sandbox mounts a fresh `/proc`, and the kernel refuses that
+in a user namespace when parts of the existing `/proc` are covered by other
+mounts (“Mount too revealing”: `mnt_already_visible` in
+[fs/namespace.c](https://github.com/torvalds/linux/blob/master/fs/namespace.c)).
+`ProtectKernelTunables=yes` mounts over `/proc/sys`, `/proc/kcore` and others
+([systemd.exec(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#ProtectKernelTunables=)).
+
+Two `systemd-run` tests confirmed it, each running the server's sandbox check
+as `maxrecall` with the unit's settings:
+- with every setting: `UNAVAILABLE`, the same error;
+- the same without `ProtectKernelTunables=yes`: `works`.
+
+So the unit no longer sets it (owner's decision). The service runs as an
+unprivileged user with `NoNewPrivileges=yes`, so it couldn't write kernel
+tunables anyway. Every other setting in the unit was in that test and works
+with bubblewrap, except the `IPAddress…` rules, which filter network traffic
+and weren't part of it.
+
+To repeat the test, as root:
+```bash
+systemd-run --wait --pipe --quiet -p User=maxrecall -p WorkingDirectory=/srv/maxrecall/maxrecall-dsa.net -p ProtectSystem=strict -p ProtectHome=yes -p PrivateTmp=yes -p PrivateDevices=yes -p NoNewPrivileges=yes -p RestrictSUIDSGID=yes -p ProtectKernelModules=yes -p ProtectControlGroups=yes -p LockPersonality=yes /usr/local/bin/node -e 'console.log(require("./judge/sandbox").describeSandbox())'
+```
+- `systemd-run` starts a temporary unit; `--wait` waits for it and `--pipe`
+  shows its output here ([systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)).
+- `--quiet` hides systemd's own messages.
+- Each `-p NAME=VALUE` sets one unit property: here, the unit file's settings.
+- It prints the server's `Sandbox:` description. Add
+  `-p ProtectKernelTunables=yes` to see the failure.
 
 ## 6. Check it's private and contained [VPS, then Kubuntu]
 
