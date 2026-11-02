@@ -1,7 +1,8 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–3
-done 2026-11-02; step 4 next.** The VPS part of step 5 (AppArmor) moved
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–4
+done 2026-11-02, plus a CPU-time limit. Next: a total time budget for
+program mode, then steps 5–8.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -255,7 +256,7 @@ Notes:
 | 1 | **Done 2026-11-02.** Every `spawn` in the runner gets `env: SUBMISSION_ENV` (`PATH`, `LANG=C.UTF-8`). It's needed for bwrap too (§5). | G1 now says “own env is clean (['LANG', 'PATH']), but the canary is readable in /proc/<pid>/environ”: still ESCAPED, as expected, until step 3. See “Step 1 notes”. |
 | 2 | **Done 2026-11-02.** `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to the cloud SessionStart hook, and to `docs/deploy-vps.md` as new §1a with the AppArmor profile (moved here from step 5). | The self-test passes in the cloud, as root and as `nobody`. With bwrap unusable, the server logs UNAVAILABLE and Run gets 503; with `MAXRECALL_UNSANDBOXED=1` it judges. |
 | 3 | **Done 2026-11-02.** Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Escape test: 10 of 11 contained (G7 left for step 4), as root and as `nobody`. Correct answers Accepted in every language and mode; starter-code verdicts unchanged in all 65 runs. See “Step 3 notes”. |
-| 4 | Compile step under bwrap. | G7 contained; C++/Java/D still compile. |
+| 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
 | 5 | VPS: follow §1a (written in step 2), read the `Sandbox:` log line, adjust the service file if its containment gets in the way. Kubuntu: `sudo apt install bubblewrap`, check `ls /etc/apparmor.d \| grep -i bwrap`, and run the selftest. | Selftest on the VPS, including G4 (port 3001) contained. |
 | 6 | Seccomp denylist (D4). | Selftest's seccomp probes are refused; all questions still pass. |
 | 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
@@ -475,6 +476,35 @@ so `docs/deploy-vps.md` §1a stays the VPS procedure.
   - `runtimeMs` includes compiling and sandbox start-up (separate, since it
     changes saved records);
   - the CPU limit is per process (cgroups, step 7).
+
+### Step 4 notes (2026-11-02)
+
+- **One compile path.** `compileCommand(language, paths)` gives the
+  compiler's command line, timeout and memory cap. `compileSubmission` runs
+  it through `sandboxedArgs`, which `spawnJudged` uses too. That replaced
+  three near-identical functions (`compileCpp`, `compileJava`, `compileD`).
+- **What the compiler sees.** `/work` writable, so it can write `main`,
+  `*.class` and `main.o`. `/judge/cpp/judge_json.o` and `/judge/java`
+  read-only. The same read-only system view, empty environment, no network
+  and limits as a run.
+- **Memory caps (added).** RLIMIT_AS 1 GB for `g++` and `dmd`, inherited by
+  `cc1plus`, `as` and `ld`. Real harness compiles fit in 512 MB (measured).
+  `javac -J-Xmx256m`, because RLIMIT_AS doesn't suit a JVM. The 257-byte
+  template source that reached 2 GB before now ends after 6.6 s with
+  “virtual memory exhausted”, as a Compile Error.
+- **A CPU-limit kill counts as a compile timeout** (exit code 152).
+- **Root.** The compiler must write to the work folder, so when the server
+  is root (sandboxes run as `nobody`), `prepareWorkDir` now hands the folder
+  to `nobody` (`chown`) instead of `chmod 0711`.
+- **Checked:**
+  - escape test 13/13 contained, as root and as `nobody`, with no compiler
+    processes left behind (G10 now answers at the 10 s limit);
+  - correct Two Sum and Hello World Accepted in all five languages:
+    sandboxed as root, as `nobody`, and with bubblewrap broken plus
+    `MAXRECALL_UNSANDBOXED=1`;
+  - starter-code verdicts identical in all 65 runs; compile errors now say
+    `/work/Main.java:6: …`;
+  - no `judge-*` folders left in `/tmp`.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

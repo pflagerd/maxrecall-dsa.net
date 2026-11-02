@@ -79,7 +79,7 @@ system. <span class="src">Source: <code>THOUGHTS</code>, <code>TODO</code>.</spa
   <tr><td><code>make sandbox-deps</code></td><td>Runs <code>scripts/sandbox-deps.sh</code>, which <code>make run</code> and <code>make dev</code> also run first. It checks that the judge's sandbox works (about 0.1 s, no root). If it doesn't, it fixes what it can, using <code>sudo</code>, which may ask for your password, and saying what it runs. It installs <code>bubblewrap</code> if missing. If Ubuntu's AppArmor restriction on user namespaces is what stops bubblewrap, it installs <code>apparmor-profiles</code> and loads Ubuntu's <code>bwrap-userns-restrict</code> profile. That's a machine-wide change, made only in that case: afterwards any user's <code>bwrap</code> may create user namespaces. If it can't fix things, it warns and lets the server start, and the server then refuses to judge. Run it as yourself, not with <code>sudo</code>: root passes the check even where AppArmor blocks ordinary users.</td></tr>
   <tr><td><code>make run</code></td><td>Starts the server in the foreground (<code>PORT=3000 node server.js</code>; Ctrl-C stops it). In the background it polls the server with <code>curl</code> every 0.2&nbsp;s until it answers, then opens it with <code>xdg-open</code> (your default browser). If the server hasn't answered within about <code>OPEN_WAIT</code> seconds (±1&nbsp;s) (default 30; e.g. <code>make run OPEN_WAIT=60</code>), it prints a message and gives up on the browser. Override the port with <code>make run PORT=8080</code>. Needs <code>curl</code> and <code>xdg-open</code> (package <code>xdg-utils</code>); the cloud environment has no <code>xdg-open</code>, so there the browser step fails and the server still runs.</td></tr>
   <tr><td><code>make dev</code></td><td>Starts the server under <code>nodemon</code>, which restarts it whenever a <code>.js</code>, <code>.mjs</code>, <code>.cjs</code> or <code>.json</code> file changes, except under <code>users/</code> (set in <code>package.json</code> → <code>nodemonConfig</code>). Opens the browser once at startup, the same way as <code>make run</code>; restarts don't open it again.</td></tr>
-  <tr><td><code>make sandbox-test</code></td><td>Runs <code>judge/sandbox-selftest.js</code>, the judge's escape test (about 15 s). Each probe is a hostile submission, and the result says whether it was <em>contained</em> or <em>ESCAPED</em>. The make target fails if anything escaped, which is everything but the memory cap until the sandbox is built. It needs no server and no <code>npm install</code>, only the toolchains.</td></tr>
+  <tr><td><code>make sandbox-test</code></td><td>Runs <code>judge/sandbox-selftest.js</code>, the judge's escape test (about 30 s). Each probe is a hostile submission, and the result says whether it was <em>contained</em> or <em>ESCAPED</em>. The make target fails if anything escaped. Since sandboxing step 4, all 13 probes are contained. It needs no server and no <code>npm install</code>, only the toolchains.</td></tr>
   <tr><td><code>make clean</code></td><td>Deletes <code>node_modules</code>.</td></tr>
 </table>
 <p>Both open <code>http://localhost:3000/</code> for you. There is no compile step for the
@@ -208,10 +208,13 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
 Compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code> as their environment, not a copy of the server's
 (<code>SUBMISSION_ENV</code>, in <code>judge/sandbox.js</code>). <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
 <code>runSubmission</code> refuses to judge if the sandbox failed its startup check (see Running it).</p>
-<p><strong>Each run is sandboxed</strong> with bubblewrap (since 2026-11-02, sandboxing step 3). Compiling isn't yet; that's step 4.
-Each submission gets its own folder (<code>/tmp/judge-XXXXXX</code>, owner-only, deleted afterwards), which the run sees,
-<strong>read-only</strong>, as <code>/work</code>: <code>main.js</code>, <code>main.py</code>, <code>Main.java</code> and its classes, or the
-binary <code>main</code>. Java's helper classes are at <code>/judge/java</code>, also read-only. So error messages show paths such as
+<p><strong>Compiling and running are sandboxed</strong> with bubblewrap (since 2026-11-02, sandboxing steps 3 and 4).
+Each submission gets its own folder (<code>/tmp/judge-XXXXXX</code>, owner-only, deleted afterwards). The compiler sees it as <code>/work</code>,
+writable, so it can write the binary or classes. The run sees it <strong>read-only</strong> as <code>/work</code>: <code>main.js</code>, <code>main.py</code>, <code>Main.java</code> and its classes, or the
+binary <code>main</code>. The judge's helpers are read-only at <code>/judge/java</code> and <code>/judge/cpp/judge_json.o</code>.
+Compilers get a memory cap too: 1&nbsp;GB of address space for <code>g++</code> (with its <code>cc1plus</code>, <code>as</code> and <code>ld</code>) and <code>dmd</code>,
+and a 256&nbsp;MB heap for <code>javac</code> (<code>-J-Xmx256m</code>, because a JVM reserves more address space than it uses).
+A compile that runs out reports “virtual memory exhausted” as a Compile Error. So error messages show paths such as
 <code>/work/main.py</code>. Inside the sandbox there's:</p>
 <ul>
   <li>a read-only <code>/usr</code> and the few <code>/etc</code> files the toolchains need;</li>
@@ -324,18 +327,12 @@ Since sandboxing step 2 it also needs bubblewrap and Ubuntu's <code>bwrap-userns
 
 <h2 id="gaps">10. Known gaps &amp; caveats</h2>
 <div class="note">
-<p><strong>Submitted code is only partly sandboxed so far</strong> (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>).
-Since step 3, every run is inside bubblewrap (see Judging), and <code>make sandbox-test</code> reports 10 of its 11 probes contained.
-What's still open:</p>
+<p><strong>Submitted code is sandboxed, but not fully hardened yet</strong> (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>).
+Since step 4, compiling and running are both inside bubblewrap (see Judging), and <code>make sandbox-test</code> reports all 13 probes contained.
+Step 4 closed three gaps: compilers reading host files (<code>#include</code>, G7); the C++ compile timeout leaving <code>cc1plus</code> running
+(G10, measured at 137&nbsp;s with a 1&nbsp;s timeout before the fix); and compilers with no memory limit (a 257-byte template source went
+from 2&nbsp;GB and growing to a Compile Error after 6.6&nbsp;s). What's still open:</p>
 <ul>
-  <li><strong>The compilers aren't sandboxed</strong> (step 4). A C++ <code>#include</code> of an absolute path still reads any file the
-  server's user can read, and shows it in the compile error. That's probe G7.</li>
-  <li><strong>The C++ compile timeout doesn't stop the compiler</strong> (found 2026-11-02, probe G10; step 4). <code>g++</code> is only a
-  driver, and the compiler proper is its child <code>cc1plus</code>. Killing <code>g++</code> after 10&nbsp;s leaves <code>cc1plus</code> running,
-  holding the judge's output pipe open, so the judge doesn't answer until it finishes. Measured with a 1&nbsp;s timeout: 137&nbsp;s.
-  A 300-byte source can compile for minutes.</li>
-  <li><strong>Nothing limits the compilers' memory</strong> (found 2026-11-02; step 4). A 257-byte C++ source of exponential templates
-  made <code>cc1plus</code> grow to 2&nbsp;GB within 20&nbsp;s, and it was still growing.</li>
   <li><strong>No seccomp filter</strong> (step 6).</li>
   <li><strong>No cgroup limits</strong> (step 7). Memory is capped per language, as before, and the 64&nbsp;MB <code>/tmp</code> is kernel memory.
   The CPU limit is per process, so a submission that forks gets 10&nbsp;s of CPU per process.</li>
@@ -387,6 +384,7 @@ of 5000, because the orphan held the output pipe open. <strong>Step 3 closed all
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 4): <code>g++</code>, <code>javac</code> and <code>dmd</code> run inside bubblewrap with the run limits. The work folder is writable at <code>/work</code> only while compiling, and the helpers are read-only. Compilers also get memory caps: 1&nbsp;GB of address space for <code>g++</code> and <code>dmd</code>, and a 256&nbsp;MB heap for <code>javac</code>. Real harness compiles fit in 512&nbsp;MB (measured). The three compile functions became one (<code>compileCommand</code>, <code>compileSubmission</code>, <code>sandboxedArgs</code>). When the server is root, the work folder is handed to <code>nobody</code> so the compiler can write to it. Escape test: 13 of 13 contained, as root and as <code>nobody</code>. Correct answers are Accepted in all five languages, sandboxed and with the override. Starter-code verdicts are unchanged in all 65 runs, and compile errors now show <code>/work/…</code> paths.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Added</strong> (owner asked how time is limited): a CPU-time limit per run process, 10&nbsp;s soft and 11&nbsp;s hard, reported as <em>Time Limit Exceeded</em>. There are two new escape-test probes. G6d (one process busy on every core) is contained: stopped after 2.6&nbsp;s of wall-clock time on 4 cores, and without the limit it ran the full 5&nbsp;s. G10 (a compile longer than the limit) is ESCAPED until step 4. Found while answering: the C++ compile timeout leaves <code>cc1plus</code> running, and compilers have no memory limit (see Known gaps).</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 3): every run, in all five languages and both judge modes, runs inside bubblewrap. Its folder is read-only at <code>/work</code>, and <code>prlimit</code> sets 128 processes, 16&nbsp;MB per file and no core dumps <em>inside</em> the sandbox. Measured: set outside, with 150 of the user's processes already running, bwrap couldn't even start. When the server is root, sandboxes run as <code>nobody</code>: root ignored a 64-process limit. Escape test: 10 of 11 contained, both as root and as <code>nobody</code>; G7 (compile time) is left for step 4. Correct Two Sum and Hello World answers are Accepted in every language, and starter-code verdicts are unchanged in all 65 runs.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner): <code>make run</code> and <code>make dev</code> install the sandbox's dependencies themselves (option c, over an explicit-only target), via <code>scripts/sandbox-deps.sh</code>. The cloud hook uses the same script. It only touches AppArmor if a minimal bubblewrap fails <em>and</em> the restriction is on. In the cloud, as root, it installed bubblewrap when missing and did nothing when present. Its AppArmor branch was checked only with stand-in commands (fake <code>sudo</code>, <code>apt-get</code>, <code>apparmor_parser</code>, <code>bwrap</code>), because the cloud has no AppArmor.</td></tr>

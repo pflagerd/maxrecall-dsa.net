@@ -14,8 +14,8 @@ It listens on two ports, both on `127.0.0.1`:
   must never point at 3001.
 
 **Why it's set up this way.** Since 2026-11-02 (sandboxing step 3),
-submitted code *runs* inside the judge's own bubblewrap sandbox
-(`readme.html` §6), but the compilers don't yet (step 4), and there are no
+submitted code is compiled and run inside the judge's own bubblewrap
+sandbox (`readme.html` §6; compilers since step 4), but there are no
 seccomp or cgroup limits yet (steps 6–7). As an outer layer, the server:
 
 - runs as its own unprivileged user, `maxrecall`;
@@ -30,8 +30,8 @@ so act as you. It could also read the service's starting environment from
 `/proc/<pid>/environ`, including `MAXRECALL_PASSWORD` if `test.env` sets it.
 Inside the sandbox, a running submission sees none of that: it has its own
 network (loopback only), its own process list and its own file view. It
-still uses CPU and memory within its limits. And the compiler can still read
-files through a C++ `#include`, until step 4.
+still uses CPU and memory within its limits. The compilers run in the same
+kind of sandbox.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
 your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.

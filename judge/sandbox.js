@@ -173,18 +173,22 @@ function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
   };
 }
 
-// sandboxedCommand plus RUN_LIMITS, for running a submission.
-function sandboxedRun(command, args, options) {
+// sandboxedCommand plus RUN_LIMITS, for running a submission or compiling
+// it. addressSpaceBytes adds an RLIMIT_AS cap (prlimit --as), which children
+// inherit: used for compilers, whose memory is otherwise unlimited.
+function sandboxedRun(command, args, { addressSpaceBytes, ...options } = {}) {
   const limits = [`--nproc=${RUN_LIMITS.nproc}`, `--fsize=${RUN_LIMITS.fsizeBytes}`, `--cpu=${RUN_LIMITS.cpuSoftSeconds}:${RUN_LIMITS.cpuHardSeconds}`, '--core=0'];
+  if (addressSpaceBytes) limits.push(`--as=${addressSpaceBytes}`);
   return sandboxedCommand('prlimit', [...limits, '--', command, ...args], options);
 }
 
 // Makes a submission's work folder usable from inside the sandbox. When the
-// server is root, sandboxes run as nobody, so the folder (made 0700 by
-// mkdtemp) must let others through. 0711 lets them open files whose names
-// they know, without listing the folder.
+// server is root, sandboxes run as nobody, and the compiler (writing the
+// binary or classes) must be able to write to it, so it's handed to nobody.
+// root, the server, can still read and delete it. Otherwise it stays as
+// mkdtemp made it: the server's user's, 0700.
 function prepareWorkDir(dir) {
-  if (RUNNING_AS_ROOT) fs.chmodSync(dir, 0o711);
+  if (RUNNING_AS_ROOT) fs.chownSync(dir, NOBODY_UID, NOBODY_UID);
 }
 
 // Run inside the sandbox once at startup. It fails, printing why, if the
@@ -230,7 +234,7 @@ const status = Object.freeze({ ...runSelfTest(), unsandboxedOverride: UNSANDBOXE
 function describeSandbox() {
   if (status.ok) {
     const who = RUNNING_AS_ROOT ? ', as nobody because the server is root' : '';
-    return `${status.version} works (self-test passed); submissions run inside it${who}. Compilers don't yet (sandboxing step 4)`;
+    return `${status.version} works (self-test passed); compilers and submissions run inside it${who}`;
   }
   if (status.unsandboxedOverride) {
     return `UNAVAILABLE (${status.reason}), but MAXRECALL_UNSANDBOXED=1, so judging is allowed WITHOUT a sandbox`;

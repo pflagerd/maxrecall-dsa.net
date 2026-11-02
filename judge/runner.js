@@ -332,87 +332,6 @@ void main() {
 `;
 }
 
-// Compiles a .cpp file to a binary with its own timeout, separate from the
-// run timeout below (compilation can legitimately take longer than running
-// trivial test cases, especially for templates).
-function compileCpp(sourceFile, binaryFile) {
-  return new Promise((resolve) => {
-    const child = spawn('g++', ['-std=c++17', '-O2', '-o', binaryFile, sourceFile, CPP_JSON_OBJECT], {
-      env: SUBMISSION_ENV,
-      timeout: CPP_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
-// Compiles Main.java to outDir/Main.class (plus Solution.class and any other
-// top-level classes spliced into the same file), with JudgeJson.class found
-// on the classpath rather than recompiled alongside it.
-function compileJava(sourceFile, outDir) {
-  return new Promise((resolve) => {
-    const child = spawn('javac', ['-cp', JAVA_DIR, '-d', outDir, sourceFile], {
-      env: SUBMISSION_ENV,
-      timeout: JAVA_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
-// Compiles main.d to a binary in the submission's work folder (-od puts the
-// stray .o object file dmd leaves there too, so it's cleaned up with the
-// folder rather than littering the system tmp dir).
-function compileD(sourceFile, binaryFile, outDir) {
-  return new Promise((resolve) => {
-    const child = spawn('dmd', [`-of=${binaryFile}`, `-od=${outDir}`, sourceFile], {
-      env: SUBMISSION_ENV,
-      timeout: D_COMPILE_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    });
-
-    let stderr = '';
-    let timedOut = false;
-
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut });
-    });
-    child.on('close', (code, signal) => {
-      if (signal === 'SIGKILL' || signal === 'SIGTERM') timedOut = true;
-      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
-    });
-  });
-}
-
 // For a submission that fails before/without producing any usable output at
 // all (compile error, timeout, no valid JSON produced): every test case
 // fails identically, so only the first gets input/error attached — the
@@ -458,17 +377,78 @@ function makeWorkDir() {
   return workDir;
 }
 
-// Where the submission's folder and the Java helpers appear to the running
-// submission: /work and /judge/java inside the sandbox (both read-only), or
+// Where the submission's folder and the judge's helpers appear to the
+// compiler and the running submission: fixed paths inside the sandbox, or
 // their real paths when judging without one (MAXRECALL_UNSANDBOXED=1).
-function runPaths(workDir) {
+// Inside, the helpers are read-only, and /work is writable only while
+// compiling (sandboxedArgs).
+const SANDBOX_PATHS = Object.freeze({ work: '/work', javaHelpers: '/judge/java', cppHelperObject: '/judge/cpp/judge_json.o' });
+function judgePaths(workDir) {
   return sandboxStatus.ok
-    ? { work: '/work', javaHelpers: '/judge/java' }
-    : { work: workDir, javaHelpers: JAVA_DIR };
+    ? SANDBOX_PATHS
+    : { work: workDir, javaHelpers: JAVA_DIR, cppHelperObject: CPP_JSON_OBJECT };
+}
+
+// Memory caps for compilers, which had none (a 257-byte C++ source of
+// exponential templates took cc1plus to 2 GB in 20 s). g++ and dmd get an
+// address-space cap (RLIMIT_AS), which their child processes (cc1plus, as,
+// ld) inherit; the harness compiles fine under 512 MB (measured), so 1 GB
+// leaves room. javac is a JVM, which reserves more address space than it
+// uses, so like java at run time it gets a heap cap (-J passes -Xmx to the
+// JVM running javac) instead.
+const COMPILER_ADDRESS_SPACE_BYTES = 1024 * 1024 * 1024;
+const JAVAC_HEAP_MB = 256;
+
+// How to compile a submission: { argv, timeoutMs, addressSpaceBytes }, in
+// the paths the compiler sees, or null for interpreted languages.
+function compileCommand(language, paths) {
+  const file = (name) => path.posix.join(paths.work, name);
+  switch (language) {
+    case 'cpp':
+      // judge_json.o is the precompiled JSON helper (ensureCppJsonObjectBuilt).
+      return {
+        argv: ['g++', '-std=c++17', '-O2', '-o', file(BINARY_FILE_NAME), file(SOURCE_FILE_NAMES.cpp), paths.cppHelperObject],
+        timeoutMs: CPP_COMPILE_TIMEOUT_MS,
+        addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
+      };
+    case 'java':
+      // Writes Main.class, Solution.class and any other top-level classes
+      // into the work folder; JudgeJson.class is found on the classpath.
+      return {
+        argv: ['javac', `-J-Xmx${JAVAC_HEAP_MB}m`, '-cp', paths.javaHelpers, '-d', paths.work, file(SOURCE_FILE_NAMES.java)],
+        timeoutMs: JAVA_COMPILE_TIMEOUT_MS,
+      };
+    case 'd':
+      // -od puts the object file dmd leaves behind in the work folder too.
+      return {
+        argv: ['dmd', `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d)],
+        timeoutMs: D_COMPILE_TIMEOUT_MS,
+        addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
+      };
+    default:
+      return null;
+  }
+}
+
+// What to spawn for a compiler or a submission: inside the sandbox when it
+// works, with workDir at /work (writable only for compiling), the helpers
+// read-only, and RUN_LIMITS; otherwise the command itself, started in
+// workDir. Killing the result kills bwrap, and with it everything inside.
+function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes } = {}) {
+  if (!sandboxStatus.ok) return { command, args, cwd: workDir };
+  return sandboxedRun(command, args, {
+    binds: [
+      { hostPath: workDir, sandboxPath: SANDBOX_PATHS.work, writable: writableWork },
+      { hostPath: JAVA_DIR, sandboxPath: SANDBOX_PATHS.javaHelpers },
+      { hostPath: CPP_JSON_OBJECT, sandboxPath: SANDBOX_PATHS.cppHelperObject },
+    ],
+    cwd: SANDBOX_PATHS.work,
+    addressSpaceBytes,
+  });
 }
 
 // The command line ([command, ...args]) that runs a submission, in the
-// paths it sees (runPaths).
+// paths it sees (judgePaths).
 function runCommand(language, judgeMode, paths) {
   const file = (name) => path.posix.join(paths.work, name);
   switch (language) {
@@ -497,32 +477,48 @@ function runCommand(language, judgeMode, paths) {
   }
 }
 
-// Compiles the submission in workDir, for compiled languages; resolves to
-// null for interpreted ones. Not sandboxed yet (sandboxing step 4).
+// Compiles the submission in workDir, for compiled languages, with its own
+// timeout (compiling can legitimately take longer than running trivial test
+// cases). Resolves to { success, stderr, timedOut }, or null for interpreted
+// languages. Hitting the CPU-time limit counts as timing out. Since the
+// compiler runs inside the sandbox, killing it on timeout kills all of it:
+// g++'s child cc1plus used to survive and hold the judge's pipe open.
 function compileSubmission(language, workDir) {
-  const sourceFile = path.join(workDir, SOURCE_FILE_NAMES[language]);
-  const binaryFile = path.join(workDir, BINARY_FILE_NAME);
-  if (language === 'cpp') return compileCpp(sourceFile, binaryFile);
-  if (language === 'java') return compileJava(sourceFile, workDir);
-  if (language === 'd') return compileD(sourceFile, binaryFile, workDir);
-  return Promise.resolve(null);
+  const compile = compileCommand(language, judgePaths(workDir));
+  if (!compile) return Promise.resolve(null);
+  const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes });
+  return new Promise((resolve) => {
+    const child = spawn(proc.command, proc.args, {
+      env: SUBMISSION_ENV,
+      cwd: proc.cwd,
+      timeout: compile.timeoutMs,
+      killSignal: 'SIGKILL',
+    });
+
+    let stderr = '';
+    let timedOut = false;
+
+    child.stderr.on('data', (chunk) => {
+      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+    });
+    child.on('error', (err) => {
+      resolve({ success: false, stderr: String(err.message || err), timedOut });
+    });
+    child.on('close', (code, signal) => {
+      if (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE) timedOut = true;
+      resolve({ success: code === 0 && !timedOut, stderr, timedOut });
+    });
+  });
 }
 
-// Runs one submission process, inside the sandbox when it works: workDir is
-// /work and judge/java is /judge/java, both read-only, and RUN_LIMITS apply
-// (judge/sandbox.js). Killing it on timeout kills bwrap, and with it
-// everything inside (--die-with-parent, and the PID namespace's end).
-function spawnJudged([command, ...args], stdinPayload, workDir) {
-  const run = sandboxStatus.ok
-    ? sandboxedRun(command, args, {
-      binds: [{ hostPath: workDir, sandboxPath: '/work' }, { hostPath: JAVA_DIR, sandboxPath: '/judge/java' }],
-      cwd: '/work',
-    })
-    : { command, args };
+// Runs one submission process: inside the sandbox when it works, with its
+// folder read-only at /work (sandboxedArgs).
+function spawnJudged(argv, stdinPayload, workDir) {
+  const proc = sandboxedArgs(argv, workDir);
   return new Promise((resolve) => {
-    const child = spawn(run.command, run.args, {
+    const child = spawn(proc.command, proc.args, {
       env: SUBMISSION_ENV,
-      cwd: sandboxStatus.ok ? undefined : workDir,
+      cwd: proc.cwd,
       timeout: TIMEOUT_MS,
       killSignal: 'SIGKILL',
     });
@@ -597,7 +593,7 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
     }
 
     const stdinPayload = JSON.stringify(testCases.map((tc) => ({ args: tc.args })));
-    const outcome = await spawnJudged(runCommand(language, 'function', runPaths(workDir)), stdinPayload, workDir);
+    const outcome = await spawnJudged(runCommand(language, 'function', judgePaths(workDir)), stdinPayload, workDir);
     const runtimeMs = Date.now() - started;
 
     if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
@@ -716,7 +712,7 @@ async function runProgramSubmission({ language, code, testCases }) {
         };
       }
     }
-    const command = runCommand(language, 'program', runPaths(workDir));
+    const command = runCommand(language, 'program', judgePaths(workDir));
 
     let passedCount = 0;
     let anyTimedOut = false;
