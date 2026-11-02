@@ -2,7 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, findOnPath, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
 const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
@@ -79,6 +79,29 @@ function ensureJudgeJsonClassBuilt() {
   execFileSync('javac', ['-d', JAVA_DIR, sourceFile]);
 }
 ensureJudgeJsonClassBuilt();
+
+// Copies the prebuilt helpers into HELPER_DIR (judge/sandbox.js), which
+// every sandbox sees read-only at /judge: cpp/judge_json.o and java/*.class.
+// Not bound from the checkout, which the sandbox's user may not be able to
+// enter (/root on the VPS). Permissions are set explicitly, because a copy
+// can keep a strict mode from the checkout.
+function stageHelpers() {
+  const cppDir = path.join(HELPER_DIR, 'cpp');
+  const javaDir = path.join(HELPER_DIR, 'java');
+  for (const dir of [cppDir, javaDir]) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.chmodSync(dir, 0o755);
+  }
+  const copy = (from, to) => {
+    fs.copyFileSync(from, to);
+    fs.chmodSync(to, 0o644);
+  };
+  copy(CPP_JSON_OBJECT, path.join(cppDir, 'judge_json.o'));
+  for (const name of fs.readdirSync(JAVA_DIR).filter((n) => n.endsWith('.class'))) {
+    copy(path.join(JAVA_DIR, name), path.join(javaDir, name));
+  }
+}
+stageHelpers();
 
 // Maps a C++ parameter type (as written in a problem's signature.cpp.params)
 // to the judge_json.hpp helper that extracts it from a JsonValue.
@@ -395,7 +418,11 @@ function makeWorkDir() {
 // their real paths when judging without one (MAXRECALL_UNSANDBOXED=1).
 // Inside, the helpers are read-only, and /work is writable only while
 // compiling (sandboxedArgs).
-const SANDBOX_PATHS = Object.freeze({ work: '/work', javaHelpers: '/judge/java', cppHelperObject: '/judge/cpp/judge_json.o' });
+const SANDBOX_PATHS = Object.freeze({
+  work: '/work',
+  javaHelpers: path.posix.join(HELPER_SANDBOX_PATH, 'java'),
+  cppHelperObject: path.posix.join(HELPER_SANDBOX_PATH, 'cpp', 'judge_json.o'),
+});
 function judgePaths(workDir) {
   return sandboxStatus.ok
     ? SANDBOX_PATHS
@@ -453,8 +480,7 @@ function sandboxedArgs([command, ...args], workDir, { writableWork = false, addr
   return sandboxedRun(command, args, {
     binds: [
       { hostPath: workDir, sandboxPath: SANDBOX_PATHS.work, writable: writableWork },
-      { hostPath: JAVA_DIR, sandboxPath: SANDBOX_PATHS.javaHelpers },
-      { hostPath: CPP_JSON_OBJECT, sandboxPath: SANDBOX_PATHS.cppHelperObject },
+      { hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH },
     ],
     cwd: SANDBOX_PATHS.work,
     addressSpaceBytes,

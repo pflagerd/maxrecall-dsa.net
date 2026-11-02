@@ -296,8 +296,19 @@ async function runPythonProbe(probe) {
 
   if (!probe.checkOrphan) return { ...readVerdict(result), runtimeMs: result.runtimeMs };
 
-  // Orphan probes: the verdict comes from outside. Give the judge's own
-  // cleanup (and, later, the sandbox's teardown) a moment first.
+  // Orphan probes: the verdict comes from outside, but only if the
+  // submission really ran: no orphan is left behind by a submission that
+  // never started (on the VPS on 2026-11-02, bwrap failed every run and
+  // these probes wrongly said "contained"). After-return needs the probe's
+  // own return value back; after-timeout needs Time Limit Exceeded.
+  const ran = probe.checkOrphan === 'after-return'
+    ? /^started an orphan/.test((result.results && result.results[0] && result.results[0].actual) || '')
+    : result.status === 'Time Limit Exceeded';
+  if (!ran) {
+    killAll(findProcesses(`${TOKEN}-${probe.checkOrphan}`));
+    return { ...readVerdict(result), verdict: 'inconclusive', runtimeMs: result.runtimeMs };
+  }
+  // Give the judge's own cleanup (and the sandbox's teardown) a moment.
   await sleep(1500);
   const leftovers = findProcesses(`${TOKEN}-${probe.checkOrphan}`);
   killAll(leftovers);
@@ -321,7 +332,11 @@ async function runCompileProbe(canaryHeader) {
   if (result.status === 'Accepted') {
     return { verdict: 'ESCAPED', detail: `compiled with ${canaryHeader} included`, runtimeMs: result.runtimeMs };
   }
-  if (result.status === 'Compile Error' && /No such file|cannot open|Permission denied/.test(result.error || '')) {
+  // Only the compiler's own complaint about the canary header counts, not
+  // any failure: on the VPS on 2026-11-02 bwrap's "Permission denied" was
+  // taken for the compiler's, and this probe wrongly said "contained".
+  const error = result.error || '';
+  if (result.status === 'Compile Error' && !/^bwrap:/m.test(error) && /canary\.h/.test(error) && /No such file|cannot open|Permission denied/.test(error)) {
     return { verdict: 'contained', detail: 'compiler could not open the canary header', runtimeMs: result.runtimeMs };
   }
   return { verdict: 'inconclusive', detail: `judge said ${result.status}: ${(result.error || '').split('\n')[0]}`, runtimeMs: result.runtimeMs };
@@ -410,6 +425,10 @@ async function runSlowCompileProbe() {
     return leftovers.length
       ? { verdict: 'ESCAPED', detail: `judge said the compile timed out, but ${leftovers.length} compiler process(es) kept running (now killed)`, runtimeMs: elapsed }
       : { verdict: 'contained', detail: 'compile stopped at the time limit, nothing left running', runtimeMs: elapsed };
+  }
+  const why = (result.error || '').split('\n').filter(Boolean)[0] || '';
+  if (/^bwrap:/.test(why)) {
+    return { verdict: 'inconclusive', detail: `judge said ${result.status}: ${why}`, runtimeMs: elapsed };
   }
   return { verdict: 'inconclusive', detail: `compile finished in ${elapsed} ms (${result.status}): not slow enough on this machine to test the limit`, runtimeMs: elapsed };
 }

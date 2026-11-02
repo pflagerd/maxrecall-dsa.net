@@ -9,6 +9,7 @@
 
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 // The whole environment compilers and submissions get, instead of a copy of
@@ -66,6 +67,21 @@ const NOBODY_UID = 65534;
 const TOOLCHAIN_COMMANDS = ['node', 'python3', 'g++', 'javac', 'java', 'ldc2', 'dmd'];
 
 const REPO_DIR = path.join(__dirname, '..');
+
+// The judge's prebuilt helpers (judge_json.o, the JudgeJson classes) are
+// copied here at startup (judge/runner.js, stageHelpers) and bound into
+// every sandbox read-only at HELPER_SANDBOX_PATH, rather than bound from
+// the checkout. The checkout may be somewhere the sandbox's user can't
+// enter: on the VPS on 2026-11-02 it was /root/maxrecall-dsa.net, run by
+// root, so sandboxes ran as nobody and every run failed with "Can't find
+// source path /root/maxrecall-dsa.net/judge/java: Permission denied".
+// mkdtemp makes it owner-only, so when root (sandboxes as nobody) it's
+// opened up for reading; the helpers aren't secret, they're in the repo.
+// Removed when the server exits.
+const HELPER_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-helpers-'));
+const HELPER_SANDBOX_PATH = '/judge';
+if (RUNNING_AS_ROOT) fs.chmodSync(HELPER_DIR, 0o755);
+process.on('exit', () => fs.rmSync(HELPER_DIR, { recursive: true, force: true }));
 
 function findOnPath(command) {
   for (const dir of (SUBMISSION_ENV.PATH || '').split(path.delimiter)) {
@@ -274,7 +290,11 @@ function runSelfTest() {
   }
 
   const toolchains = TOOLCHAIN_COMMANDS.filter((c) => findOnPath(c));
-  const { command, args } = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains]);
+  // Binds the helper folder the way every run does, so a folder the
+  // sandbox's user can't reach fails here, at startup, not on every Run.
+  const { command, args } = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains], {
+    binds: [{ hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH }],
+  });
   const result = spawnSync(command, args, { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 10000 });
   if (result.error) return { ok: false, version: versionText, reason: `couldn't run bwrap: ${result.error.message}` };
   if (result.status !== 0 || result.stdout.trim() !== 'ok') {
@@ -313,4 +333,4 @@ function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }
 
-module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, findOnPath, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };
+module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };

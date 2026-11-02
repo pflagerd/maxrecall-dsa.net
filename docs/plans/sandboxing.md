@@ -604,6 +604,42 @@ The owner ran `make sandbox-test |& tee output.lst` as **root** in
 - Still to do on the VPS: the JDK, Node 22, and fixing root's `PATH`.
 
 
+### Step 5, VPS part: third run (2026-11-02, owner's run)
+
+Run as root in `/root/maxrecall-dsa.net`, with `PATH` cut down to the
+system folders (`PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+make sandbox-test`, which is systemd's service `PATH` plus `/sbin:/bin`).
+
+- `toolchain-deps` installed `default-jdk-headless` (OpenJDK 21.0.12) and
+  `ldc` (1.36.0), then Node 22.23.4 into `/usr/local` (`SHASUMS256.txt`:
+  OK). `sandbox-deps`: works, since the profile was already loaded.
+- **Every run failed:** `bwrap: Can't find source path
+  /root/maxrecall-dsa.net/judge/java: Permission denied`. The judge's
+  helpers (`judge/java`, `judge/cpp/judge_json.o`) were bound from the
+  checkout. Sandboxes ran as `nobody` because the server was root, and
+  `nobody` can't enter `/root`. The startup self-test passed because it
+  didn't bind the helpers.
+  - **Fix:** `judge/sandbox.js` makes `HELPER_DIR`
+    (`/tmp/judge-helpers-XXXXXX`, opened to others when root, removed on
+    exit). `judge/runner.js` copies `judge_json.o` and the `JudgeJson*.class`
+    files into it (`stageHelpers`, with explicit 0755/0644 modes). Every
+    sandbox binds it read-only at `/judge`, and so does the startup
+    self-test.
+- **The escape test gave false passes:** G5a, G5b and G7 said *contained*
+  although nothing ran. No orphan was found because none was started, and
+  G7 took bwrap's “Permission denied” for the compiler's.
+  - **Fix:** G5a needs the probe's own return value, G5b needs *Time Limit
+    Exceeded*, and G7 needs a compile error naming `canary.h` that isn't
+    from bwrap. Anything else is *inconclusive*. (G10 also shows bwrap's
+    error as *inconclusive*.)
+- **Checked** with a copy of the checkout under this container's `/root`
+  (`drwx------`), run as root: the old judge plus the new escape test gave
+  13 *inconclusive*; the new judge gave 13 of 13 contained. With `TMPDIR`
+  inside `/root`, the startup self-test fails naming the helper folder.
+  Correct answers are still Accepted in all five languages (sandboxed, as
+  `nobody`, and with the override), the starter-code verdicts are unchanged,
+  and no `judge-*` folders are left behind.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).
