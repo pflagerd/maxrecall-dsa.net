@@ -454,25 +454,44 @@ async function runCpuProbe() {
 // the submission cgroup's 768 MB. Only cgroups cap that (sandboxing step 7).
 // Pages are written to, not just reserved, so they really count. Where
 // cgroups aren't in use (anywhere but the VPS service) it's skipped and
-// allocates nothing.
+// allocates nothing. Until 2026-11-02 each child slept 2 s holding its
+// memory, which used up most of the 5 s time limit before any limit could
+// act (G12 timed out on the VPS at a 521 MB peak); now they hold it only
+// until all four have it.
 const MEMORY_PROBE = `
 import os
 def probe():
     n = 200 * 1024 * 1024
+    # Each child reports on "ready" once its 200 MB is written, then holds
+    # it until the parent closes "go". The parent counts reports until EOF
+    # on "ready": every child has reported and closed its end, or died. So
+    # a child killed for using too much memory can't leave the others
+    # waiting, and no fixed sleep uses up the time limit.
+    ready_r, ready_w = os.pipe()
+    go_r, go_w = os.pipe()
     children = []
     for i in range(4):
         pid = os.fork()
         if pid == 0:
+            os.close(ready_r)
+            os.close(go_w)
             b = bytearray(n)
             b[::4096] = b'\\x01' * len(range(0, n, 4096))
-            import time
-            time.sleep(2)
+            os.write(ready_w, b'x')
+            os.close(ready_w)
+            os.read(go_r, 1)
             os._exit(0)
         children.append(pid)
+    os.close(ready_w)
+    os.close(go_r)
+    ready = 0
+    while os.read(ready_r, 1):
+        ready += 1
+    os.close(go_w)
     statuses = [os.waitpid(pid, 0)[1] for pid in children]
     killed = sum(1 for st in statuses if os.WIFSIGNALED(st))
     if killed:
-        return 'contained: %d of 4 processes were killed' % killed
+        return 'contained: %d of 4 processes were killed, %d had their 200 MB' % (killed, ready)
     return 'ESCAPED: 4 processes held 800 MB together'
 `;
 

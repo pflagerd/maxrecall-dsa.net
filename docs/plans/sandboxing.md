@@ -895,8 +895,23 @@ io_uring_setup, kcmp, keyctl, ptrace`.
     removed, so the next run shows what happened. Checked with a fake
     cgroup: limit reached then timed out gives the new message; timed out
     without reaching it gives plain “Time limit exceeded.”.
-- **Still to test on the VPS:** a second run of the above, then the
-  service itself after the merge.
+- **Second VPS run: the hypothesis was wrong.** G12 timed out again, with
+  `[cgroup: peak 521 MB, limit reached 0 time(s), 0 OOM kill(s)]`. The
+  limit was never reached; the four processes simply hadn't allocated
+  800 MB within 5 s.
+  - The probe itself spent 2 s of the 5 sleeping: each child held its
+    memory for a fixed 2 s. Here, without cgroups, the full-size probe took
+    3.8 s, although `bytearray(200 MB)` takes 0.18 s.
+  - **Changed:** the children report "ready" through a pipe and hold their
+    memory only until all four have it, or until the rest are dead (EOF),
+    so a killed child can't leave the others waiting. Now 1.6 s here.
+    Simulating a child killed at once gives “contained: 1 of 4 processes
+    were killed, 3 had their 200 MB” in 0.18 s.
+  - **Still unexplained:** about 100 MB/s on the VPS against over 1 GB/s
+    here. Either `cpu.max` (one CPU for four processes) or slow first-touch
+    memory on the VPS. To be measured there, not guessed.
+- **Still to test on the VPS:** that measurement, a third run of the
+  escape test, then the service itself after the merge.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
