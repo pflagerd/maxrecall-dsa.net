@@ -1,7 +1,7 @@
 # Plan: sandbox submitted code
 
-Status: **proposed 2026-11-02. Nothing is built yet, and no option is chosen.**
-The owner decides D1–D6 below before any code changes.
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Step 0 done
+2026-11-02; step 1 next.**
 Linked from `readme.html` → Decisions & plans.
 
 ## 1. The problem today
@@ -63,7 +63,9 @@ Each submission (compile and run) should get:
    No repo, no `questions/`, no `users/`, no `auth/`, no `/proc` of the
    host. That closes G2, G3 and G7.
 2. **No network at all.** This includes host loopback. That closes G4 and G8.
-3. **An empty environment** (plus `PATH`). That closes G1.
+3. **An empty environment** (plus `PATH`), both for bwrap itself and for
+   what it runs. That closes G1. Step 0 showed that `--clearenv` alone
+   isn't enough (§5).
 4. **Its own PID namespace,** killed as a whole. When the judge kills the
    sandbox, every process in it dies. That closes G5.
 5. **No privileges:** no capabilities, `no_new_privs`, no nested user
@@ -186,6 +188,15 @@ Notes:
   `#include "/etc/passwd"` failed to compile with “No such file”;
   `unshare --user` inside failed; and **killing the outer bwrap killed an
   orphaned, `setsid()`ed child within about a second** (G5 fixed).
+- **`--clearenv` doesn't hide bwrap's own environment.** It clears only the
+  environment of the program bwrap finally runs. bwrap's own PID 1 inside
+  the sandbox, the helper that reaps exited processes, keeps the environment
+  Node started bwrap with. A submission running as the same uid can read it
+  from `/proc/1/environ` ([proc_pid_environ(5)](https://man7.org/linux/man-pages/man5/proc_pid_environ.5.html)
+  shows a process's *starting* environment). Step 0's trial measured this:
+  G1 still escaped through `/proc/1/environ`. So the judge must call
+  `spawn('bwrap', …, { env: { PATH } })` as well as passing `--clearenv`.
+  That makes step 1 a requirement, not only a quick win.
 - **Limits** are set with `prlimit` (util-linux) before bwrap, or in a tiny
   wrapper. I measured these:
   - `--nproc=50` stopped a fork loop at 47 children.
@@ -239,8 +250,8 @@ Notes:
 
 | Step | What | Check |
 |---|---|---|
-| 0 | **An escape test first:** `judge/sandbox-selftest.js` (or `make sandbox-test`) runs hostile submissions through `runSubmission` and reports each of G1–G8 as *contained* or *ESCAPED*. Run it now to see the gaps, then after each step. | Today: most lines say ESCAPED. |
-| 1 | Quick win: pass `env: { PATH }` to every `spawn` in the runner. | The G1 env test is contained. `/proc/<ppid>/environ` is still readable until step 3. |
+| 0 | **Done 2026-11-02.** An escape test: `judge/sandbox-selftest.js` (`make sandbox-test`) runs hostile submissions through `runSubmission` and reports each of G1–G8 as *contained* or *ESCAPED*. Run it after each step. | Cloud, 2026-11-02: 10 ESCAPED, 1 contained (G6c, the existing memory cap). See “Step 0 results” below. |
+| 1 | Pass `env: { PATH }` to every `spawn` in the runner. It's needed for bwrap too (§5), not only as a quick win. | G1's own-env check is contained. `/proc/<pid>/environ` of the *server* is still readable until step 3, so G1 still says ESCAPED until then. |
 | 2 | `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to `docs/deploy-vps.md` §1 and the cloud SessionStart hook. | The self-test passes in the cloud. The server refuses to judge if bwrap is removed. |
 | 3 | Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Every existing question still passes its starter solution; selftest G2–G6, G8 contained. |
 | 4 | Compile step under bwrap. | G7 contained; C++/Java/D still compile. |
@@ -252,7 +263,33 @@ Notes:
 Each step updates `readme.html` (Judging, Known gaps, Environments,
 Decisions) in the same commit.
 
-## 7. Decisions needed from the owner
+### Step 0 results (cloud session, 2026-11-02)
+
+The probes and what they plant are described at the top of
+`judge/sandbox-selftest.js`. Unsandboxed, as the judge is today:
+
+| Probe | Result | Detail |
+|---|---|---|
+| G1 env | ESCAPED | canary in `os.environ` (175 variables) |
+| G2 questions | ESCAPED | read `questions/two-sum.json`, hidden cases included |
+| G3 private files | ESCAPED | read the owner-only canary file and wrote next to it |
+| G4 loopback port | ESCAPED | connected to the test's `127.0.0.1` listener |
+| G5a orphan after return | ESCAPED | still running 1.5 s later |
+| G5b orphan after timeout | ESCAPED | still running 1.5 s after *Time Limit Exceeded* |
+| G6a 300 processes | ESCAPED | all 300 started |
+| G6b 100 MB file | ESCAPED | written |
+| G6c 1 GB allocation | contained | `MemoryError` (the existing `RLIMIT_AS` cap) |
+| G7 compile-time read | ESCAPED | C++ compiled with the canary header `#include`d |
+| G8 network | ESCAPED | interfaces `lo`, `ifb0`, `ifb1`, `eth0`; direct connect to 1.1.1.1:443 worked |
+
+**Check on the test itself.** A throwaway wrapper, not committed, routed
+the Python run step through bwrap and `prlimit --nproc=64 --fsize=10M`, as
+`nobody`. Then 9 of 11 were contained. G7 still escaped, as expected,
+because the compiler wasn't wrapped. G1 still escaped through
+`/proc/1/environ`, the finding in §5. So the probes can report both
+outcomes, and they caught a gap in the design.
+
+## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).
 - **D2.** If the sandbox is unavailable: fail closed, with

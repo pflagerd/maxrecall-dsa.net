@@ -1,4 +1,4 @@
-.PHONY: all install build run dev clean
+.PHONY: all install build run dev clean sandbox-test
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -35,6 +35,11 @@ run: build
 dev: build
 	$(OPEN_BROWSER)
 	PORT=$(PORT) npx nodemon server.js
+
+# Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
+# code and reports each probe as contained or ESCAPED. Fails if any escaped.
+sandbox-test:
+	node judge/sandbox-selftest.js
 
 # Remove installed dependencies
 clean:
