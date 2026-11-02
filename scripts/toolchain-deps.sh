@@ -29,6 +29,19 @@ NODE_SHA256_ARM64=6287aa46b6c375d816e63ae66d024fbbfd70404825aabdfdf898a970871d2f
 NODE_PREFIX=/usr/local
 NODE_MIN_MAJOR=22
 
+# End-of-life dates per Node major version, from the Node.js Release team's
+# schedule (https://github.com/nodejs/Release/blob/main/schedule.json, read
+# 2026-11-02). Odd majors are "Current" releases that never become LTS and
+# end about eight months after they start. Used only to warn, never to stop:
+# node_warning. Majors not listed (newer than this table) get no warning.
+NODE_END_OF_LIFE=(
+  [18]=2025-04-30 [19]=2023-06-01 [20]=2026-04-30 [21]=2024-06-01
+  [22]=2027-04-30 [23]=2025-06-01 [24]=2028-04-30 [25]=2026-06-01
+  [26]=2029-04-30 [27]=2030-04-30
+)
+# Warn this many days before a major's end of life.
+NODE_EOL_WARNING_DAYS=90
+
 # command -> the Ubuntu package that provides it (docs/deploy-vps.md §1).
 # git and make aren't here: you needed them to get this far.
 APT_PACKAGES=(
@@ -67,6 +80,34 @@ apt_install() {
   as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -q "$@" >&2
 }
 
+# A warning about a node binary's major version, or nothing: odd-numbered
+# (never LTS), past its end of life, or within NODE_EOL_WARNING_DAYS of it.
+# Dates compare as text because they're all YYYY-MM-DD.
+node_warning() {
+  local major end today soon
+  major=$(node_major "$1")
+  end=${NODE_END_OF_LIFE[$major]:-}
+  today=$(date +%F)
+  soon=$(date -d "+${NODE_EOL_WARNING_DAYS} days" +%F)
+  if [ -n "$end" ] && [[ "$end" < "$today" ]]; then
+    echo "node $("$1" --version) reached end of life on $end and gets no security fixes; use an LTS release (even-numbered), e.g. take it off PATH so make installs Node $NODE_VERSION"
+  elif [ $((major % 2)) -eq 1 ]; then
+    echo "node $("$1" --version) is an odd-numbered release, which never becomes LTS${end:+ and ends on $end}; prefer an even-numbered LTS release"
+  elif [ -n "$end" ] && [[ "$end" < "$soon" ]]; then
+    echo "node $("$1" --version) reaches end of life on $end; plan a move to a newer LTS release"
+  fi
+}
+
+# Prints the summary line, with a warning about the node version if there
+# is one (on stderr too, so it's seen in a terminal).
+report_ok() {
+  local warning
+  warning=$(node_warning "$1")
+  [ -n "$warning" ] && note "warning: $warning."
+  echo "Toolchains: g++, javac, python3, ldc2 present; node $("$1" --version) at $1${warning:+ (warning: $warning)} (scripts/toolchain-deps.sh)."
+  exit 0
+}
+
 # The major version of a node binary (22 for v22.23.4), or 0 if it won't run.
 node_major() {
   local version
@@ -89,8 +130,7 @@ fi
 # 2. Node. Leave any node of NODE_MIN_MAJOR or later that PATH finds first.
 current=$(command -v node || true)
 if [ -n "$current" ] && [ "$(node_major "$current")" -ge "$NODE_MIN_MAJOR" ]; then
-  echo "Toolchains: g++, javac, python3, ldc2 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
-  exit 0
+  report_ok "$current"
 fi
 
 if [ "$(node_major "$NODE_PREFIX/bin/node")" -lt "$NODE_MIN_MAJOR" ]; then
@@ -117,7 +157,6 @@ fi
 # The server and make use whichever node PATH finds first.
 current=$(command -v node || true)
 if [ -n "$current" ] && [ "$(node_major "$current")" -ge "$NODE_MIN_MAJOR" ]; then
-  echo "Toolchains: g++, javac, python3, ldc2 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
-  exit 0
+  report_ok "$current"
 fi
 fail "Node $("$NODE_PREFIX/bin/node" --version) is in $NODE_PREFIX/bin, but the node your PATH finds first is ${current:-none}${current:+ ($("$current" --version 2>/dev/null))}. Take that one off PATH (check ~/.bashrc and ~/.profile), start a new shell, and run make again."
