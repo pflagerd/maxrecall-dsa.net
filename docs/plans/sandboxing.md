@@ -733,6 +733,23 @@ tried with bubblewrap.
   **Step 5 is complete:** the service judges inside the sandbox, as
   `maxrecall`, under the unit's systemd containment.
 
+### Step 6 notes (2026-11-02, branch `seccomp-filter`)
+
+**Part 1: the probe, G11.** It shows what the filter must change. It needs
+calls that **succeed for an ordinary user without a filter**, so that a
+refusal shows the filter rather than missing privileges. Checked as
+`nobody`, outside any sandbox: `io_uring_setup` returned an fd, and
+`keyctl(KEYCTL_GET_KEYRING_ID, session)`, `kcmp(self, self, KCMP_FILE, 0,
+0)` and `ptrace(PTRACE_TRACEME)` all succeeded. Calls like `bpf` would prove
+nothing, since Ubuntu already refuses them to ordinary users. G11 also reads
+`Seccomp:` from `/proc/self/status`. *contained* needs mode 2 (a filter) and
+all four refused; all four refused without a filter is *inconclusive*.
+Syscall numbers come from the kernel's tables: x86-64 `asm/unistd_64.h`
+(425, 101, 250, 312) and ARM64 `asm-generic/unistd.h` (425, 117, 219, 272).
+
+Today, as root and as `nobody`: **ESCAPED**, `seccomp mode 0; allowed:
+io_uring_setup, kcmp, keyctl, ptrace`.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).
