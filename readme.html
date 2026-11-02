@@ -193,7 +193,8 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
   <tr><td>Java</td><td><code>javac</code> / <code>java</code></td><td>256 MB</td><td><code>-Xmx</code> (heap only)</td></tr>
   <tr><td>D</td><td><code>dmd</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
 </table>
-<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s.
+<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s. Only the direct
+child is killed, though: a submission's own forked processes survive it (see Known gaps).
 Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
 separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.
 <span class="src">Source: <code>judge/runner.js</code> (constants at the top,
@@ -292,6 +293,13 @@ server, with only time and memory limits. It can read and write files and reach 
 network. That's acceptable on your own machine, but it has to be solved (for example
 with containers or seccomp/namespaces) before this is hosted for other people.
 <span class="src">Source: <code>spawnJudged</code> in <code>judge/runner.js</code>.</span></p>
+<p>Found while planning the fix on 2026-11-02 (<a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a> §1):
+submissions inherit the server's whole environment, including <code>MAXRECALL_PASSWORD</code>
+(<code>spawn</code> passes <code>process.env</code> on by default); they can read
+<code>questions/*.json</code>, so hidden test cases' expected answers too; and a process a
+submission forks <strong>outlives the timeout</strong>. A Python submission that forked and called
+<code>setsid()</code> kept running after the judge gave up, and the judge reported 8042 ms instead
+of 5000, because the orphan held the output pipe open.</p>
 </div>
 <ul>
   <li><code>package-lock.json</code> is gitignored, so the cloud and Kubuntu can
@@ -322,6 +330,7 @@ with containers or seccomp/namespaces) before this is hosted for other people.
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>In planning:</strong> sandboxing submitted code (compile and run). Options compared: bubblewrap, nsjail, firejail, hand-rolled namespaces and seccomp, systemd-run, containers, isolate, gVisor. Recommended: bubblewrap plus rlimits, then seccomp and (on the VPS) cgroup v2. On Ubuntu 24.04, bubblewrap needs an AppArmor allowance for user namespaces. Six decisions are waiting for the owner. Plan: <a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>.</td></tr>
   <tr><td>2026-10-28</td><td>Added <code>CLAUDE.md</code>: “teach while working” is Claude's primary directive.</td></tr>
   <tr><td>2026-10-28</td><td><strong>In planning:</strong> multi-user step 1, which records attempts per user under <code>users/&lt;id&gt;/</code>, without login yet. The four open questions were decided on 2026-10-29 (below). Plan, with decisions still needed on layout, record contents, identity and committing: <a href="docs/plans/multi-user-step-1.md"><code>docs/plans/multi-user-step-1.md</code></a>.</td></tr>
   <tr><td>2026-10-29</td><td><strong>Decided:</strong> each user's directory is named by email address, e.g. <code>users/daniel.pflager@gmail.com/</code>. There's one user for now. Before anyone else can sign up, the address must be lower-cased and checked against a strict pattern: <a href="https://www.rfc-editor.org/rfc/rfc5322#section-3.2.3">RFC&nbsp;5322 §3.2.3</a> allows <code>/</code> in the part before the <code>@</code>, so an unchecked address could reach outside <code>users/</code> (path traversal).</td></tr>
