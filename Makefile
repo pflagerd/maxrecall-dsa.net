@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test deploy-server
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -57,6 +57,17 @@ dev: build
 # make's "Error 1", unless every probe is contained or skipped.
 sandbox-test: sandbox-deps
 	node judge/sandbox-selftest.js
+
+# Set up, or update, the systemd service on this machine: docs/deploy-vps.md
+# done for you (scripts/deploy-server.sh). For the VPS. Needs root (asks for
+# sudo), and the first run asks before changing anything (DEPLOY_CONFIRM=yes
+# skips that). The prerequisites run with systemd's own PATH, the one the
+# service gets, so toolchains in your home folder can't get in the way; a
+# target-specific exported variable applies to prerequisites too.
+SYSTEMD_PATH := /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+deploy-server: export PATH := $(SYSTEMD_PATH)
+deploy-server: toolchain-deps sandbox-deps
+	./scripts/deploy-server.sh
 
 # Remove installed dependencies
 clean:

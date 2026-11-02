@@ -36,6 +36,72 @@ kind of sandbox.
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
 your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.
 
+## The quick way: `make deploy-server` [VPS]
+
+Added 2026-11-02. Everything below, §1 to §6 and §8, is done by one command,
+run as root (or with `sudo`) in **any** checkout of the repo on the VPS:
+
+```bash
+apt install -y git make
+```
+- Needed once, to clone the repo and run `make`.
+
+```bash
+git clone https://github.com/pflagerd/maxrecall-dsa.net.git
+```
+- Any folder will do, e.g. root's home. The service gets a clone of its own
+  in `/srv/maxrecall`.
+
+```bash
+cd maxrecall-dsa.net
+```
+
+```bash
+make deploy-server
+```
+- **`toolchain-deps`** (§1, §2): installs `g++`, the JDK, `python3`, LDC,
+  `curl`, `xz-utils`, and Node 22.23.4 into `/usr/local`, checked against
+  two hashes. Only what's missing.
+- **`sandbox-deps`** (§1a): installs bubblewrap, and loads Ubuntu's
+  `bwrap-userns-restrict` AppArmor profile if the restriction blocks it.
+- **`scripts/deploy-server.sh`**:
+  - creates the `maxrecall` user (§3);
+  - clones `master` into `/srv/maxrecall/maxrecall-dsa.net`, runs
+    `npm install --omit=dev`, and creates the data folder (§4);
+  - installs, enables and starts the service (§5);
+  - checks it: it waits for it to answer, shows its startup lines, **fails
+    if the `Sandbox:` line says `UNAVAILABLE`**, and checks that ports 3000
+    and 3001 listen on `127.0.0.1` only (§6).
+- **The first run asks** `Set up the maxrecall service on this machine?
+  [y/N]`, because the trusted port makes anyone on the machine the owner. A
+  desktop is the wrong place for it. `DEPLOY_CONFIRM=yes make deploy-server`
+  skips the question.
+- **Run it again to update** (§8): `git pull --ff-only`, `npm install`, the
+  unit file re-copied only if it changed, then a restart and the same checks.
+- **Its `PATH` is systemd's own**
+  (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin`, plus `/sbin:/bin`)
+  for all of this, so toolchains in root's home folder can't interfere.
+  That's the `PATH` the service gets, which systemd.exec(5) documents.
+- **Not done for you:** the optional password file (§4), which is a secret
+  you choose. The SSH tunnel (§7) is on Kubuntu.
+
+Tested 2026-11-02 in a cloud session, which has no systemd, so `systemctl`
+and `journalctl` were stand-ins that started the server as the unit file
+says (as `maxrecall`, with only its `Environment=` lines). Everything else
+was real:
+- declining the question changed nothing;
+- the confirmed first install took 6.5 s;
+- the server ran with `Sandbox: … works`, judged all five languages, and the
+  escape test as `maxrecall` gave 13 of 13 contained;
+- a second run took the update path;
+- with bubblewrap broken, it failed on the `UNAVAILABLE` line.
+
+**Not tested:** the unit's own systemd containment around bubblewrap. Its
+`Sandbox:` line on the VPS is that test.
+
+The sections below are what it does, step by step, with each command
+explained.
+
 ## 1. Packages [VPS]
 
 **Shortcut (since 2026-11-02):** once `git` and `make` are installed and the
