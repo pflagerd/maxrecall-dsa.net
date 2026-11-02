@@ -1,4 +1,4 @@
-.PHONY: all install sandbox-deps build run dev clean sandbox-test
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -17,16 +17,25 @@ OPEN_BROWSER = ( deadline=$$(( $$(date +%s) + $(OPEN_WAIT) )); \
 
 all: build
 
+# Install the toolchains from docs/deploy-vps.md §1–§2 if missing: g++, a
+# JDK, python3, curl, xz-utils (apt) and Node 22 (nodejs.org, into
+# /usr/local). Asks for sudo only when it has something to install; stops
+# make if it can't fix things. See scripts/toolchain-deps.sh.
+toolchain-deps:
+	./scripts/toolchain-deps.sh
+
 # Install dependencies
 install: node_modules
 
-node_modules: package.json
+# toolchain-deps is order-only (after the |): it runs first, since npm needs
+# node, but doesn't make node_modules count as out of date.
+node_modules: package.json | toolchain-deps
 	npm install
 
 # Install the judge's sandbox (bubblewrap, and Ubuntu's AppArmor profile for
 # it if AppArmor is what's in the way) if missing, then check it works. Asks
 # for sudo only when it has something to install. See scripts/sandbox-deps.sh.
-sandbox-deps:
+sandbox-deps: toolchain-deps
 	./scripts/sandbox-deps.sh
 
 # "Build" step: just ensure dependencies are installed (static HTML/CSS/JS needs no compile)

@@ -38,6 +38,14 @@ your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows i
 
 ## 1. Packages [VPS]
 
+**Shortcut (since 2026-11-02):** once `git` and `make` are installed and the
+repo is cloned, `make toolchain-deps` in the checkout does §1 and §2 for
+you: the packages below, and Node 22.23.4 into `/usr/local` with both
+checksum checks. It does this only for what's missing, and runs as root, or
+asks for `sudo`. It stops with an explanation if an older `node` is still
+first on your `PATH` (`scripts/toolchain-deps.sh`). The manual steps stay
+here, explained, because they're what the script does.
+
 ```bash
 sudo apt update
 ```
