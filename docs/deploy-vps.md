@@ -52,19 +52,21 @@ sudo apt update
 Refreshes the list of available packages.
 
 ```bash
-sudo apt install -y git make g++ default-jdk-headless python3 curl xz-utils
+sudo apt install -y git make g++ default-jdk-headless python3 ldc curl xz-utils
 ```
 - `-y` answers "yes" to the confirmation prompt.
 - `g++` 13.2 compiles C++ submissions.
+- `ldc` (LDC 1.36.0, the LLVM-based D compiler, in Ubuntu's universe
+  section) compiles D submissions with `ldc2`. Added 2026-11-02.
 - `default-jdk-headless` (OpenJDK 21) compiles and runs Java. "Headless"
   means no desktop GUI libraries.
 - `xz-utils` unpacks the Node download.
 
 These versions were checked against Ubuntu 24.04's repositories on 2026-10-29.
 
-Not covered: **D**. Ubuntu has no `dmd` package, and the judge runs `dmd`
-specifically, so D submissions will fail here. (The cloud sessions get DMD
-from d-apt, `docs/d-compiler.md`.)
+**D** is covered by `ldc` above: since 2026-11-02 the judge uses `ldc2` when
+it's installed, and `dmd` otherwise. Ubuntu has no `dmd` package; the cloud
+sessions get DMD from d-apt (`docs/d-compiler.md`).
 
 ## 1a. The judge's sandbox: bubblewrap and AppArmor [VPS]
 

@@ -63,7 +63,7 @@ const NOBODY_UID = 65534;
 
 // Toolchains the judge runs. Any that live outside /usr (Node is
 // /opt/node22 in the cloud) get their install folder bound in read-only.
-const TOOLCHAIN_COMMANDS = ['node', 'python3', 'g++', 'javac', 'java', 'dmd'];
+const TOOLCHAIN_COMMANDS = ['node', 'python3', 'g++', 'javac', 'java', 'ldc2', 'dmd'];
 
 const REPO_DIR = path.join(__dirname, '..');
 
@@ -103,9 +103,10 @@ function systemDirArgs() {
 // The few files under /etc the toolchains need, and nothing else from /etc
 // (no /etc/passwd, no machine configuration). /etc/alternatives holds the
 // symlinks behind python3, java and others; java needs /etc/java-<n>-openjdk;
-// dmd needs /etc/dmd.conf; ld.so.cache only makes library lookups faster.
+// ldc2 needs /etc/ldc2.conf and dmd /etc/dmd.conf; ld.so.cache only makes
+// library lookups faster.
 function etcArgs() {
-  const args = ['--ro-bind-try', '/etc/alternatives', '/etc/alternatives', '--ro-bind-try', '/etc/ld.so.cache', '/etc/ld.so.cache', '--ro-bind-try', '/etc/dmd.conf', '/etc/dmd.conf'];
+  const args = ['--ro-bind-try', '/etc/alternatives', '/etc/alternatives', '--ro-bind-try', '/etc/ld.so.cache', '/etc/ld.so.cache', '--ro-bind-try', '/etc/ldc2.conf', '/etc/ldc2.conf', '--ro-bind-try', '/etc/dmd.conf', '/etc/dmd.conf'];
   let entries = [];
   try {
     entries = fs.readdirSync('/etc');
@@ -312,4 +313,4 @@ function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }
 
-module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };
+module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, findOnPath, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };

@@ -2,7 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, findOnPath, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
 const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
@@ -27,6 +27,13 @@ const JAVA_COMPILE_TIMEOUT_MS = 10000;
 // overhead, so it gets the same cap as C++.
 const D_MEMORY_MB = 128;
 const D_COMPILE_TIMEOUT_MS = 10000;
+// The D compiler: LDC (ldc2) if it's installed, else DMD. LDC is in
+// Ubuntu's own archive (package ldc), so scripts/toolchain-deps.sh installs
+// it on Kubuntu and the VPS alike; DMD comes from the third-party d-apt
+// (docs/d-compiler.md) and stays as the fallback. Both use the DMD
+// frontend, so error messages look alike; they accept the same -of=/-od=.
+// Chosen once, at startup, like the other toolchains' paths.
+const D_COMPILER = findOnPath('ldc2') ? 'ldc2' : 'dmd';
 // Caps how much stdout/stderr get buffered, both to bound this server's own
 // memory if a submission spams output and to keep the response payload sane.
 const MAX_CAPTURED_OUTPUT = 200_000;
@@ -396,7 +403,7 @@ function judgePaths(workDir) {
 }
 
 // Memory caps for compilers, which had none (a 257-byte C++ source of
-// exponential templates took cc1plus to 2 GB in 20 s). g++ and dmd get an
+// exponential templates took cc1plus to 2 GB in 20 s). g++ and the D compiler get an
 // address-space cap (RLIMIT_AS), which their child processes (cc1plus, as,
 // ld) inherit; the harness compiles fine under 512 MB (measured), so 1 GB
 // leaves room. javac is a JVM, which reserves more address space than it
@@ -425,9 +432,10 @@ function compileCommand(language, paths) {
         timeoutMs: JAVA_COMPILE_TIMEOUT_MS,
       };
     case 'd':
-      // -od puts the object file dmd leaves behind in the work folder too.
+      // -of names the binary; -od puts the object file the compiler leaves
+      // behind in the work folder too. ldc2 and dmd take the same flags.
       return {
-        argv: ['dmd', `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d)],
+        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d)],
         timeoutMs: D_COMPILE_TIMEOUT_MS,
         addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
       };
@@ -802,4 +810,4 @@ function runSubmission({ language, code, functionName, testCases, signature, jud
     : runFunctionSubmission({ language, code, functionName, testCases, signature });
 }
 
-module.exports = { runSubmission, CPP_COMPILE_TIMEOUT_MS };
+module.exports = { runSubmission, CPP_COMPILE_TIMEOUT_MS, D_COMPILER };

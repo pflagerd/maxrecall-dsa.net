@@ -1,6 +1,7 @@
 #!/bin/bash
 # Installs the toolchains from docs/deploy-vps.md §1–§2, if they're missing:
-# g++, a JDK (javac/java), python3, curl and xz-utils from Ubuntu's archive,
+# g++, a JDK (javac/java), python3, LDC (the D compiler ldc2), curl and
+# xz-utils from Ubuntu's archive,
 # and Node 22 from nodejs.org into /usr/local. Run by `make` before
 # `npm install` and before scripts/sandbox-deps.sh, since both need node.
 #
@@ -12,7 +13,8 @@
 # runner.js compiles its C++ and Java helpers when it loads, and server.js
 # needs a Node with process.loadEnvFile).
 #
-# Not covered, as in the guide: D. Cloud sessions get DMD from d-apt
+# D: LDC, from Ubuntu's archive (universe). The judge prefers ldc2 and
+# falls back to dmd, which cloud sessions also get from d-apt
 # (docs/d-compiler.md, .claude/hooks/session-start.sh).
 set -euo pipefail
 
@@ -33,6 +35,7 @@ APT_PACKAGES=(
   "g++:g++"
   "javac:default-jdk-headless"
   "python3:python3"
+  "ldc2:ldc"
   "curl:curl"
   "xz:xz-utils"
 )
@@ -86,7 +89,7 @@ fi
 # 2. Node. Leave any node of NODE_MIN_MAJOR or later that PATH finds first.
 current=$(command -v node || true)
 if [ -n "$current" ] && [ "$(node_major "$current")" -ge "$NODE_MIN_MAJOR" ]; then
-  echo "Toolchains: g++, javac, python3 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
+  echo "Toolchains: g++, javac, python3, ldc2 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
   exit 0
 fi
 
@@ -114,7 +117,7 @@ fi
 # The server and make use whichever node PATH finds first.
 current=$(command -v node || true)
 if [ -n "$current" ] && [ "$(node_major "$current")" -ge "$NODE_MIN_MAJOR" ]; then
-  echo "Toolchains: g++, javac, python3 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
+  echo "Toolchains: g++, javac, python3, ldc2 present; node $("$current" --version) at $current (scripts/toolchain-deps.sh)."
   exit 0
 fi
 fail "Node $("$NODE_PREFIX/bin/node" --version) is in $NODE_PREFIX/bin, but the node your PATH finds first is ${current:-none}${current:+ ($("$current" --version 2>/dev/null))}. Take that one off PATH (check ~/.bashrc and ~/.profile), start a new shell, and run make again."
