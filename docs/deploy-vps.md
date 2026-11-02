@@ -146,10 +146,13 @@ cloud sessions have no AppArmor. The server's startup log (step 5 below)
 says whether it worked.
 
 ```bash
-sudo apt install -y bubblewrap apparmor-profiles
+sudo apt install -y bubblewrap libseccomp-dev apparmor-profiles
 ```
 - `bubblewrap` provides `bwrap`, the sandbox. It's in Ubuntu's main
   archive, which gets security updates from Canonical.
+- `libseccomp-dev` is libseccomp's header and library. The server compiles
+  the sandbox's seccomp filter with it at startup (since 2026-11-02),
+  and refuses to judge without it.
 - `apparmor-profiles` holds extra AppArmor profiles that aren't loaded by
   default, including the one below.
 

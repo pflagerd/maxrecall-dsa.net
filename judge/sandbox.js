@@ -199,6 +199,62 @@ function toolchainArgs() {
   return REACHABLE_TOOLCHAIN_ROOTS.flatMap((root) => ['--ro-bind', root, root]);
 }
 
+// --- Seccomp (sandboxing step 6) -------------------------------------------
+// System calls every sandbox is refused, with EPERM ("Operation not
+// permitted"): a denylist (decision D4). The filter doesn't replace any wall;
+// it shrinks how much of the host kernel a submission can reach, since most
+// kernel escapes go through rarely used calls like these. Grouped by why.
+// Left out on purpose, although Docker restricts them: adjtimex (also used
+// just to read the clock) and the NUMA calls (mbind, get_mempolicy, ...),
+// which language runtimes may make.
+const SECCOMP_DENYLIST = Object.freeze([
+  // Kernel interfaces with a long history of privilege-escalation bugs,
+  // which a judged program never needs.
+  'bpf', 'perf_event_open', 'userfaultfd', 'io_uring_setup', 'io_uring_enter', 'io_uring_register',
+  'keyctl', 'add_key', 'request_key',
+  // Looking into or controlling other processes.
+  'ptrace', 'process_vm_readv', 'process_vm_writev', 'kcmp', 'pidfd_getfd',
+  // Namespaces and mounts. --disable-userns and the missing capabilities
+  // refuse these already; this is a second wall.
+  'unshare', 'setns', 'mount', 'umount2', 'pivot_root', 'chroot',
+  'move_mount', 'open_tree', 'fsopen', 'fsconfig', 'fsmount', 'fspick', 'mount_setattr',
+  // Opening files by handle instead of by path (a known container escape).
+  'name_to_handle_at', 'open_by_handle_at',
+  // Machine-wide: kernel modules, kexec, reboot, swap, the clock, the host
+  // name, process accounting, quotas, the kernel log, I/O ports.
+  'init_module', 'finit_module', 'delete_module', 'kexec_load', 'kexec_file_load', 'reboot',
+  'swapon', 'swapoff', 'settimeofday', 'clock_settime', 'clock_adjtime', 'sethostname', 'setdomainname',
+  'acct', 'quotactl', 'syslog', 'iopl', 'ioperm', 'lookup_dcookie', 'vhangup',
+]);
+
+// The filter, built at startup into the helper folder by compiling
+// judge/seccomp/gen.cpp (with libseccomp, from libseccomp-dev) and running
+// it with the denylist. Besides the denylist, gen.cpp makes clone3 fail
+// with ENOSYS (so the C library falls back to clone) and refuses clone with
+// namespace flags. null when built; otherwise why not, which fails the
+// self-test, so the server refuses to judge rather than run unfiltered.
+const SECCOMP_FILTER = path.join(HELPER_DIR, 'seccomp.bpf');
+function buildSeccompFilter() {
+  const gxx = findOnPath('g++');
+  if (!gxx) return "g++ isn't installed, so the seccomp filter can't be built";
+  const generator = path.join(HELPER_DIR, 'seccomp-gen');
+  // The compiler's first error line says what's wrong ("fatal error:
+  // seccomp.h: No such file or directory"); its last is often just
+  // "compilation terminated.".
+  const errorLine = (text) => {
+    const lines = (text || '').trim().split('\n').filter(Boolean);
+    return lines.find((line) => /error/i.test(line)) || lines.slice(-1)[0] || '';
+  };
+  const compile = spawnSync(gxx, ['-O2', '-o', generator, path.join(__dirname, 'seccomp', 'gen.cpp'), '-lseccomp'], { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 60000 });
+  if (compile.status !== 0) {
+    return `couldn't build the seccomp filter generator (is libseccomp-dev installed? scripts/sandbox-deps.sh installs it): ${errorLine(compile.stderr) || compile.error || `exit status ${compile.status}`}`;
+  }
+  const run = spawnSync(generator, [SECCOMP_FILTER, ...SECCOMP_DENYLIST], { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 10000 });
+  if (run.status !== 0) return `couldn't write the seccomp filter: ${errorLine(run.stderr) || `exit status ${run.status}`}`;
+  return null;
+}
+const SECCOMP_BUILD_ERROR = buildSeccompFilter();
+
 // Computed once: the toolchains don't move while the server runs.
 const BASE_ARGS = Object.freeze([
   // New user, PID, network, IPC, UTS (hostname) and cgroup namespaces. The
@@ -221,6 +277,10 @@ const BASE_ARGS = Object.freeze([
   '--size', String(TMPFS_BYTES), '--tmpfs', '/tmp',
   // No capabilities, even inside the sandbox's own user namespace.
   '--cap-drop', 'ALL',
+  // The seccomp filter, read from file descriptor 3, which spawnSandboxed
+  // opens. bwrap installs it just before running the command, so it holds
+  // for the command and everything it starts, but not for bwrap's setup.
+  '--seccomp', '3',
 ]);
 
 // Returns { command, args } that runs `command args` inside the sandbox.
@@ -235,6 +295,22 @@ function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
     command: 'setpriv',
     args: [`--reuid=${NOBODY_UID}`, `--regid=${NOBODY_UID}`, '--clear-groups', 'bwrap', ...bwrapArgs],
   };
+}
+
+// Starts a command from sandboxedCommand or sandboxedRun, with the seccomp
+// filter open as file descriptor 3 (in Node, stdio[3] becomes the child's
+// fd 3). It's opened for each start because bwrap reads it to the end, and
+// the parent's copy is closed straight after: the child has its own.
+// spawnFn is child_process.spawn or spawnSync.
+function spawnSandboxed(spawnFn, command, args, options = {}) {
+  const fd = fs.openSync(SECCOMP_FILTER, 'r');
+  try {
+    const stdio = Array.isArray(options.stdio) ? [...options.stdio] : ['pipe', 'pipe', 'pipe'];
+    stdio[3] = fd;
+    return spawnFn(command, args, { ...options, stdio });
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 // sandboxedCommand plus RUN_LIMITS, for running a submission or compiling
@@ -258,10 +334,13 @@ function prepareWorkDir(dir) {
 // Run inside the sandbox once at startup. It fails, printing why, if the
 // sandbox can see the repository (so the filesystem isn't isolated), has a
 // network interface besides loopback, or if bwrap's own process 1 carries
-// anything but SUBMISSION_ENV; or if a toolchain found outside can't be
-// found inside. "$1" is the repo folder; the rest are toolchain commands.
+// anything but SUBMISSION_ENV; if it isn't under a seccomp filter (mode 2
+// in /proc/self/status); or if a toolchain found outside can't be found
+// inside. "$1" is the repo folder; the rest are toolchain commands.
 const SELF_TEST_SCRIPT = `
 repo=$1; shift
+mode=$(awk '/^Seccomp:/ { print $2 }' /proc/self/status)
+if [ "$mode" != 2 ]; then echo "the sandbox isn't under a seccomp filter (Seccomp: $mode)"; exit 1; fi
 if [ -e "$repo" ]; then echo "the sandbox can see $repo"; exit 1; fi
 if [ "$(grep -c : /proc/net/dev)" != 1 ]; then echo "the sandbox has a network interface besides loopback"; exit 1; fi
 extra=$(tr '\\0' '\\n' < /proc/1/environ | grep -v -e '^PATH=' -e '^LANG=')
@@ -279,6 +358,8 @@ function runSelfTest() {
   const version = spawnSync(bwrap, ['--version'], { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 5000 });
   const versionText = (version.stdout || '').trim() || 'bubblewrap, version unknown';
 
+  if (SECCOMP_BUILD_ERROR) return { ok: false, version: versionText, reason: SECCOMP_BUILD_ERROR };
+
   if (UNREACHABLE_TOOLCHAIN_ROOTS.length) {
     const who = RUNNING_AS_ROOT ? 'nobody (sandboxes run as nobody when the server is root)' : "the server's user";
     const which = UNREACHABLE_TOOLCHAIN_ROOTS.map((root) => `${[...TOOLCHAIN_ROOTS.get(root)].join(', ')} in ${root}`).join('; ');
@@ -295,7 +376,7 @@ function runSelfTest() {
   const { command, args } = sandboxedCommand('/bin/sh', ['-c', SELF_TEST_SCRIPT, 'sh', REPO_DIR, ...toolchains], {
     binds: [{ hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH }],
   });
-  const result = spawnSync(command, args, { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 10000 });
+  const result = spawnSandboxed(spawnSync, command, args, { env: SUBMISSION_ENV, encoding: 'utf8', timeout: 10000 });
   if (result.error) return { ok: false, version: versionText, reason: `couldn't run bwrap: ${result.error.message}` };
   if (result.status !== 0 || result.stdout.trim() !== 'ok') {
     // bwrap's own errors (e.g. AppArmor's user-namespace restriction on
@@ -333,4 +414,4 @@ function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }
 
-module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };
+module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, SECCOMP_DENYLIST, findOnPath, sandboxedCommand, sandboxedRun, spawnSandboxed, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };

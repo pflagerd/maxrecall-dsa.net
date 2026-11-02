@@ -2,7 +2,7 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, spawnSandboxed, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
 const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
@@ -476,8 +476,8 @@ function compileCommand(language, paths) {
 // read-only, and RUN_LIMITS; otherwise the command itself, started in
 // workDir. Killing the result kills bwrap, and with it everything inside.
 function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes } = {}) {
-  if (!sandboxStatus.ok) return { command, args, cwd: workDir };
-  return sandboxedRun(command, args, {
+  if (!sandboxStatus.ok) return { command, args, cwd: workDir, sandboxed: false };
+  const proc = sandboxedRun(command, args, {
     binds: [
       { hostPath: workDir, sandboxPath: SANDBOX_PATHS.work, writable: writableWork },
       { hostPath: HELPER_DIR, sandboxPath: HELPER_SANDBOX_PATH },
@@ -485,6 +485,7 @@ function sandboxedArgs([command, ...args], workDir, { writableWork = false, addr
     cwd: SANDBOX_PATHS.work,
     addressSpaceBytes,
   });
+  return { ...proc, sandboxed: true };
 }
 
 // The command line ([command, ...args]) that runs a submission, in the
@@ -517,6 +518,14 @@ function runCommand(language, judgeMode, paths) {
   }
 }
 
+// Starts what sandboxedArgs returned: through spawnSandboxed (which hands
+// bwrap the seccomp filter) when it's sandboxed, else a plain spawn.
+function startProcess(proc, options) {
+  return proc.sandboxed
+    ? spawnSandboxed(spawn, proc.command, proc.args, options)
+    : spawn(proc.command, proc.args, options);
+}
+
 // Compiles the submission in workDir, for compiled languages, with its own
 // timeout (compiling can legitimately take longer than running trivial test
 // cases). Resolves to { success, stderr, timedOut }, or null for interpreted
@@ -528,7 +537,7 @@ function compileSubmission(language, workDir) {
   if (!compile) return Promise.resolve(null);
   const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes });
   return new Promise((resolve) => {
-    const child = spawn(proc.command, proc.args, {
+    const child = startProcess(proc, {
       env: SUBMISSION_ENV,
       cwd: proc.cwd,
       timeout: compile.timeoutMs,
@@ -556,7 +565,7 @@ function compileSubmission(language, workDir) {
 function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS) {
   const proc = sandboxedArgs(argv, workDir);
   return new Promise((resolve) => {
-    const child = spawn(proc.command, proc.args, {
+    const child = startProcess(proc, {
       env: SUBMISSION_ENV,
       cwd: proc.cwd,
       timeout: timeoutMs,
