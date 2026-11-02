@@ -525,7 +525,39 @@ so `docs/deploy-vps.md` §1a stays the VPS procedure.
     `ls /etc/apparmor.d | grep -i bwrap`.
   - Does Java fit within the 128-thread limit on that many cores? The escape
     test never runs Java. Run a Java question on Kubuntu to check.
-- The VPS part of step 5 is still to do.
+
+### Step 5, VPS part: first run (2026-11-02, owner's run)
+
+The owner ran `make sandbox-test |& tee output.lst` as **root** in
+`/root/maxrecall-dsa.net`. That's not the service's checkout or user
+(`/srv/maxrecall/maxrecall-dsa.net`, `maxrecall`).
+
+- `scripts/sandbox-deps.sh` installed bubblewrap 0.9.0. The self-test then
+  failed: `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
+  My reading, a hypothesis until the profile is loaded for real: AppArmor's
+  `unprivileged_userns` profile (“audit deny capability”) took away the
+  capability bubblewrap needs to give the sandbox's loopback an address.
+  My earlier guess at the message (“uid map” / “Failed to make / slave”)
+  was wrong; `docs/deploy-vps.md` §1a now quotes the real one.
+- **Bug in the script, fixed.** As root, the self-test runs sandboxes as
+  `nobody` (like `judge/sandbox.js`), but `minimal_bwrap`, the “is it
+  AppArmor?” check, ran bwrap as root, which the restriction exempts. It
+  passed, so the script gave up instead of loading the profile. It now runs
+  the check as `nobody` too (`as_sandbox_user`). Reproduced in the cloud
+  with stand-ins (a `bwrap` that works for root and fails with the VPS's
+  message for anyone else, until a fake `apparmor_parser` “loads” the
+  profile): the old script prints the VPS's exact line, and the fixed one
+  loads the profile and reports `works`.
+- **Not sandbox problems, but they stop the VPS judging:**
+  - `javac` wasn't found. The runner compiles `JudgeJson.java` when it
+    loads, so it threw.
+  - root's `node` was v18.17.0. `server.js` calls `process.loadEnvFile`
+    (Node 20.12+/21.7+), so the server couldn't start under it.
+    `docs/deploy-vps.md` §2 installs Node 22 to `/usr/local/bin`; something
+    else comes first on root's `PATH`.
+- Next: on the VPS, check `which -a node` and `javac -version`, pull the
+  fix, run `make sandbox-deps`, then the escape test and the service's
+  `Sandbox:` log line.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

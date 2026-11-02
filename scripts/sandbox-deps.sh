@@ -20,9 +20,12 @@
 # still lets you judge without a sandbox. One summary line goes to stdout
 # (the cloud hook shows it to Claude); everything else goes to stderr.
 #
-# Run it as the user the server runs as, not with sudo: root may create
-# user namespaces even where AppArmor stops everyone else, so a check run as
-# root can pass while the server's own user fails.
+# Root may create user namespaces even where AppArmor stops everyone else.
+# So when this script runs as root, both of its checks run bubblewrap as
+# nobody, as judge/sandbox.js does when the server is root, and they test
+# what an ordinary user (such as the VPS's maxrecall) would get. Before
+# 2026-11-02 the second check ran as root and passed on the VPS, so the
+# script blamed something other than AppArmor and never loaded the profile.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -62,10 +65,23 @@ self_test() {
   node -e 'const s = require("./judge/sandbox"); if (!s.sandboxStatus.ok) { console.log(s.sandboxStatus.reason); process.exit(1); }'
 }
 
+# Runs a command as the user sandboxes run as: nobody if we are root (the
+# same switch judge/sandbox.js makes), else ourselves.
+as_sandbox_user() {
+  if [ "$(id -u)" -eq 0 ]; then
+    setpriv --reuid=65534 --regid=65534 --clear-groups "$@"
+  else
+    "$@"
+  fi
+}
+
 # The smallest sandbox: tells "AppArmor (or the kernel) won't let bwrap make
 # namespaces" apart from other self-test failures, such as a missing bind.
+# --unshare-all includes the network namespace, whose loopback setup is
+# where AppArmor's restriction showed on the VPS ("loopback: Failed
+# RTM_NEWADDR: Operation not permitted").
 minimal_bwrap() {
-  bwrap --unshare-all --unshare-user --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 -- true 2>/dev/null
+  as_sandbox_user bwrap --unshare-all --unshare-user --ro-bind /usr /usr --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 -- true 2>/dev/null
 }
 
 works() {

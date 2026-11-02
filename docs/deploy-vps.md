@@ -123,9 +123,14 @@ Tries a minimal sandbox as the service's user. It should print
 - `--ro-bind /usr /usr` and the `--symlink`s give it the programs.
 - `true` is a command that does nothing and succeeds.
 
-An error like `setting up uid map: Permission denied` or `Failed to make /
-slave` means AppArmor is still in the way. My guess is it would look like
-that; I haven't seen it.
+If AppArmor is still in the way, the error is (seen on this VPS on
+2026-11-02, before the profile was loaded):
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. bubblewrap
+creates the namespaces, but the capability it needs to set up the sandbox's
+loopback network has been taken away. (Before that run I had guessed a
+different message, `setting up uid map` or `Failed to make / slave`; this is
+the real one.) From the checkout, `make sandbox-deps` recognises this and
+loads the profile itself, asking for `sudo` if you're not root.
 
 If the profile route fails, the fallbacks (plan §4) are a profile of our
 own for the service, or turning the restriction off. **Don't** turn it off
