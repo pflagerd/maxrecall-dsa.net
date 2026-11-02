@@ -1,9 +1,10 @@
 # Getting DMD (the D compiler) in a Claude Code cloud session
 
-**Since 2026-11-02 the judge prefers LDC** (`ldc2`, from Ubuntu's own
-archive, package `ldc`), which `make` installs (`scripts/toolchain-deps.sh`).
-DMD, set up as below, is the fallback the judge uses when `ldc2` isn't
-installed. The cloud's SessionStart hook still installs it.
+**Since 2026-11-02 the judge uses LDC** (`ldc2`, from Ubuntu's own archive,
+package `ldc`), which `make` and the cloud's SessionStart hook both install
+(`scripts/toolchain-deps.sh`). **Nothing installs DMD automatically any
+more.** This note is how to install it by hand if you want it; the judge
+uses `dmd` only when `ldc2` isn't installed.
 
 Written 2026-10-30. The judge compiles D submissions by running `dmd`
 (`judge/runner.js`, `compileD`), but the cloud environment doesn't come with
