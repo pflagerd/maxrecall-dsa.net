@@ -511,6 +511,22 @@ so `docs/deploy-vps.md` §1a stays the VPS procedure.
     `/work/Main.java:6: …`;
   - no `judge-*` folders left in `/tmp`.
 
+### Step 5, Kubuntu part (2026-11-02, owner's run)
+
+- `make sandbox-test` on Kubuntu 26.04: bubblewrap **0.11.1**, the startup
+  self-test passed, and **13 of 13 probes were contained**.
+- G6d was stopped by the CPU limit after 1008 ms, against 2570 ms in the
+  cloud on 4 cores: 10 s of CPU in 1 s means about 10 cores were busy.
+- **Not known yet:**
+  - Did `scripts/sandbox-deps.sh` install bubblewrap or load
+    `bwrap-userns-restrict`, or did 26.04 already allow bubblewrap? Its notes
+    go to stderr, which wasn't in the saved output. Checks:
+    `sysctl kernel.apparmor_restrict_unprivileged_userns` and
+    `ls /etc/apparmor.d | grep -i bwrap`.
+  - Does Java fit within the 128-thread limit on that many cores? The escape
+    test never runs Java. Run a Java question on Kubuntu to check.
+- The VPS part of step 5 is still to do.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).
