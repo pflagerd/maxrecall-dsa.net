@@ -259,7 +259,7 @@ Notes:
 | 3 | **Done 2026-11-02.** Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Escape test: 10 of 11 contained (G7 left for step 4), as root and as `nobody`. Correct answers Accepted in every language and mode; starter-code verdicts unchanged in all 65 runs. See “Step 3 notes”. |
 | 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
 | 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
-| 6 | Seccomp denylist (D4). | Selftest's seccomp probes are refused; all questions still pass. |
+| 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 as root and as `nobody`; all languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
 | 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
 
@@ -732,6 +732,68 @@ tried with bubblewrap.
 
   **Step 5 is complete:** the service judges inside the sandbox, as
   `maxrecall`, under the unit's systemd containment.
+
+### Step 6 notes (2026-11-02, branch `seccomp-filter`)
+
+**Part 1: the probe, G11.** It shows what the filter must change. It needs
+calls that **succeed for an ordinary user without a filter**, so that a
+refusal shows the filter rather than missing privileges. Checked as
+`nobody`, outside any sandbox: `io_uring_setup` returned an fd, and
+`keyctl(KEYCTL_GET_KEYRING_ID, session)`, `kcmp(self, self, KCMP_FILE, 0,
+0)` and `ptrace(PTRACE_TRACEME)` all succeeded. Calls like `bpf` would prove
+nothing, since Ubuntu already refuses them to ordinary users. G11 also reads
+`Seccomp:` from `/proc/self/status`. *contained* needs mode 2 (a filter) and
+all four refused; all four refused without a filter is *inconclusive*.
+Syscall numbers come from the kernel's tables: x86-64 `asm/unistd_64.h`
+(425, 101, 250, 312) and ARM64 `asm-generic/unistd.h` (425, 117, 219, 272).
+
+Today, as root and as `nobody`: **ESCAPED**, `seccomp mode 0; allowed:
+io_uring_setup, kcmp, keyctl, ptrace`.
+
+**Part 2: the filter.**
+- `judge/seccomp/gen.cpp` (libseccomp) writes the BPF program:
+  - every call in `SECCOMP_DENYLIST` (in `judge/sandbox.js`, about 50 names,
+    grouped by reason) gets `ERRNO(EPERM)`;
+  - `clone3` gets `ERRNO(ENOSYS)`, so the C library falls back to `clone`,
+    whose flags a filter can see (Docker does the same);
+  - `clone` with any of the seven namespace flags gets `EPERM`;
+  - everything else is allowed.
+
+  Left out on purpose: `adjtimex`, which can also just read the clock, and
+  the NUMA memory calls, which runtimes may use.
+- **Checked in the generated program itself**, by decoding the BPF
+  instructions, not just libseccomp's readable `--pfc` output. A
+  non-x86-64 architecture tag jumps to `ret 0` (kill). So does a syscall
+  number at or above `0x40000000` (x86-64's x32 ABI, whose numbers would
+  otherwise slip past every rule): the guard is libseccomp's own, and the
+  `--pfc` text doesn't show it. Also seen: a name the architecture lacks
+  (`vm86` on x86-64) becomes a harmless never-matching rule, not an error.
+- `judge/sandbox.js` compiles `gen.cpp` with `g++ -lseccomp` into the
+  helper folder at startup (`buildSeccompFilter`), writes the filter there,
+  and adds `--seccomp 3` to every sandbox. `spawnSandboxed` opens the filter
+  as the child's fd 3 for each start, since bwrap reads it to the end, and
+  closes the parent's copy. The runner starts sandboxed compiles and runs
+  through it (`startProcess`).
+- **Fail closed:** if the filter can't be built, the self-test fails with
+  the compiler's error line, and the server refuses to judge. The
+  self-test also checks `Seccomp: 2` inside the sandbox.
+  `scripts/sandbox-deps.sh` installs `libseccomp-dev` when
+  `/usr/include/seccomp.h` is missing, and `docs/deploy-vps.md` §1a lists
+  it.
+- **Checked:**
+  - G11 is contained, `seccomp filter active (mode 2)`, with all four calls
+    refused as `Operation not permitted`;
+  - the escape test is 14/14 as root and as `nobody`;
+  - correct answers are Accepted in all five languages, which also covers
+    the `clone3` fallback for JVM and D threads, and Node;
+  - starter-code verdicts are unchanged in 65 runs, and so is the override
+    path;
+  - with the header hidden, `UNAVAILABLE (couldn't build the seccomp filter
+    generator …: fatal error: seccomp.h …)`, and judging is refused;
+  - with `libseccomp-dev` removed, `make sandbox-deps` reinstalled it.
+  - One run showed Java and D at about 3.6 s instead of about 0.8 s. Three
+    reruns gave 650–700 ms and 0.9–1.1 s, so that was noise in the shared
+    container, not the filter.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

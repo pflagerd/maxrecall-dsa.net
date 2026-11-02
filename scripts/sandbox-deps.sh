@@ -8,7 +8,9 @@
 #
 # What it may do, in order:
 # 1. Install bubblewrap from Ubuntu's archive, if `bwrap` isn't on PATH.
-# 2. If the sandbox self-test fails because AppArmor blocks bubblewrap's
+# 2. Install libseccomp-dev, if its header is missing: the server builds the
+#    sandbox's seccomp filter with it at startup.
+# 3. If the sandbox self-test fails because AppArmor blocks bubblewrap's
 #    user namespaces (Ubuntu's kernel.apparmor_restrict_unprivileged_userns),
 #    load Ubuntu's own bwrap-userns-restrict profile, installing
 #    apparmor-profiles for it first if needed. This is a machine-wide change:
@@ -102,9 +104,17 @@ if ! command -v bwrap >/dev/null; then
   apt_install bubblewrap || give_up "installing bubblewrap failed"
 fi
 
+# 2. libseccomp's header and library, which the server needs to build the
+# sandbox's seccomp filter at startup (judge/seccomp/gen.cpp). Without them
+# the self-test fails and the server refuses to judge.
+if [ ! -f /usr/include/seccomp.h ]; then
+  note "libseccomp-dev is not installed; installing it from Ubuntu's archive."
+  apt_install libseccomp-dev || give_up "installing libseccomp-dev failed"
+fi
+
 if reason=$(self_test); then works; fi
 
-# 2. AppArmor, only if it's what's in the way.
+# 3. AppArmor, only if it's what's in the way.
 if minimal_bwrap; then
   give_up "$reason"
 fi

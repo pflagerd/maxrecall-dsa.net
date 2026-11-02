@@ -210,6 +210,55 @@ def probe():
 `,
     },
     {
+      id: 'G11',
+      what: 'make system calls a seccomp filter should refuse (io_uring, ptrace, keyctl, kcmp)',
+      // Four calls that succeed for an ordinary user without a filter
+      // (checked 2026-11-02 as nobody, outside any sandbox), so a refusal
+      // shows the filter rather than missing privileges. Calls such as bpf
+      // would prove nothing: Ubuntu already refuses them to ordinary users.
+      // Numbers from the kernel's syscall tables: x86-64 (asm/unistd_64.h)
+      // and ARM64 (asm-generic/unistd.h).
+      code: `
+import ctypes, os, platform
+NUMBERS = {
+    'x86_64':  {'io_uring_setup': 425, 'ptrace': 101, 'keyctl': 250, 'kcmp': 312},
+    'aarch64': {'io_uring_setup': 425, 'ptrace': 117, 'keyctl': 219, 'kcmp': 272},
+}
+def probe():
+    nr = NUMBERS.get(platform.machine())
+    if nr is None:
+        return 'inconclusive: no syscall numbers for ' + platform.machine()
+    libc = ctypes.CDLL(None, use_errno=True)
+    def call(n, *args):
+        r = libc.syscall(n, *[ctypes.c_long(a) for a in args])
+        return r, ctypes.get_errno()
+    with open('/proc/self/status') as f:
+        mode = [l.split()[1] for l in f if l.startswith('Seccomp:')][0]
+    params = ctypes.create_string_buffer(120)
+    results = {}
+    results['io_uring_setup'] = call(nr['io_uring_setup'], 1, ctypes.addressof(params))
+    results['keyctl'] = call(nr['keyctl'], 0, -3, 0)   # KEYCTL_GET_KEYRING_ID, session keyring
+    pid = os.getpid()
+    results['kcmp'] = call(nr['kcmp'], pid, pid, 0, 0, 0)  # KCMP_FILE: fd 0 against itself
+    r, w = os.pipe()
+    child = os.fork()
+    if child == 0:
+        rc, err = call(nr['ptrace'], 0, 0, 0, 0)  # PTRACE_TRACEME
+        os.write(w, ('%d %d' % (rc, err)).encode())
+        os._exit(0)
+    os.waitpid(child, 0)
+    rc, err = os.read(r, 64).decode().split()
+    results['ptrace'] = (int(rc), int(err))
+    allowed = sorted(k for k, (rc, err) in results.items() if rc >= 0)
+    refused = ', '.join('%s %s' % (k, os.strerror(err)) for k, (rc, err) in sorted(results.items()) if rc < 0)
+    if allowed:
+        return 'ESCAPED: seccomp mode %s; allowed: %s%s' % (mode, ', '.join(allowed), ('; refused: ' + refused) if refused else '')
+    if mode != '2':
+        return 'inconclusive: all refused, but no seccomp filter (mode %s): %s' % (mode, refused)
+    return 'contained: seccomp filter active (mode 2); refused: ' + refused
+`,
+    },
+    {
       id: 'G8',
       what: 'have a network interface other than loopback',
       code: `
@@ -282,7 +331,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // broken probe can't pass by accident.
 function readVerdict(result) {
   const actual = result.results && result.results[0] && result.results[0].actual;
-  if (typeof actual === 'string' && /^(ESCAPED|contained):/.test(actual)) {
+  if (typeof actual === 'string' && /^(ESCAPED|contained|inconclusive):/.test(actual)) {
     const [verdict, ...rest] = actual.split(':');
     return { verdict, detail: rest.join(':').trim() };
   }
