@@ -668,7 +668,9 @@ is on `master`, which doesn't have this work yet, and it runs as
 
 ### Step 5, VPS part: fifth run, passing (2026-11-02, owner's run)
 
-Root's checkout, system-only `PATH`, after `6ea6395`/`b6c0ebd`:
+Root's checkout, system-only `PATH`, at `afcdf76` (repeated at `59bf2c6`
+with the same result; an earlier version of this note said “after
+`6ea6395`/`b6c0ebd`”, but the hook change `b6c0ebd` came after that run):
 `Toolchains: … node v22.23.4 at /usr/local/bin/node`, `Sandbox: bubblewrap
 0.9.0 works`, and **12 contained, 1 skipped (G6d, 2 cores)**, with make
 exiting 0. The judge's sandbox now works on all three machines: cloud 13/13,
