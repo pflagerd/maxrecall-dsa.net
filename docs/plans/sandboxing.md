@@ -353,6 +353,46 @@ outcomes, and they caught a gap in the design.
   toolchains outside `/usr` are bound too: `/opt/node22` in the cloud. So
   no paths are hard-coded per machine.
 
+### Step 2b: `make` installs the dependencies (2026-11-02, owner's choice)
+
+The owner chose option (c): `make run` and `make dev` install what the
+sandbox needs, rather than leaving it to an explicit target. Both depend on
+`build`, which now depends on `sandbox-deps` (`scripts/sandbox-deps.sh`). The
+cloud SessionStart hook calls the same script, so there's one copy of the
+install logic.
+
+1. **Check first** with the server's own self-test, without root (about
+   0.1 s). If it passes, the script does nothing more.
+2. **bubblewrap missing:** `apt-get install bubblewrap`, through `sudo`
+   unless already root, refreshing package lists only if apt doesn't know
+   the package.
+3. **Still failing:** a minimal `bwrap … true` tells whether namespaces
+   themselves are refused. Only if they are, *and*
+   `kernel.apparmor_restrict_unprivileged_userns` is `1`, it installs
+   `apparmor-profiles` if needed, copies `bwrap-userns-restrict` into
+   `/etc/apparmor.d/`, and loads it with `apparmor_parser -r`. Then it
+   re-tests.
+4. **Can't fix it** (no sudo rights, a cancelled password prompt, a failure
+   that isn't AppArmor's): it prints `Sandbox: UNAVAILABLE (reason)` and exits
+   0, so the server starts and refuses to judge on its own.
+
+**Checked:** in the cloud, as root, both bwrap present and bwrap missing
+with empty package lists. The AppArmor branch was checked only with
+stand-ins, run as `nobody` so everything went through `sudo`. Logging fakes
+of `sudo`, `apt-get` and `apparmor_parser`, and a `bwrap` that fails until
+the “profile” is loaded, showed:
+- the right commands, in order, each through `sudo`;
+- nothing done on a second run;
+- AppArmor left alone when it isn't the cause;
+- a warning, not a failed `make`, when `sudo` is refused.
+
+**Untested:** real AppArmor, on Kubuntu 26.04 and on the VPS.
+
+**Caution:** run it as the user the server runs as. Root may create user
+namespaces even where AppArmor stops everyone else, so a check run as root
+can pass while the server's user fails. The VPS service doesn't use `make`,
+so `docs/deploy-vps.md` §1a stays the VPS procedure.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).

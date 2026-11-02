@@ -1,4 +1,4 @@
-.PHONY: all install build run dev clean sandbox-test
+.PHONY: all install sandbox-deps build run dev clean sandbox-test
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -23,8 +23,14 @@ install: node_modules
 node_modules: package.json
 	npm install
 
+# Install the judge's sandbox (bubblewrap, and Ubuntu's AppArmor profile for
+# it if AppArmor is what's in the way) if missing, then check it works. Asks
+# for sudo only when it has something to install. See scripts/sandbox-deps.sh.
+sandbox-deps:
+	./scripts/sandbox-deps.sh
+
 # "Build" step: just ensure dependencies are installed (static HTML/CSS/JS needs no compile)
-build: install
+build: install sandbox-deps
 
 # Run the server in the foreground (so Ctrl-C stops it) and open it in the browser
 run: build
@@ -38,7 +44,7 @@ dev: build
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained or ESCAPED. Fails if any escaped.
-sandbox-test:
+sandbox-test: sandbox-deps
 	node judge/sandbox-selftest.js
 
 # Remove installed dependencies
