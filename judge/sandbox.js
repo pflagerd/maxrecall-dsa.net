@@ -31,6 +31,24 @@ const UNSANDBOXED_OVERRIDE = process.env.MAXRECALL_UNSANDBOXED === '1';
 // Size of each sandbox's private /tmp (a tmpfs, so it's memory).
 const TMPFS_BYTES = 64 * 1024 * 1024;
 
+// Limits for a submission's run, set with prlimit INSIDE the sandbox. Inside
+// matters: since Linux 5.14 RLIMIT_NPROC is counted per user namespace, so
+// inside the sandbox it counts only the sandbox's own processes and threads.
+// Set outside, it would count every process the server's user owns (all of
+// a desktop session), and the sandbox wouldn't even start. Measured
+// 2026-11-02: with 150 processes outside, --nproc=64 outside made bwrap
+// fail; inside it stopped a fork loop at 62. Threads count too, and the JVM
+// starts more of them on more cores, hence the headroom. fsize caps any one
+// file (in /tmp); core=0 means no core dumps.
+const RUN_LIMITS = Object.freeze({ nproc: 128, fsizeBytes: 16 * 1024 * 1024 });
+
+// Root is exempt from RLIMIT_NPROC (measured: 300 forks under a 64 limit),
+// and submissions shouldn't run as root anyway. So when the server is root
+// (the cloud sessions), sandboxes run as nobody instead, via setpriv. On
+// Kubuntu and the VPS the server isn't root, and sandboxes run as its user.
+const RUNNING_AS_ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+const NOBODY_UID = 65534;
+
 // Toolchains the judge runs. Any that live outside /usr (Node is
 // /opt/node22 in the cloud) get their install folder bound in read-only.
 const TOOLCHAIN_COMMANDS = ['node', 'python3', 'g++', 'javac', 'java', 'dmd'];
@@ -134,10 +152,27 @@ const BASE_ARGS = Object.freeze([
 // The caller passes { env: SUBMISSION_ENV } to spawn (see SUBMISSION_ENV).
 function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
   const bindArgs = binds.flatMap(({ hostPath, sandboxPath, writable }) => [writable ? '--bind' : '--ro-bind', hostPath, sandboxPath || hostPath]);
+  const bwrapArgs = [...BASE_ARGS, ...bindArgs, '--chdir', cwd, '--', command, ...args];
+  if (!RUNNING_AS_ROOT) return { command: 'bwrap', args: bwrapArgs };
+  // setpriv (util-linux) changes user, then execs bwrap.
   return {
-    command: 'bwrap',
-    args: [...BASE_ARGS, ...bindArgs, '--chdir', cwd, '--', command, ...args],
+    command: 'setpriv',
+    args: [`--reuid=${NOBODY_UID}`, `--regid=${NOBODY_UID}`, '--clear-groups', 'bwrap', ...bwrapArgs],
   };
+}
+
+// sandboxedCommand plus RUN_LIMITS, for running a submission.
+function sandboxedRun(command, args, options) {
+  const limits = [`--nproc=${RUN_LIMITS.nproc}`, `--fsize=${RUN_LIMITS.fsizeBytes}`, '--core=0'];
+  return sandboxedCommand('prlimit', [...limits, '--', command, ...args], options);
+}
+
+// Makes a submission's work folder usable from inside the sandbox. When the
+// server is root, sandboxes run as nobody, so the folder (made 0700 by
+// mkdtemp) must let others through. 0711 lets them open files whose names
+// they know, without listing the folder.
+function prepareWorkDir(dir) {
+  if (RUNNING_AS_ROOT) fs.chmodSync(dir, 0o711);
 }
 
 // Run inside the sandbox once at startup. It fails, printing why, if the
@@ -182,7 +217,8 @@ const status = Object.freeze({ ...runSelfTest(), unsandboxedOverride: UNSANDBOXE
 // One line for the server's startup log.
 function describeSandbox() {
   if (status.ok) {
-    return `${status.version} works (self-test passed); submissions don't run inside it yet (sandboxing step 3)`;
+    const who = RUNNING_AS_ROOT ? ', as nobody because the server is root' : '';
+    return `${status.version} works (self-test passed); submissions run inside it${who}. Compilers don't yet (sandboxing step 4)`;
   }
   if (status.unsandboxedOverride) {
     return `UNAVAILABLE (${status.reason}), but MAXRECALL_UNSANDBOXED=1, so judging is allowed WITHOUT a sandbox`;
@@ -203,4 +239,4 @@ function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }
 
-module.exports = { SUBMISSION_ENV, sandboxedCommand, sandboxStatus: status, describeSandbox, assertJudgingAllowed };
+module.exports = { SUBMISSION_ENV, RUN_LIMITS, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };

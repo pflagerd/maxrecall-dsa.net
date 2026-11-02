@@ -13,8 +13,10 @@ It listens on two ports, both on `127.0.0.1`:
   what a reverse proxy would point at, if the app is ever made public, and it
   must never point at 3001.
 
-**Why it's set up this way.** Submitted code isn't sandboxed (`readme.html`
-§10). It runs as the server's user. To limit the damage, the server:
+**Why it's set up this way.** Since 2026-11-02 (sandboxing step 3),
+submitted code *runs* inside the judge's own bubblewrap sandbox
+(`readme.html` §6), but the compilers don't yet (step 4), and there are no
+seccomp or cgroup limits yet (steps 6–7). As an outer layer, the server:
 
 - runs as its own unprivileged user, `maxrecall`;
 - is reachable only through your SSH login;
@@ -22,15 +24,14 @@ It listens on two ports, both on `127.0.0.1`:
   network except the VPS itself, a read-only file system apart from three
   folders, and a private `/tmp`.
 
-That's containment, not a real sandbox. A submission can still read
-world-readable files on the VPS, use CPU and memory, and connect to
-`127.0.0.1:3001`, so a submission could act as you. It can also read the
-service's starting environment from `/proc/<pid>/environ`, including
-`MAXRECALL_PASSWORD` if `test.env` sets it. Root-only `test.env` keeps the
-file private, not the value once the service has it. Sandboxing step 3
-(`docs/plans/sandboxing.md`) closes this. With you as the only
-user, that's no worse than you running it yourself; it would matter with
-other users.
+Before step 3, that containment was all there was. A submission could
+read world-readable files on the VPS and connect to `127.0.0.1:3001`, and
+so act as you. It could also read the service's starting environment from
+`/proc/<pid>/environ`, including `MAXRECALL_PASSWORD` if `test.env` sets it.
+Inside the sandbox, a running submission sees none of that: it has its own
+network (loopback only), its own process list and its own file view. It
+still uses CPU and memory within its limits. And the compiler can still read
+files through a C++ `#include`, until step 4.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
 your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.

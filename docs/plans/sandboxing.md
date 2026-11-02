@@ -1,7 +1,7 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–2
-done 2026-11-02; step 3 next.** The VPS part of step 5 (AppArmor) moved
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–3
+done 2026-11-02; step 4 next.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -198,8 +198,8 @@ Notes:
   G1 still escaped through `/proc/1/environ`. So the judge must call
   `spawn('bwrap', …, { env: { PATH } })` as well as passing `--clearenv`.
   That makes step 1 a requirement, not only a quick win.
-- **Limits** are set with `prlimit` (util-linux) before bwrap, or in a tiny
-  wrapper. I measured these:
+- **Limits** are set with `prlimit` (util-linux). **Correction (step 3): inside
+  bwrap, not before it.** See “Step 3 notes”. I measured these:
   - `--nproc=50` stopped a fork loop at 47 children.
   - `--as=256M` refused a 400 MB allocation.
   - `--fsize=10M` stopped a file at exactly 10 MB in the tmpfs.
@@ -254,7 +254,7 @@ Notes:
 | 0 | **Done 2026-11-02.** An escape test: `judge/sandbox-selftest.js` (`make sandbox-test`) runs hostile submissions through `runSubmission` and reports each of G1–G8 as *contained* or *ESCAPED*. Run it after each step. | Cloud, 2026-11-02: 10 ESCAPED, 1 contained (G6c, the existing memory cap). See “Step 0 results” below. |
 | 1 | **Done 2026-11-02.** Every `spawn` in the runner gets `env: SUBMISSION_ENV` (`PATH`, `LANG=C.UTF-8`). It's needed for bwrap too (§5). | G1 now says “own env is clean (['LANG', 'PATH']), but the canary is readable in /proc/<pid>/environ”: still ESCAPED, as expected, until step 3. See “Step 1 notes”. |
 | 2 | **Done 2026-11-02.** `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to the cloud SessionStart hook, and to `docs/deploy-vps.md` as new §1a with the AppArmor profile (moved here from step 5). | The self-test passes in the cloud, as root and as `nobody`. With bwrap unusable, the server logs UNAVAILABLE and Run gets 503; with `MAXRECALL_UNSANDBOXED=1` it judges. |
-| 3 | Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Every existing question still passes its starter solution; selftest G2–G6, G8 contained. |
+| 3 | **Done 2026-11-02.** Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Escape test: 10 of 11 contained (G7 left for step 4), as root and as `nobody`. Correct answers Accepted in every language and mode; starter-code verdicts unchanged in all 65 runs. See “Step 3 notes”. |
 | 4 | Compile step under bwrap. | G7 contained; C++/Java/D still compile. |
 | 5 | VPS: follow §1a (written in step 2), read the `Sandbox:` log line, adjust the service file if its containment gets in the way. Kubuntu: `sudo apt install bubblewrap`, check `ls /etc/apparmor.d \| grep -i bwrap`, and run the selftest. | Selftest on the VPS, including G4 (port 3001) contained. |
 | 6 | Seccomp denylist (D4). | Selftest's seccomp probes are refused; all questions still pass. |
@@ -392,6 +392,52 @@ the “profile” is loaded, showed:
 namespaces even where AppArmor stops everyone else, so a check run as root
 can pass while the server's user fails. The VPS service doesn't use `make`,
 so `docs/deploy-vps.md` §1a stays the VPS procedure.
+
+### Step 3 notes (2026-11-02)
+
+- **Where the process limit has to go (measured).** The plan's §5 said to
+  run `prlimit` *before* bwrap. That was wrong. With 150 processes of the
+  same user already running:
+  - `prlimit --nproc=64` **outside** bwrap made bwrap itself fail
+    (`Creating new namespace failed: Resource temporarily unavailable`),
+    because it counted all 150;
+  - **inside** bwrap, the same limit stopped a fork loop at 62.
+
+  Since Linux 5.14, RLIMIT_NPROC is counted per user namespace (the kernel's
+  “ucounts”). Inside, it counts only the sandbox. Outside, a new namespace's
+  ceiling is the creator's limit, which is checked against *everything* that
+  user owns. A Kubuntu desktop session would fail every Run. So
+  `sandboxedRun` puts `prlimit` inside: `bwrap … -- prlimit --nproc=128
+  --fsize=16M --core=0 -- <command>`. (The kernel mechanism is from my
+  reading of `kernel/ucount.c`, not re-checked this session; the
+  measurement is what the code relies on.)
+- **Root ignores it.** As root, the same limit allowed all 300 forks. The
+  kernel exempts the root user, and root inside a user namespace started by
+  root is still that user. So when the server runs as root (the cloud),
+  `sandboxedCommand` prefixes `setpriv --reuid=65534 --regid=65534
+  --clear-groups` and runs sandboxes as `nobody`. The work folder is then
+  made `0711` (`prepareWorkDir`), so `nobody` can open the files without
+  listing the folder. On Kubuntu and the VPS the server isn't root and none
+  of this applies. This wasn't in the plan; it's how the cloud tests the
+  same thing as the other machines.
+- **128 processes.** Threads count, and the JVM's thread count grows with
+  cores. 128 ran Java fine on the cloud's 4 cores. A many-core Kubuntu
+  machine *might* need more; that's a guess. A Java submission failing with
+  “unable to create native thread” would be the sign.
+- **Work folders.** One `mkdtemp` folder per submission, with fixed names
+  (`main.js`, `main.py`, `main.cpp`, `Main.java`, `main.d`, binary `main`),
+  read-only at `/work` while running; Java helpers at `/judge/java`.
+  Compiling still happens in it on the host (step 4). Without a working
+  sandbox, but with `MAXRECALL_UNSANDBOXED=1`, runs use the real paths and
+  start in that folder, otherwise as before (`runPaths`).
+- **Checked:**
+  - the escape test, as root (sandboxes as `nobody`) and as `nobody` (bwrap
+    directly): 10 of 11 contained both times;
+  - correct Two Sum (function mode, hidden tests included) and Hello World
+    (program mode): Accepted in all five languages, sandboxed both ways and
+    with the override;
+  - starter code: the same verdicts in all 65 runs;
+  - no `judge-*` folders left in `/tmp`.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
