@@ -204,7 +204,9 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
   <tr><td>Java</td><td><code>javac</code> / <code>java</code></td><td>256 MB</td><td><code>-Xmx</code> (heap only)</td></tr>
   <tr><td>D</td><td><code>dmd</code></td><td>128 MB</td><td><code>ulimit -v</code></td></tr>
 </table>
-<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s.
+<p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s. In program mode, where each test case is its own run,
+all of a submission's runs together may take at most 20&nbsp;s (<code>PROGRAM_TOTAL_RUN_MS</code>, not counting compiling). A case is
+cut short if less than 5&nbsp;s is left, and cases still waiting when the time is used up aren't run; both count as Time Limit Exceeded.
 Compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code> as their environment, not a copy of the server's
 (<code>SUBMISSION_ENV</code>, in <code>judge/sandbox.js</code>). <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
 <code>runSubmission</code> refuses to judge if the sandbox failed its startup check (see Running it).</p>
@@ -336,7 +338,6 @@ from 2&nbsp;GB and growing to a Compile Error after 6.6&nbsp;s). What's still op
   <li><strong>No seccomp filter</strong> (step 6).</li>
   <li><strong>No cgroup limits</strong> (step 7). Memory is capped per language, as before, and the 64&nbsp;MB <code>/tmp</code> is kernel memory.
   The CPU limit is per process, so a submission that forks gets 10&nbsp;s of CPU per process.</li>
-  <li><strong>Program mode's time limit is per test case</strong>: 5&nbsp;s each, so a question with 20 cases allows up to 100&nbsp;s (a small step after step 4).</li>
   <li><strong>The reported runtime includes compiling</strong> and sandbox start-up, because <code>runtimeMs</code> is measured from before the compile.</li>
   <li><strong>No limit on concurrent judgings</strong> (step 8).</li>
   <li><strong>The kernel is shared</strong> with the host, as with any namespace sandbox.</li>
@@ -384,6 +385,7 @@ of 5000, because the orphan held the output pipe open. <strong>Step 3 closed all
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong>: a 20&nbsp;s total for all of a program-mode submission's runs (<code>PROGRAM_TOTAL_RUN_MS</code>); it was 5&nbsp;s per test case with no total. Checked with ten cases that each sleep 3&nbsp;s: 6 passed, the 7th was cut off at 20&nbsp;s, and the last 3 weren't run. The whole thing took 20.0&nbsp;s instead of 50&nbsp;s. Only Hello World uses program mode so far, with 1 case.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 4): <code>g++</code>, <code>javac</code> and <code>dmd</code> run inside bubblewrap with the run limits. The work folder is writable at <code>/work</code> only while compiling, and the helpers are read-only. Compilers also get memory caps: 1&nbsp;GB of address space for <code>g++</code> and <code>dmd</code>, and a 256&nbsp;MB heap for <code>javac</code>. Real harness compiles fit in 512&nbsp;MB (measured). The three compile functions became one (<code>compileCommand</code>, <code>compileSubmission</code>, <code>sandboxedArgs</code>). When the server is root, the work folder is handed to <code>nobody</code> so the compiler can write to it. Escape test: 13 of 13 contained, as root and as <code>nobody</code>. Correct answers are Accepted in all five languages, sandboxed and with the override. Starter-code verdicts are unchanged in all 65 runs, and compile errors now show <code>/work/…</code> paths.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Added</strong> (owner asked how time is limited): a CPU-time limit per run process, 10&nbsp;s soft and 11&nbsp;s hard, reported as <em>Time Limit Exceeded</em>. There are two new escape-test probes. G6d (one process busy on every core) is contained: stopped after 2.6&nbsp;s of wall-clock time on 4 cores, and without the limit it ran the full 5&nbsp;s. G10 (a compile longer than the limit) is ESCAPED until step 4. Found while answering: the C++ compile timeout leaves <code>cc1plus</code> running, and compilers have no memory limit (see Known gaps).</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 3): every run, in all five languages and both judge modes, runs inside bubblewrap. Its folder is read-only at <code>/work</code>, and <code>prlimit</code> sets 128 processes, 16&nbsp;MB per file and no core dumps <em>inside</em> the sandbox. Measured: set outside, with 150 of the user's processes already running, bwrap couldn't even start. When the server is root, sandboxes run as <code>nobody</code>: root ignored a 64-process limit. Escape test: 10 of 11 contained, both as root and as <code>nobody</code>; G7 (compile time) is left for step 4. Correct Two Sum and Hello World answers are Accepted in every language, and starter-code verdicts are unchanged in all 65 runs.</td></tr>

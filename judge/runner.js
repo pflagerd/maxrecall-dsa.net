@@ -8,6 +8,12 @@ const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, sandboxStatus, sandboxe
 const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
 
 const TIMEOUT_MS = 5000;
+// Program judging runs one process per test case, each allowed TIMEOUT_MS,
+// so without a total a question with 20 cases would allow 100 s. This caps
+// all of a submission's runs together (not counting compiling). Java starts
+// a JVM per case, about 0.3 to 0.7 s each with the sandbox, so 20 s leaves
+// room for about 30 cases.
+const PROGRAM_TOTAL_RUN_MS = 20000;
 const NODE_MEMORY_MB = 128;
 const PYTHON_MEMORY_MB = 256;
 const CPP_MEMORY_MB = 128;
@@ -513,13 +519,13 @@ function compileSubmission(language, workDir) {
 
 // Runs one submission process: inside the sandbox when it works, with its
 // folder read-only at /work (sandboxedArgs).
-function spawnJudged(argv, stdinPayload, workDir) {
+function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS) {
   const proc = sandboxedArgs(argv, workDir);
   return new Promise((resolve) => {
     const child = spawn(proc.command, proc.args, {
       env: SUBMISSION_ENV,
       cwd: proc.cwd,
-      timeout: TIMEOUT_MS,
+      timeout: timeoutMs,
       killSignal: 'SIGKILL',
     });
 
@@ -719,13 +725,28 @@ async function runProgramSubmission({ language, code, testCases }) {
     let anyCrashed = false;
     const results = [];
 
+    const runsStarted = Date.now();
     for (let index = 0; index < testCases.length; index++) {
       const tc = testCases[index];
-      const outcome = await spawnJudged(command, tc.input || '', workDir);
+      // Each case gets TIMEOUT_MS, or what's left of the total if less.
+      // Cases still waiting when the total is used up aren't run.
+      const remainingMs = PROGRAM_TOTAL_RUN_MS - (Date.now() - runsStarted);
+      if (remainingMs <= 0) {
+        anyTimedOut = true;
+        results.push(tc.hidden
+          ? { index, hidden: true, passed: false }
+          : { index, hidden: false, passed: false, input: tc.input, error: `Not run: all test cases together may take at most ${PROGRAM_TOTAL_RUN_MS / 1000} s, and that time was used up.` });
+        continue;
+      }
+      const timeoutMs = Math.min(TIMEOUT_MS, remainingMs);
+      const outcome = await spawnJudged(command, tc.input || '', workDir, timeoutMs);
 
       if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
         anyTimedOut = true;
-        const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
+        let errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
+        if (outcome.timedOut && timeoutMs < TIMEOUT_MS) {
+          errorText = `Time limit exceeded: all test cases together may take at most ${PROGRAM_TOTAL_RUN_MS / 1000} s.`;
+        }
         results.push(tc.hidden
           ? { index, hidden: true, passed: false }
           : { index, hidden: false, passed: false, input: tc.input, error: errorText });

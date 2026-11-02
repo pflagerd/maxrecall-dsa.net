@@ -1,8 +1,8 @@
 # Plan: sandbox submitted code
 
 Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–4
-done 2026-11-02, plus a CPU-time limit. Next: a total time budget for
-program mode, then steps 5–8.** The VPS part of step 5 (AppArmor) moved
+done 2026-11-02, plus a CPU-time limit and a total time budget for program
+mode. Next: step 5 (VPS and Kubuntu on real AppArmor), then 6–8.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -471,8 +471,13 @@ so `docs/deploy-vps.md` §1a stays the VPS procedure.
   2.7 s, N=18 14.7 s. There's deliberately no probe for this: before the
   fix, it would push the machine toward gigabytes of RAM on every run of the
   escape test. Step 4 adds a cap and checks it by hand.
+- **Done after step 4:** program mode's runs together may take at most
+  20 s (`PROGRAM_TOTAL_RUN_MS`, not counting compiling). Each case gets
+  `min(5 s, what's left)`, and cases still waiting when it's used up are
+  marked failed, “Not run”, without running. Checked with ten 3 s cases: 6
+  passed, the 7th was cut off, the last 3 weren't run; 20.0 s in all
+  instead of 50 s.
 - **Still open:**
-  - program mode's 5 s is per test case (a small step after step 4);
   - `runtimeMs` includes compiling and sandbox start-up (separate, since it
     changes saved records);
   - the CPU limit is per process (cgroups, step 7).
