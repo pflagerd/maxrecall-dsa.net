@@ -1,8 +1,9 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–4
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–5
 done 2026-11-02, plus a CPU-time limit and a total time budget for program
-mode. Next: step 5 (VPS and Kubuntu on real AppArmor), then 6–8.** The VPS part of step 5 (AppArmor) moved
+mode. The sandbox works in the cloud, on Kubuntu 26.04, and in the VPS's
+systemd service. Next: steps 6–8.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -257,7 +258,7 @@ Notes:
 | 2 | **Done 2026-11-02.** `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to the cloud SessionStart hook, and to `docs/deploy-vps.md` as new §1a with the AppArmor profile (moved here from step 5). | The self-test passes in the cloud, as root and as `nobody`. With bwrap unusable, the server logs UNAVAILABLE and Run gets 503; with `MAXRECALL_UNSANDBOXED=1` it judges. |
 | 3 | **Done 2026-11-02.** Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Escape test: 10 of 11 contained (G7 left for step 4), as root and as `nobody`. Correct answers Accepted in every language and mode; starter-code verdicts unchanged in all 65 runs. See “Step 3 notes”. |
 | 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
-| 5 | VPS: follow §1a (written in step 2), read the `Sandbox:` log line, adjust the service file if its containment gets in the way. Kubuntu: `sudo apt install bubblewrap`, check `ls /etc/apparmor.d \| grep -i bwrap`, and run the selftest. | Selftest on the VPS, including G4 (port 3001) contained. |
+| 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
 | 6 | Seccomp denylist (D4). | Selftest's seccomp probes are refused; all questions still pass. |
 | 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
@@ -720,6 +721,17 @@ tried with bubblewrap.
 - Next: get `deploy-server` onto `master` (pull request), then rerun
   `make deploy-server` on the VPS. It re-copies the changed unit, reloads,
   restarts and checks the `Sandbox:` line.
+- **Done.** `deploy-server` merged (pull request #13, `839dd21`). Rerun
+  on the VPS from root's checkout on `master`:
+  - `git pull --ff-only` in the service's checkout to `839dd21`;
+  - the changed unit installed, then a restart;
+  - `Sandbox: bubblewrap 0.9.0 works (self-test passed); compilers and
+    submissions run inside it`;
+  - ports 3000 and 3001 on `127.0.0.1` only;
+  - `Deployed: … at 839dd21`.
+
+  **Step 5 is complete:** the service judges inside the sandbox, as
+  `maxrecall`, under the unit's systemd containment.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
