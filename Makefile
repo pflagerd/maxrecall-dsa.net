@@ -52,7 +52,9 @@ dev: build
 	PORT=$(PORT) npx nodemon server.js
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
-# code and reports each probe as contained or ESCAPED. Fails if any escaped.
+# code and reports each probe as contained, ESCAPED, skipped (this machine
+# can't test it) or inconclusive (it didn't run as intended). Fails, with
+# make's "Error 1", unless every probe is contained or skipped.
 sandbox-test: sandbox-deps
 	node judge/sandbox-selftest.js
 
