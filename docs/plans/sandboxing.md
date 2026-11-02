@@ -1,7 +1,8 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0 and 1
-done 2026-11-02; step 2 next.**
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–2
+done 2026-11-02; step 3 next.** The VPS part of step 5 (AppArmor) moved
+into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
 ## 1. The problem today
@@ -252,10 +253,10 @@ Notes:
 |---|---|---|
 | 0 | **Done 2026-11-02.** An escape test: `judge/sandbox-selftest.js` (`make sandbox-test`) runs hostile submissions through `runSubmission` and reports each of G1–G8 as *contained* or *ESCAPED*. Run it after each step. | Cloud, 2026-11-02: 10 ESCAPED, 1 contained (G6c, the existing memory cap). See “Step 0 results” below. |
 | 1 | **Done 2026-11-02.** Every `spawn` in the runner gets `env: SUBMISSION_ENV` (`PATH`, `LANG=C.UTF-8`). It's needed for bwrap too (§5). | G1 now says “own env is clean (['LANG', 'PATH']), but the canary is readable in /proc/<pid>/environ”: still ESCAPED, as expected, until step 3. See “Step 1 notes”. |
-| 2 | `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to `docs/deploy-vps.md` §1 and the cloud SessionStart hook. | The self-test passes in the cloud. The server refuses to judge if bwrap is removed. |
+| 2 | **Done 2026-11-02.** `judge/sandbox.js` with startup self-test and fail-closed (D2). `bwrap` added to the cloud SessionStart hook, and to `docs/deploy-vps.md` as new §1a with the AppArmor profile (moved here from step 5). | The self-test passes in the cloud, as root and as `nobody`. With bwrap unusable, the server logs UNAVAILABLE and Run gets 503; with `MAXRECALL_UNSANDBOXED=1` it judges. |
 | 3 | Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Every existing question still passes its starter solution; selftest G2–G6, G8 contained. |
 | 4 | Compile step under bwrap. | G7 contained; C++/Java/D still compile. |
-| 5 | VPS: AppArmor (D3), service file and guide updated. Kubuntu: check `ls /etc/apparmor.d \| grep -i bwrap` and run the selftest. | Selftest on the VPS, including G4 (port 3001) contained. |
+| 5 | VPS: follow §1a (written in step 2), read the `Sandbox:` log line, adjust the service file if its containment gets in the way. Kubuntu: `sudo apt install bubblewrap`, check `ls /etc/apparmor.d \| grep -i bwrap`, and run the selftest. | Selftest on the VPS, including G4 (port 3001) contained. |
 | 6 | Seccomp denylist (D4). | Selftest's seccomp probes are refused; all questions still pass. |
 | 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
@@ -314,6 +315,43 @@ outcomes, and they caught a gap in the design.
   visible in `/proc/<pid>/environ`. That's a narrower exposure than §1's G1
   row suggests: the leak there was through inheritance, which this step
   ends.
+
+### Step 2 notes (2026-11-02)
+
+- **What the startup self-test checks.** It runs `/bin/sh` once, inside a
+  sandbox built by the same `sandboxedCommand` the judge will use, and fails
+  if:
+  - the repo folder is visible (filesystem not isolated);
+  - `/proc/net/dev` lists anything but `lo` (no network namespace);
+  - `/proc/1/environ` holds anything but `PATH` and `LANG` (§5's finding);
+  - a toolchain found on `PATH` outside can't be found inside (a missing
+    bind).
+- **The self-test fails when it should.** I fed the same script four
+  deliberately broken sandboxes: the repo bound in, the network namespace
+  left out, bwrap started with the server's environment, and Node's
+  `/opt/node22` not bound. Each was reported with its own message.
+- **Failure cases tried.**
+  - bwrap not executable: `UNAVAILABLE (bubblewrap is not installed: …)`.
+  - User namespaces blocked, simulated by running the server inside an
+    outer `bwrap --disable-userns` because the container doesn't allow
+    changing the `sysctl`: `UNAVAILABLE (self-test failed: bwrap: Creating
+    new namespace failed: … (ENOSPC))`.
+
+  In both, Run gets HTTP 503 and the page shows the reason. With
+  `MAXRECALL_UNSANDBOXED=1`, the log says “judging is allowed WITHOUT a
+  sandbox” and Run works.
+- **Why the AppArmor step moved here.** Once the server refuses to judge
+  without a working bwrap, pulling this version onto the VPS without the
+  AppArmor profile would stop it judging. So `docs/deploy-vps.md` §1a has
+  the steps now. They're **untested**; the VPS's `Sandbox:` log line is the
+  test. Step 5 is now “follow §1a and adjust if the systemd containment gets
+  in the way”.
+- **Bind paths are found at startup.** `/usr` is read-only. `/bin`, `/lib`
+  and the rest are copied as they are on the machine: symlinks on Ubuntu's
+  merged `/usr`. Only these `/etc` entries are visible: `alternatives`,
+  `ld.so.cache`, `dmd.conf` and `java-<n>-openjdk`. Install folders of
+  toolchains outside `/usr` are bound too: `/opt/node22` in the cloud. So
+  no paths are hard-coded per machine.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

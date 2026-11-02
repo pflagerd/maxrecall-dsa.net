@@ -22,6 +22,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { runSubmission } = require('./runner');
+const { sandboxStatus, describeSandbox } = require('./sandbox');
 
 const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
@@ -327,6 +328,13 @@ async function runCompileProbe(canaryHeader) {
 }
 
 async function main() {
+  console.log(`Sandbox: ${describeSandbox()}\n`);
+  if (!sandboxStatus.ok && !sandboxStatus.unsandboxedOverride) {
+    console.log('The judge refuses to run anything, so there is nothing to probe. To see what an');
+    console.log('unsandboxed judge lets through, run: MAXRECALL_UNSANDBOXED=1 make sandbox-test');
+    process.exitCode = 2;
+    return;
+  }
   // Canaries. The private folder and file are owner-only, like auth/.
   const canaryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maxrecall-selftest-'));
   fs.chmodSync(canaryDir, 0o700);

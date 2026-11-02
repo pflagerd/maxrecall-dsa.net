@@ -101,6 +101,12 @@ data out of the repo's gitignored <code>auth/</code>.</p>
 variable says otherwise. With <code>HOST=127.0.0.1</code> it accepts connections only from the same
 machine, which is how it runs on the VPS behind an SSH tunnel (see Environments). The first line it prints
 says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the repo's <code>users/</code> (see Where data lives). <span class="src">Source: <code>server.js</code>, <code>users.js</code>.</span></p>
+
+<p>At startup the server checks that the judge's sandbox, bubblewrap, works, and prints a <code>Sandbox:</code>
+line saying so. If it doesn't, Run and Submit are refused with HTTP 503 and the reason, unless
+<code>MAXRECALL_UNSANDBOXED=1</code> is set, which allows judging without a sandbox (for setting up your own machine,
+never a shared server). On Kubuntu: <code>sudo apt install bubblewrap</code>, then read the <code>Sandbox:</code> line.
+<span class="src">Source: <code>judge/sandbox.js</code>.</span></p>
 <p>Make variables given on the command line (<code>PORT=8080</code>) override the
 <code>PORT ?= 3000</code> default — see the
 <a href="https://www.gnu.org/software/make/manual/html_node/Overriding.html">GNU Make manual, “Overriding Variables”</a>.</p>
@@ -116,6 +122,7 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>users/</code></td><td>Saved submissions, one JSON file per Submit (see Where data lives). <strong>Gitignored</strong>: the owner manages it by hand.</td></tr>
   <tr><td><code>paths.js</code></td><td><code>resolveInside(baseDir, ...parts)</code>: builds a path and returns <code>null</code> if it would land outside <code>baseDir</code> (path traversal). Used by <code>loadProblem</code>; <code>users/</code> code will use it too.</td></tr>
   <tr><td><code>judge/runner.js</code></td><td>Builds a harness around submitted code, runs it in a child process, compares results.</td></tr>
+  <tr><td><code>judge/sandbox.js</code></td><td>The judge's sandbox: builds bubblewrap command lines (<code>sandboxedCommand</code>), self-tests bubblewrap once at startup, and refuses judging if that fails (<code>assertJudgingAllowed</code>), unless <code>MAXRECALL_UNSANDBOXED=1</code>. Also holds <code>SUBMISSION_ENV</code>.</td></tr>
   <tr><td><code>judge/sandbox-selftest.js</code></td><td>Escape test for the judge (<code>make sandbox-test</code>). It plants canaries (an environment variable, an owner-only file and C++ header, a listener on <code>127.0.0.1</code>) and submits code through <code>runSubmission</code> that tries to reach them, leave processes behind, fork 300 processes, write 100&nbsp;MB, allocate 1&nbsp;GB and use the network. Probes G1–G8 match <code>docs/plans/sandboxing.md</code> §1.</td></tr>
   <tr><td><code>judge/cpp/judge_json.{hpp,cpp}</code></td><td>JSON parser/serializer linked into C++ submissions. Compiled once to <code>judge_json.o</code> (gitignored) at server start.</td></tr>
   <tr><td><code>judge/java/JudgeJson.java</code></td><td>Same role for Java. Compiled to <code>JudgeJson.class</code> (gitignored) at server start.</td></tr>
@@ -131,7 +138,7 @@ says which. <code>MAXRECALL_USERS_DIR</code> moves saved submissions out of the 
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
   <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecall-dsa.test.service</code></td><td>Step-by-step guide and systemd service for running the app on the VPS (Ubuntu 24.04), reachable only through an SSH tunnel.</td></tr>
   <tr><td><code>docs/d-compiler.md</code></td><td>How to install DMD in a cloud session, from d-apt (the D community's APT repository on SourceForge), with the key fingerprint to check.</td></tr>
-  <tr><td><code>.claude/settings.json</code>, <code>.claude/hooks/session-start.sh</code></td><td>Claude Code project settings: a SessionStart hook that installs DMD from d-apt in cloud sessions only (see <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>).</td></tr>
+  <tr><td><code>.claude/settings.json</code>, <code>.claude/hooks/session-start.sh</code></td><td>Claude Code project settings: a SessionStart hook that, in cloud sessions only, installs bubblewrap from Ubuntu's archive and DMD from d-apt (see <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>).</td></tr>
   <tr><td><code>CLAUDE.md</code></td><td>Instructions to Claude Code (loaded automatically every session).</td></tr>
   <tr><td><code>readme.html</code></td><td>This file.</td></tr>
 </table>
@@ -198,11 +205,12 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
 <p>Every run is killed with <code>SIGKILL</code> after 5 s; compiling gets 10 s. Only the direct
 child is killed, though: a submission's own forked processes survive it (see Known gaps).
 Compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code> as their environment, not a copy of the server's
-(<code>SUBMISSION_ENV</code>). <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
+(<code>SUBMISSION_ENV</code>, in <code>judge/sandbox.js</code>). <code>runSubmission</code> refuses to judge if the sandbox failed its
+startup check (see Running it), although submissions don't run inside it yet. <code>LANG</code> makes Java print UTF-8, which it otherwise doesn't in the cloud.
 Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
 separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.
 <span class="src">Source: <code>judge/runner.js</code> (constants at the top,
-<code>SUBMISSION_ENV</code>, <code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>).</span></p>
+<code>spawnJudged</code>, <code>runFunctionSubmission</code>, <code>runProgramSubmission</code>) and <code>judge/sandbox.js</code>.</span></p>
 
 <h2 id="frontend">7. Front end</h2>
 <ul>
@@ -271,6 +279,7 @@ switching, pull after.</p>
   <tr><td>g++</td><td>13.3.0</td><td><em>fill in</em></td></tr>
   <tr><td>Python</td><td>3.13.17</td><td><em>fill in</em></td></tr>
   <tr><td>Java</td><td>installed (version not recorded)</td><td><em>fill in</em></td></tr>
+  <tr><td>bubblewrap (<code>bwrap</code>)</td><td>not installed to begin with; the SessionStart hook installs it from Ubuntu's archive (0.9.0 on 2026-11-02). It works there without AppArmor changes, because the cloud has no AppArmor.</td><td><em>fill in</em> (<code>bwrap --version</code>)</td></tr>
   <tr><td>D (<code>dmd</code>)</td><td><strong>not installed</strong> to begin with; the SessionStart hook installs it from d-apt at the start of each session (2.113.0 on 2026-11-02). See <a href="docs/d-compiler.md"><code>docs/d-compiler.md</code></a>.</td><td><em>fill in</em></td></tr>
 </table>
 <p>To fill in the Kubuntu column, run each of these and note the version:</p>
@@ -288,11 +297,14 @@ sign-in. You reach the trusted port with <code>ssh -N -L 3000:127.0.0.1:3001 roo
 <code>MAXRECALL_PASSWORD</code>, needed only to register on port 3000. It runs as the
 <code>maxrecall</code> user under systemd containment: no network except loopback, and a read-only file
 system apart from its data and the judge's helper folders. Its submissions are copied to Kubuntu with
-<code>rsync</code> and committed there. That's containment, not a sandbox (see Known gaps).</p>
+<code>rsync</code> and committed there. That's containment, not a sandbox (see Known gaps).
+Since sandboxing step 2 it also needs bubblewrap and Ubuntu's <code>bwrap-userns-restrict</code> AppArmor profile
+(<code>docs/deploy-vps.md</code> §1a), or it refuses to judge. That section is untested.</p>
 
 <h2 id="gaps">10. Known gaps &amp; caveats</h2>
 <div class="note">
-<p><strong>Submitted code is not sandboxed.</strong> It runs as the same OS user as the
+<p><strong>Submitted code is not sandboxed.</strong> (Being fixed: <a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>.
+Since step 2, bubblewrap is checked at startup, but submissions don't run inside it until step 3.) It runs as the same OS user as the
 server, with only time and memory limits. It can read and write files and reach the
 network. That's acceptable on your own machine, but it has to be solved (for example
 with containers or seccomp/namespaces) before this is hosted for other people.
@@ -337,6 +349,7 @@ of 5000, because the orphan held the output pipe open.</p>
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 2): <code>judge/sandbox.js</code> builds the bubblewrap command and self-tests it at startup. It checks that the sandbox can't see the repo, has only loopback networking, that bwrap's process 1 has only <code>PATH</code> and <code>LANG</code>, and that every installed toolchain is visible inside. If any check fails, Run and Submit get HTTP 503, unless <code>MAXRECALL_UNSANDBOXED=1</code>. The cloud hook installs bubblewrap. <strong>Moved from step 5:</strong> the VPS's AppArmor setup (<code>docs/deploy-vps.md</code> §1a), because the refusal would otherwise stop the VPS judging. It's untested; the VPS's startup log will show whether it works.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 1): compilers and submissions get only <code>PATH</code> and <code>LANG=C.UTF-8</code>. Every question's starter code gets the same verdict as before in all five languages. Java compile errors in the cloud no longer start with a <code>Picked up JAVA_TOOL_OPTIONS</code> line, and Java now prints UTF-8 there (<code>café</code> was <code>caf?</code>). The escape test's G1 canary now sits in its starting environment, like a VPS password, because <code>/proc/&lt;pid&gt;/environ</code> shows only that.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner, sandboxing D1–D6, all as recommended): bubblewrap; refuse to judge if the sandbox is unavailable, unless <code>MAXRECALL_UNSANDBOXED=1</code>; on the VPS, Ubuntu's <code>bwrap-userns-restrict</code> AppArmor profile; a seccomp denylist built with libseccomp; cgroup v2 limits on the VPS as step 7; all sandboxes share the server's uid for now. <strong>Done:</strong> step 0, the escape test (<code>make sandbox-test</code>). On the cloud on 2026-11-02 it reported 10 of 11 probes ESCAPED (all but the memory cap). A throwaway trial routing Python runs through bubblewrap contained 9 of 11. It also showed that <code>--clearenv</code> isn't enough: bubblewrap's own PID 1 keeps the environment it was started with, and a submission can read it from <code>/proc/1/environ</code>, so the judge must also start bubblewrap with an empty environment.</td></tr>
   <tr><td>2026-11-02</td><td><strong>In planning:</strong> sandboxing submitted code (compile and run). Options compared: bubblewrap, nsjail, firejail, hand-rolled namespaces and seccomp, systemd-run, containers, isolate, gVisor. Recommended: bubblewrap plus rlimits, then seccomp and (on the VPS) cgroup v2. On Ubuntu 24.04, bubblewrap needs an AppArmor allowance for user namespaces. Six decisions are waiting for the owner. Plan: <a href="docs/plans/sandboxing.md"><code>docs/plans/sandboxing.md</code></a>.</td></tr>

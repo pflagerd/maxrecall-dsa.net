@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { SUBMISSION_ENV, assertJudgingAllowed } = require('./sandbox');
 
 const TIMEOUT_MS = 5000;
 const NODE_MEMORY_MB = 128;
@@ -27,15 +28,6 @@ const MAX_CAPTURED_OUTPUT = 200_000;
 // apart from the harness's own output: everything before the last
 // occurrence of this marker is the user's stdout, everything after is ours.
 const RESULT_MARKER = '###JUDGE_RESULT###';
-
-// The whole environment compilers and submissions get, instead of a copy of
-// the server's (spawn's default), which can hold secrets such as
-// MAXRECALL_PASSWORD. PATH is how they find node/python3/g++/java/dmd. LANG
-// makes text output UTF-8 everywhere: without it, Java falls back to ASCII
-// and prints "café" as "caf?" (Python coerces the C locale to UTF-8 on its
-// own, PEP 538). C.UTF-8 is built into glibc, so it exists on every machine.
-// Step 1 of docs/plans/sandboxing.md.
-const SUBMISSION_ENV = Object.freeze({ PATH: process.env.PATH, LANG: 'C.UTF-8' });
 
 const CPP_DIR = path.join(__dirname, 'cpp');
 const CPP_JSON_HELPER = fs.readFileSync(path.join(CPP_DIR, 'judge_json.hpp'), 'utf8');
@@ -799,7 +791,10 @@ async function runProgramSubmission({ language, code, testCases }) {
 // Dispatches to function or program judging. judgeMode defaults to
 // 'function' so existing problems (which predate this option, and so have
 // no judgeMode field at all) keep behaving exactly as before.
+// Throws SandboxUnavailableError (err.code 'SANDBOX_UNAVAILABLE') first if
+// the sandbox isn't working and MAXRECALL_UNSANDBOXED=1 isn't set.
 function runSubmission({ language, code, functionName, testCases, signature, judgeMode }) {
+  assertJudgingAllowed();
   return judgeMode === 'program'
     ? runProgramSubmission({ language, code, testCases })
     : runFunctionSubmission({ language, code, functionName, testCases, signature });

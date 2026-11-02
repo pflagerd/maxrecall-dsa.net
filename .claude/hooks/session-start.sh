@@ -1,7 +1,9 @@
 #!/bin/bash
-# SessionStart hook: installs DMD (the D compiler) from d-apt in Claude Code
-# cloud sessions, so the judge can compile D submissions. The steps and the
-# reasons for them are in docs/d-compiler.md.
+# SessionStart hook for Claude Code cloud sessions. It installs:
+# - bubblewrap, the judge's sandbox (judge/sandbox.js), from Ubuntu's archive.
+#   Without it the server refuses Run and Submit (docs/plans/sandboxing.md).
+# - DMD (the D compiler) from d-apt, so the judge can compile D submissions.
+#   The steps and the reasons for them are in docs/d-compiler.md.
 #
 # stdout becomes context for Claude, so installer output goes to stderr and
 # only a one-line summary goes to stdout. A non-zero exit doesn't stop the
@@ -28,6 +30,20 @@ key_fingerprint() {
 report() {
   echo "D compiler: $(dmd --version | head -1), from d-apt (docs/d-compiler.md)."
 }
+
+# bubblewrap comes from Ubuntu's own archive (main), so no extra key or
+# source is needed. The package lists start empty in a new container, hence
+# the update. Done first, so the DMD shortcut below can't skip it.
+if ! command -v bwrap >/dev/null; then
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "session-start: installing bubblewrap needs root; skipped. The judge will refuse Run and Submit." >&2
+    exit 1
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -q >&2
+  apt-get install -y -q bubblewrap >&2
+fi
+echo "Sandbox: $(bwrap --version), from Ubuntu's archive (judge/sandbox.js)."
 
 # Already installed by an earlier run in this container: nothing to do.
 if dpkg-query -W -f='${Status}' dmd-compiler 2>/dev/null | grep -q '^install ok installed$' \
