@@ -132,6 +132,22 @@ different message, `setting up uid map` or `Failed to make / slave`; this is
 the real one.) From the checkout, `make sandbox-deps` recognises this and
 loads the profile itself, asking for `sudo` if you're not root.
 
+To see AppArmor's side of it:
+```bash
+journalctl -k -b | grep -iE 'apparmor.*(bwrap|unprivileged_userns)' | tail -5
+```
+- `-k` shows kernel messages only, and `-b` only this boot. See
+  [journalctl(1)](https://www.freedesktop.org/software/systemd/man/latest/journalctl.html).
+- `grep -iE` matches, ignoring case, lines about AppArmor and bwrap.
+- `tail -5` keeps the last five.
+
+On this VPS on 2026-11-02 it showed `apparmor="AUDIT"
+operation="userns_create" … comm="bwrap" … target="unprivileged_userns"`,
+where bwrap was moved into the restricted profile. Then came
+`apparmor="DENIED" operation="capable" … profile="unprivileged_userns"
+comm="bwrap"` for `capname="net_admin"` (the loopback setup) and
+`capname="setpcap"`.
+
 If the profile route fails, the fallbacks (plan §4) are a profile of our
 own for the service, or turning the restriction off. **Don't** turn it off
 without deciding to: it's machine-wide.

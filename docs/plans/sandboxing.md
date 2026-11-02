@@ -534,9 +534,13 @@ The owner ran `make sandbox-test |& tee output.lst` as **root** in
 
 - `scripts/sandbox-deps.sh` installed bubblewrap 0.9.0. The self-test then
   failed: `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`.
-  My reading, a hypothesis until the profile is loaded for real: AppArmor's
-  `unprivileged_userns` profile (“audit deny capability”) took away the
-  capability bubblewrap needs to give the sandbox's loopback an address.
+  **Confirmed as AppArmor** by the kernel log (`journalctl -k -b`):
+  - `apparmor="AUDIT" operation="userns_create" … comm="bwrap" …
+    target="unprivileged_userns"`: bwrap was moved into the restricted
+    profile;
+  - `apparmor="DENIED" operation="capable" … profile="unprivileged_userns"
+    comm="bwrap"` for `capname="net_admin"` (the loopback address) and
+    `capname="setpcap"`.
   My earlier guess at the message (“uid map” / “Failed to make / slave”)
   was wrong; `docs/deploy-vps.md` §1a now quotes the real one.
 - **Bug in the script, fixed.** As root, the self-test runs sandboxes as
@@ -555,9 +559,19 @@ The owner ran `make sandbox-test |& tee output.lst` as **root** in
     (Node 20.12+/21.7+), so the server couldn't start under it.
     `docs/deploy-vps.md` §2 installs Node 22 to `/usr/local/bin`; something
     else comes first on root's `PATH`.
-- Next: on the VPS, check `which -a node` and `javac -version`, pull the
-  fix, run `make sandbox-deps`, then the escape test and the service's
-  `Sandbox:` log line.
+- **The VPS's setup doesn't match `docs/deploy-vps.md` §1–§2** (owner's
+  output):
+  - the only `node` is `/root/.local/share/node-v18.17.0-linux-x64/bin/node`,
+    and there's no `/usr/local/bin/node`, so §2 wasn't done;
+  - there's no `javac`, so §1's JDK isn't installed.
+
+  Ubuntu 24.04's `default-jdk-headless` is 2:1.21-75+exp1, which depends on
+  `openjdk-21-jdk-headless` (checked with `apt-cache` in the cloud).
+  command-not-found on the VPS suggested `default-jdk` “version 2:1.17-75”.
+  My guess is its database is stale; `javac -version` after installing
+  settles it.
+- Next on the VPS: install the JDK (§1) and Node 22 (§2), take Node 18 off
+  root's `PATH`, pull, then `make sandbox-test |& tee output.lst`.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
