@@ -77,8 +77,42 @@ const REPO_DIR = path.join(__dirname, '..');
 // source path /root/maxrecall-dsa.net/judge/java: Permission denied".
 // mkdtemp makes it owner-only, so when root (sandboxes as nobody) it's
 // opened up for reading; the helpers aren't secret, they're in the repo.
-// Removed when the server exits.
-const HELPER_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-helpers-'));
+// Removed when the server exits normally. Node doesn't run 'exit' handlers
+// when it's killed by a signal, which is how systemd (SIGTERM), Ctrl-C
+// (SIGINT) and nodemon stop it, so the folder's name carries the server's
+// process ID, and each start removes folders whose process is gone
+// (removeStaleHelperDirs). Found 2026-11-02: folders left in /tmp by
+// stopped servers.
+const HELPER_DIR_PREFIX = 'judge-helpers-';
+
+// Removes helper folders left by servers that are no longer running: named
+// judge-helpers-<pid>-..., owned by this user, and no process <pid>.
+// process.kill(pid, 0) sends no signal; it fails with ESRCH if there's no
+// such process (EPERM means there is one, owned by someone else). Folders
+// from before this naming (no pid) are left alone.
+function removeStaleHelperDirs() {
+  const myUid = typeof process.getuid === 'function' ? process.getuid() : null;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(os.tmpdir());
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    const match = name.match(/^judge-helpers-(\d+)-/);
+    if (!match) continue;
+    const dir = path.join(os.tmpdir(), name);
+    try {
+      if (myUid !== null && fs.statSync(dir).uid !== myUid) continue;
+      process.kill(Number(match[1]), 0);
+    } catch (err) {
+      if (err.code === 'ESRCH') fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+removeStaleHelperDirs();
+
+const HELPER_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `${HELPER_DIR_PREFIX}${process.pid}-`));
 const HELPER_SANDBOX_PATH = '/judge';
 if (RUNNING_AS_ROOT) fs.chmodSync(HELPER_DIR, 0o755);
 process.on('exit', () => fs.rmSync(HELPER_DIR, { recursive: true, force: true }));
