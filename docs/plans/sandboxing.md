@@ -640,6 +640,32 @@ make sandbox-test`, which is systemd's service `PATH` plus `/sbin:/bin`).
   `nobody`, and with the override), the starter-code verdicts are unchanged,
   and no `judge-*` folders are left behind.
 
+### Step 5, VPS part: fourth run (2026-11-02, owner's run)
+
+Same setup as the third run, after pulling `916953c`: toolchains present,
+sandbox works, **12 of 13 probes contained**. G6d was *inconclusive*,
+stopped by the wall clock after 5017 ms on 2 cores: 2 × 5 s = 10 s of CPU
+at most, equal to the 10 s soft CPU limit, so the clock always wins there.
+That's a fact about the machine, not a gap.
+
+**Changed:** a fourth verdict, *skipped*, for “this machine can't test
+it”:
+- G6d, when cores × the wall-clock limit ≤ the soft CPU limit;
+- G10, when GCC ends the compile itself (its `constexpr` limit) before the
+  judge's time limit.
+
+`make sandbox-test` passes when every probe is *contained* or *skipped*,
+and fails on *ESCAPED* or *inconclusive*, so a broken judge (the third
+run's 13 inconclusive) still fails. Checked: 4 cores, 13 contained, exit
+0; pinned to one core with `taskset -c 0` (and `os.cpus()` reporting 1),
+G6d skipped, 12 contained, exit 0.
+
+**Status of step 5:** the judge's sandbox works on Kubuntu 26.04 and on the
+VPS (in root's checkout, run as root, so sandboxes run as `nobody`). Still
+to do: the systemd service. Its checkout `/srv/maxrecall/maxrecall-dsa.net`
+is on `master`, which doesn't have this work yet, and it runs as
+`maxrecall` with the containment in `deploy/maxrecall-dsa.test.service`.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).

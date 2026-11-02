@@ -13,7 +13,13 @@
 // port. A probe "escapes" if it can see or reach one.
 //
 // Run: node judge/sandbox-selftest.js   (or: make sandbox-test)
-// Exit status: 0 if every probe was contained, 1 otherwise.
+// Exit status: 0 if every probe was contained or skipped, 1 otherwise.
+//
+// Verdicts: "contained" (the limit held), "ESCAPED" (it didn't),
+// "skipped" (this machine can't test it: G6d on 1-2 cores, G10 where GCC
+// gives up before the time limit), "inconclusive" (the probe didn't run as
+// intended, e.g. the judge failed; that fails too, so a broken judge can't
+// pass).
 
 const { spawnSync } = require('child_process');
 const crypto = require('crypto');
@@ -21,8 +27,8 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { runSubmission, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
-const { sandboxStatus, describeSandbox } = require('./sandbox');
+const { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
+const { sandboxStatus, describeSandbox, RUN_LIMITS } = require('./sandbox');
 
 const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
@@ -363,8 +369,14 @@ async function runCpuProbe() {
   if (/CPU time limit/.test(error)) {
     return { verdict: 'contained', detail: `stopped by the CPU-time limit after ${result.runtimeMs} ms of wall-clock time`, runtimeMs: result.runtimeMs };
   }
-  if (result.status === 'Time Limit Exceeded' && cores >= 3) {
-    return { verdict: 'ESCAPED', detail: `ran until the wall-clock timeout with every core busy (${cores} cores): about ${cores} x 5 s of CPU time`, runtimeMs: result.runtimeMs };
+  // On few cores the wall-clock timeout allows no more CPU time than the
+  // CPU limit, so it always stops this first: nothing to test here (the
+  // VPS has 2 cores: 2 x 5 s = 10 s, the CPU limit itself).
+  const maxCpuSeconds = cores * (TIMEOUT_MS / 1000);
+  if (result.status === 'Time Limit Exceeded' && /^Time limit exceeded/.test(error)) {
+    return maxCpuSeconds <= RUN_LIMITS.cpuSoftSeconds
+      ? { verdict: 'skipped', detail: `on ${cores} core(s) the ${TIMEOUT_MS / 1000} s wall-clock limit allows at most ${maxCpuSeconds} s of CPU time, no more than the ${RUN_LIMITS.cpuSoftSeconds} s CPU limit, so it can't be tested here (stopped by the clock)`, runtimeMs: result.runtimeMs }
+      : { verdict: 'ESCAPED', detail: `ran until the wall-clock timeout with every core busy (${cores} cores): about ${maxCpuSeconds} s of CPU time`, runtimeMs: result.runtimeMs };
   }
   return { verdict: 'inconclusive', detail: `judge said ${result.status} on ${cores} core(s): ${error.split('\n')[0]}`, runtimeMs: result.runtimeMs };
 }
@@ -430,7 +442,12 @@ async function runSlowCompileProbe() {
   if (/^bwrap:/.test(why)) {
     return { verdict: 'inconclusive', detail: `judge said ${result.status}: ${why}`, runtimeMs: elapsed };
   }
-  return { verdict: 'inconclusive', detail: `compile finished in ${elapsed} ms (${result.status}): not slow enough on this machine to test the limit`, runtimeMs: elapsed };
+  // GCC's own constexpr limit ended the compile before ours: the probe ran,
+  // but this machine is too fast to test the time limit with it.
+  if (result.status === 'Compile Error' && /constexpr/.test(result.error || '')) {
+    return { verdict: 'skipped', detail: `GCC finished the compile itself in ${elapsed} ms (its constexpr limit), before the ${CPP_COMPILE_TIMEOUT_MS / 1000} s limit: too fast here to test it`, runtimeMs: elapsed };
+  }
+  return { verdict: 'inconclusive', detail: `judge said ${result.status} after ${elapsed} ms: ${why}`, runtimeMs: elapsed };
 }
 
 async function main() {
@@ -488,7 +505,7 @@ async function main() {
   const counts = outcomes.reduce((acc, o) => ({ ...acc, [o.verdict]: (acc[o.verdict] || 0) + 1 }), {});
   console.log(`\n${outcomes.length} probes: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}.`);
   console.log('G9 (concurrent Runs) is not probed here; see docs/plans/sandboxing.md step 8.');
-  process.exitCode = outcomes.every((o) => o.verdict === 'contained') ? 0 : 1;
+  process.exitCode = outcomes.every((o) => o.verdict === 'contained' || o.verdict === 'skipped') ? 0 : 1;
 }
 
 main().catch((err) => {

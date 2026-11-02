@@ -836,4 +836,4 @@ function runSubmission({ language, code, functionName, testCases, signature, jud
     : runFunctionSubmission({ language, code, functionName, testCases, signature });
 }
 
-module.exports = { runSubmission, CPP_COMPILE_TIMEOUT_MS, D_COMPILER };
+module.exports = { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS, D_COMPILER };
