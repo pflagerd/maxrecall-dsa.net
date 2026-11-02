@@ -141,4 +141,4 @@ else
   note "ss isn't installed, so I couldn't check the ports listen on 127.0.0.1 only (docs/deploy-vps.md §6)."
 fi
 
-echo "Deployed: $UNIT at $(as_service_user git -C "$CHECKOUT" log --oneline -1), running. Reach it from Kubuntu with: ssh -N -L 3000:127.0.0.1:${PORTS[1]} root@VPS_IP, then http://localhost:3000 (docs/deploy-vps.md §7)."
+echo "Deployed: $UNIT at $(as_service_user git -C "$CHECKOUT" log --oneline -1), running. Reach it from Kubuntu with: make open-ssh-3005 (ssh -N -L 3005:127.0.0.1:${PORTS[1]} root@VPS_IP), then http://localhost:3005 (docs/deploy-vps.md §7)."

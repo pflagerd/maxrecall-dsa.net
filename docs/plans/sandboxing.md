@@ -1,9 +1,9 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–5
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–6
 done 2026-11-02, plus a CPU-time limit and a total time budget for program
 mode. The sandbox works in the cloud, on Kubuntu 26.04, and in the VPS's
-systemd service. Next: steps 6–8.** The VPS part of step 5 (AppArmor) moved
+systemd service, seccomp included. Next: steps 7–8.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -259,7 +259,7 @@ Notes:
 | 3 | **Done 2026-11-02.** Run step under bwrap, all five languages, both judge modes. Per-submission work dirs. | Escape test: 10 of 11 contained (G7 left for step 4), as root and as `nobody`. Correct answers Accepted in every language and mode; starter-code verdicts unchanged in all 65 runs. See “Step 3 notes”. |
 | 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
 | 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
-| 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 as root and as `nobody`; all languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
+| 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 in the cloud (as root and as `nobody`) and on Kubuntu 26.04; the VPS service reports `works` with the filter checked. All languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
 | 7 | cgroup v2 on the VPS (D5). | A fork bomb and a 1 GB allocation are contained; `systemd-cgls` shows `judge-<id>` groups appear and vanish. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
 
@@ -794,6 +794,16 @@ io_uring_setup, kcmp, keyctl, ptrace`.
   - One run showed Java and D at about 3.6 s instead of about 0.8 s. Three
     reruns gave 650–700 ms and 0.9–1.1 s, so that was noise in the shared
     container, not the filter.
+- **On the other machines** (owner's runs, after pull request #17,
+  `5327435`):
+  - **Kubuntu 26.04:** `make sandbox-test` installed `libseccomp-dev`
+    2.6.0 (`resolute/main`) and gave 14 of 14 contained. G11:
+    `seccomp filter active (mode 2)`, all four calls refused.
+  - **VPS:** `make deploy-server` installed `libseccomp-dev` 2.5.5, updated
+    the service to `5327435` and restarted it, and the service reports
+    `Sandbox: bubblewrap 0.9.0 works (self-test passed)`. The self-test
+    fails without `Seccomp: 2`, so the service's sandboxes run filtered,
+    under the unit's systemd containment. Ports are still 127.0.0.1 only.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
