@@ -220,7 +220,9 @@ binary <code>main</code>. Java's helper classes are at <code>/judge/java</code>,
   <li>its own process list, an empty environment apart from <code>PATH</code> and <code>LANG</code>, and no capabilities.</li>
 </ul>
 <p>Limits are set with <code>prlimit</code> <em>inside</em> the sandbox (<code>RUN_LIMITS</code>): 128 processes and threads, 16&nbsp;MB per
-file, no core dumps. They're inside because the process count is per user namespace there; set outside, it would count every
+file, no core dumps, and 10&nbsp;s of CPU time per process (all its threads together; <code>SIGKILL</code> at 11&nbsp;s). The CPU limit is a
+backstop to the 5&nbsp;s wall-clock timeout, which on its own allows 5&nbsp;s × cores of CPU. A run it stops is reported as
+<em>Time Limit Exceeded</em> with “CPU time limit exceeded”. The judge recognises it by bwrap's exit code 152, which is 128 + <code>SIGXCPU</code>. They're inside because the process count is per user namespace there; set outside, it would count every
 process the server's user owns. Killing a run on timeout kills everything in its sandbox. When the server runs as root (the cloud),
 sandboxes run as <code>nobody</code>, because root ignores the process limit.
 <code>make sandbox-test</code> checks all of this.</p>
@@ -328,8 +330,17 @@ What's still open:</p>
 <ul>
   <li><strong>The compilers aren't sandboxed</strong> (step 4). A C++ <code>#include</code> of an absolute path still reads any file the
   server's user can read, and shows it in the compile error. That's probe G7.</li>
+  <li><strong>The C++ compile timeout doesn't stop the compiler</strong> (found 2026-11-02, probe G10; step 4). <code>g++</code> is only a
+  driver, and the compiler proper is its child <code>cc1plus</code>. Killing <code>g++</code> after 10&nbsp;s leaves <code>cc1plus</code> running,
+  holding the judge's output pipe open, so the judge doesn't answer until it finishes. Measured with a 1&nbsp;s timeout: 137&nbsp;s.
+  A 300-byte source can compile for minutes.</li>
+  <li><strong>Nothing limits the compilers' memory</strong> (found 2026-11-02; step 4). A 257-byte C++ source of exponential templates
+  made <code>cc1plus</code> grow to 2&nbsp;GB within 20&nbsp;s, and it was still growing.</li>
   <li><strong>No seccomp filter</strong> (step 6).</li>
-  <li><strong>No cgroup limits</strong> (step 7). Memory is capped per language, as before, and the 64&nbsp;MB <code>/tmp</code> is kernel memory.</li>
+  <li><strong>No cgroup limits</strong> (step 7). Memory is capped per language, as before, and the 64&nbsp;MB <code>/tmp</code> is kernel memory.
+  The CPU limit is per process, so a submission that forks gets 10&nbsp;s of CPU per process.</li>
+  <li><strong>Program mode's time limit is per test case</strong>: 5&nbsp;s each, so a question with 20 cases allows up to 100&nbsp;s (a small step after step 4).</li>
+  <li><strong>The reported runtime includes compiling</strong> and sandbox start-up, because <code>runtimeMs</code> is measured from before the compile.</li>
   <li><strong>No limit on concurrent judgings</strong> (step 8).</li>
   <li><strong>The kernel is shared</strong> with the host, as with any namespace sandbox.</li>
 </ul>
@@ -376,6 +387,7 @@ of 5000, because the orphan held the output pipe open. <strong>Step 3 closed all
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-02</td><td><strong>Added</strong> (owner asked how time is limited): a CPU-time limit per run process, 10&nbsp;s soft and 11&nbsp;s hard, reported as <em>Time Limit Exceeded</em>. There are two new escape-test probes. G6d (one process busy on every core) is contained: stopped after 2.6&nbsp;s of wall-clock time on 4 cores, and without the limit it ran the full 5&nbsp;s. G10 (a compile longer than the limit) is ESCAPED until step 4. Found while answering: the C++ compile timeout leaves <code>cc1plus</code> running, and compilers have no memory limit (see Known gaps).</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 3): every run, in all five languages and both judge modes, runs inside bubblewrap. Its folder is read-only at <code>/work</code>, and <code>prlimit</code> sets 128 processes, 16&nbsp;MB per file and no core dumps <em>inside</em> the sandbox. Measured: set outside, with 150 of the user's processes already running, bwrap couldn't even start. When the server is root, sandboxes run as <code>nobody</code>: root ignored a 64-process limit. Escape test: 10 of 11 contained, both as root and as <code>nobody</code>; G7 (compile time) is left for step 4. Correct Two Sum and Hello World answers are Accepted in every language, and starter-code verdicts are unchanged in all 65 runs.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Decided</strong> (owner): <code>make run</code> and <code>make dev</code> install the sandbox's dependencies themselves (option c, over an explicit-only target), via <code>scripts/sandbox-deps.sh</code>. The cloud hook uses the same script. It only touches AppArmor if a minimal bubblewrap fails <em>and</em> the restriction is on. In the cloud, as root, it installed bubblewrap when missing and did nothing when present. Its AppArmor branch was checked only with stand-in commands (fake <code>sudo</code>, <code>apt-get</code>, <code>apparmor_parser</code>, <code>bwrap</code>), because the cloud has no AppArmor.</td></tr>
   <tr><td>2026-11-02</td><td><strong>Done</strong> (sandboxing step 2): <code>judge/sandbox.js</code> builds the bubblewrap command and self-tests it at startup. It checks that the sandbox can't see the repo, has only loopback networking, that bwrap's process 1 has only <code>PATH</code> and <code>LANG</code>, and that every installed toolchain is visible inside. If any check fails, Run and Submit get HTTP 503, unless <code>MAXRECALL_UNSANDBOXED=1</code>. The cloud hook installs bubblewrap. <strong>Moved from step 5:</strong> the VPS's AppArmor setup (<code>docs/deploy-vps.md</code> §1a), because the refusal would otherwise stop the VPS judging. It's untested; the VPS's startup log will show whether it works.</td></tr>

@@ -40,7 +40,19 @@ const TMPFS_BYTES = 64 * 1024 * 1024;
 // fail; inside it stopped a fork loop at 62. Threads count too, and the JVM
 // starts more of them on more cores, hence the headroom. fsize caps any one
 // file (in /tmp); core=0 means no core dumps.
-const RUN_LIMITS = Object.freeze({ nproc: 128, fsizeBytes: 16 * 1024 * 1024 });
+//
+// cpu is CPU time per process, all its threads added up (RLIMIT_CPU), a
+// backstop to the judge's wall-clock timeout: 5 s of wall-clock time can be
+// 5 s x cores of CPU. At the soft limit the kernel sends SIGXCPU, at the
+// hard one SIGKILL (getrlimit(2)). The soft limit is below the hard one so
+// the judge can tell this kill from others: bwrap reports a child killed by
+// a signal as exit code 128 + the signal, measured 2026-11-02: SIGXCPU (24)
+// gives 152; equal soft and hard limits gave SIGKILL, 137, like any kill.
+// It's per process, so a submission that forks gets this much per process:
+// cgroups (sandboxing step 7) give one budget for the whole sandbox.
+const RUN_LIMITS = Object.freeze({ nproc: 128, fsizeBytes: 16 * 1024 * 1024, cpuSoftSeconds: 10, cpuHardSeconds: 11 });
+const SIGXCPU = 24;
+const CPU_LIMIT_EXIT_CODE = 128 + SIGXCPU;
 
 // Root is exempt from RLIMIT_NPROC (measured: 300 forks under a 64 limit),
 // and submissions shouldn't run as root anyway. So when the server is root
@@ -163,7 +175,7 @@ function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
 
 // sandboxedCommand plus RUN_LIMITS, for running a submission.
 function sandboxedRun(command, args, options) {
-  const limits = [`--nproc=${RUN_LIMITS.nproc}`, `--fsize=${RUN_LIMITS.fsizeBytes}`, '--core=0'];
+  const limits = [`--nproc=${RUN_LIMITS.nproc}`, `--fsize=${RUN_LIMITS.fsizeBytes}`, `--cpu=${RUN_LIMITS.cpuSoftSeconds}:${RUN_LIMITS.cpuHardSeconds}`, '--core=0'];
   return sandboxedCommand('prlimit', [...limits, '--', command, ...args], options);
 }
 
@@ -239,4 +251,4 @@ function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }
 
-module.exports = { SUBMISSION_ENV, RUN_LIMITS, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };
+module.exports = { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, sandboxedCommand, sandboxedRun, prepareWorkDir, sandboxStatus: status, describeSandbox, assertJudgingAllowed };

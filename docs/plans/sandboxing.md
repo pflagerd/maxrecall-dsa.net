@@ -439,6 +439,43 @@ so `docs/deploy-vps.md` §1a stays the VPS procedure.
   - starter code: the same verdicts in all 65 runs;
   - no `judge-*` folders left in `/tmp`.
 
+### Time limits (2026-11-02, added after step 3 when the owner asked)
+
+- **What there was:** only wall-clock timers, through Node's `spawn`
+  `timeout`: 5 s per run process and 10 s per compile, ended with `SIGKILL`.
+  Since step 3, killing a run kills its whole sandbox (G5b).
+- **Added:** `--cpu=10:11` in `RUN_LIMITS`: 10 s of CPU time per process,
+  all threads together. That's a backstop, since 5 s of wall-clock time is
+  5 s × cores of CPU. The soft limit is below the hard one because bwrap
+  reports a child killed by a signal as exit code 128 + signal (measured):
+  `SIGXCPU` gives 152, which the runner reports as *Time Limit Exceeded* /
+  “CPU time limit exceeded”. Equal limits would give `SIGKILL`, 137, which
+  can't be told apart from other kills.
+- **New probe G6d:** a JavaScript submission with one busy worker thread per
+  core, at least 4. Contained: stopped after 2570 ms on 4 cores. With `--cpu`
+  removed for a moment, it ran the full 5 s (5020 ms, wall-clock timeout).
+  So the probe can fail.
+- **Found: the C++ compile timeout doesn't work (new probe G10).** Killing
+  the `g++` driver leaves its child `cc1plus` running, with parent PID 1,
+  and holding the judge's stderr pipe. `compileCpp` resolves on `close`,
+  which waits for that pipe. With a 1 s timeout, the judge answered after
+  137 s, when I killed `cc1plus` by hand. G10 submits 299 bytes: 8
+  `constexpr` evaluations, each stopped by GCC's own limit of 2^25
+  operations. Measured: 6 of them took 27 s at 454 MB. G10 has a watchdog at
+  compile limit + 4 s, so the escape test doesn't hang. It's ESCAPED until
+  step 4.
+- **Found: compilers have no memory limit.** 257 bytes of exponential
+  templates (2^N distinct instantiations, which GCC can't cache) made
+  `cc1plus` reach 2 GB in 20 s, still growing. Timings: N=14 0.5 s, N=16
+  2.7 s, N=18 14.7 s. There's deliberately no probe for this: before the
+  fix, it would push the machine toward gigabytes of RAM on every run of the
+  escape test. Step 4 adds a cap and checks it by hand.
+- **Still open:**
+  - program mode's 5 s is per test case (a small step after step 4);
+  - `runtimeMs` includes compiling and sandbox start-up (separate, since it
+    changes saved records);
+  - the CPU limit is per process (cgroups, step 7).
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).

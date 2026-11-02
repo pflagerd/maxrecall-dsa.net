@@ -21,7 +21,7 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { runSubmission } = require('./runner');
+const { runSubmission, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
 const { sandboxStatus, describeSandbox } = require('./sandbox');
 
 const REPO_DIR = path.join(__dirname, '..');
@@ -327,6 +327,93 @@ async function runCompileProbe(canaryHeader) {
   return { verdict: 'inconclusive', detail: `judge said ${result.status}: ${(result.error || '').split('\n')[0]}`, runtimeMs: result.runtimeMs };
 }
 
+// G6d: one process keeping several cores busy. The wall-clock timeout
+// alone allows 5 s x cores of CPU time; the CPU-time limit should stop it
+// sooner. One busy worker thread per core (at least 4), plus the main one.
+async function runCpuProbe() {
+  const cores = os.cpus().length;
+  const result = await runSubmission({
+    language: 'javascript',
+    code: `function probe() {
+  const { Worker } = require('worker_threads');
+  const threads = Math.max(4, require('os').cpus().length);
+  for (let i = 0; i < threads; i++) new Worker('for (;;) {}', { eval: true });
+  for (;;) {}
+}`,
+    functionName: 'probe',
+    testCases: PYTHON_CASE,
+    judgeMode: 'function',
+  });
+  const error = result.error || '';
+  if (/CPU time limit/.test(error)) {
+    return { verdict: 'contained', detail: `stopped by the CPU-time limit after ${result.runtimeMs} ms of wall-clock time`, runtimeMs: result.runtimeMs };
+  }
+  if (result.status === 'Time Limit Exceeded' && cores >= 3) {
+    return { verdict: 'ESCAPED', detail: `ran until the wall-clock timeout with every core busy (${cores} cores): about ${cores} x 5 s of CPU time`, runtimeMs: result.runtimeMs };
+  }
+  return { verdict: 'inconclusive', detail: `judge said ${result.status} on ${cores} core(s): ${error.split('\n')[0]}`, runtimeMs: result.runtimeMs };
+}
+
+// G10: a compile that takes longer than the compile timeout. g++ is only a
+// driver; the compiler proper is its child, cc1plus. Killing the driver on
+// timeout used to leave cc1plus running, holding the judge's pipe open, so
+// the judge didn't answer until it finished (measured 2026-11-02: 137 s
+// with a 1 s timeout). The source is small, like a real submission: 8
+// constexpr evaluations, each stopped by GCC's own operation limit after
+// about 5 s, at a few hundred MB. A watchdog stops this probe from waiting
+// that long: if the judge hasn't answered 4 s after the compile timeout,
+// it's ESCAPED, and the leftover compiler is killed here.
+const SLOW_CPP = `constexpr long spin(long k) { long s = k; for (long i = 0; i < 200000; i++) for (long j = 0; j < 200000; j++) s += i ^ j ^ k; return s; }
+constexpr long a = spin(1), b = spin(2), c = spin(3), d = spin(4), e = spin(5), f = spin(6), g = spin(7), h = spin(8);
+int probe(int x) { return (int)((a + b + c + d + e + f + g + h) & 1) + x; }
+`;
+
+function compilerPids() {
+  const pids = [];
+  for (const entry of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      if (fs.readFileSync(`/proc/${entry}/comm`, 'utf8').trim() === 'cc1plus') pids.push(Number(entry));
+    } catch {
+      // Gone, or not ours.
+    }
+  }
+  return pids;
+}
+
+async function runSlowCompileProbe() {
+  const before = new Set(compilerPids());
+  const newCompilers = () => compilerPids().filter((pid) => !before.has(pid));
+  const started = Date.now();
+  const deadlineMs = CPP_COMPILE_TIMEOUT_MS + 4000;
+  const judged = runSubmission({
+    language: 'cpp',
+    code: SLOW_CPP,
+    functionName: 'probe',
+    testCases: [{ args: [0], expected: 0, hidden: false }],
+    signature: { params: ['int'], returns: 'int' },
+    judgeMode: 'function',
+  });
+  const answer = await Promise.race([judged.then((result) => ({ result })), sleep(deadlineMs).then(() => null)]);
+  const elapsed = Date.now() - started;
+  if (!answer) {
+    const leftovers = newCompilers();
+    killAll(leftovers);
+    await judged;
+    return { verdict: 'ESCAPED', detail: `no answer ${deadlineMs / 1000} s after submitting (compile limit ${CPP_COMPILE_TIMEOUT_MS / 1000} s); ${leftovers.length} compiler process(es) still running, now killed`, runtimeMs: elapsed };
+  }
+  const { result } = answer;
+  if (result.status === 'Compile Error' && /timed out/.test(result.error || '')) {
+    await sleep(1000);
+    const leftovers = newCompilers();
+    killAll(leftovers);
+    return leftovers.length
+      ? { verdict: 'ESCAPED', detail: `judge said the compile timed out, but ${leftovers.length} compiler process(es) kept running (now killed)`, runtimeMs: elapsed }
+      : { verdict: 'contained', detail: 'compile stopped at the time limit, nothing left running', runtimeMs: elapsed };
+  }
+  return { verdict: 'inconclusive', detail: `compile finished in ${elapsed} ms (${result.status}): not slow enough on this machine to test the limit`, runtimeMs: elapsed };
+}
+
 async function main() {
   console.log(`Sandbox: ${describeSandbox()}\n`);
   if (!sandboxStatus.ok && !sandboxStatus.unsandboxedOverride) {
@@ -355,10 +442,18 @@ async function main() {
       process.stdout.write(`${outcome.verdict}\n`);
       outcomes.push({ id: probe.id, what: probe.what, ...outcome });
     }
+    process.stdout.write('G6d ... ');
+    const cpuOutcome = await runCpuProbe();
+    process.stdout.write(`${cpuOutcome.verdict}\n`);
+    outcomes.push({ id: 'G6d', what: 'keep every core busy from one process (takes up to 5 s)', ...cpuOutcome });
     process.stdout.write('G7 ... ');
     const compileOutcome = await runCompileProbe(canaryHeader);
     process.stdout.write(`${compileOutcome.verdict}\n`);
     outcomes.push({ id: 'G7', what: 'read a host file at compile time (C++ #include)', ...compileOutcome });
+    process.stdout.write('G10 ... ');
+    const slowCompileOutcome = await runSlowCompileProbe();
+    process.stdout.write(`${slowCompileOutcome.verdict}\n`);
+    outcomes.push({ id: 'G10', what: 'compile for longer than the compile time limit (takes up to 14 s)', ...slowCompileOutcome });
   } finally {
     listener.close();
     killAll(findProcesses(TOKEN));

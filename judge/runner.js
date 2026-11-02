@@ -2,7 +2,10 @@ const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { SUBMISSION_ENV, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, sandboxStatus, sandboxedRun, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+
+// Shown when a run is stopped by the CPU-time limit rather than the clock.
+const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
 
 const TIMEOUT_MS = 5000;
 const NODE_MEMORY_MB = 128;
@@ -597,8 +600,8 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
     const outcome = await spawnJudged(runCommand(language, 'function', runPaths(workDir)), stdinPayload, workDir);
     const runtimeMs = Date.now() - started;
 
-    if (outcome.timedOut) {
-      const errorText = 'Time limit exceeded.';
+    if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
+      const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
       return {
         status: 'Time Limit Exceeded',
         passed: 0,
@@ -724,11 +727,12 @@ async function runProgramSubmission({ language, code, testCases }) {
       const tc = testCases[index];
       const outcome = await spawnJudged(command, tc.input || '', workDir);
 
-      if (outcome.timedOut) {
+      if (outcome.timedOut || outcome.exitCode === CPU_LIMIT_EXIT_CODE) {
         anyTimedOut = true;
+        const errorText = outcome.timedOut ? 'Time limit exceeded.' : CPU_LIMIT_MESSAGE;
         results.push(tc.hidden
           ? { index, hidden: true, passed: false }
-          : { index, hidden: false, passed: false, input: tc.input, error: 'Time limit exceeded.' });
+          : { index, hidden: false, passed: false, input: tc.input, error: errorText });
         continue;
       }
       if (outcome.exitCode !== 0) {
@@ -781,4 +785,4 @@ function runSubmission({ language, code, functionName, testCases, signature, jud
     : runFunctionSubmission({ language, code, functionName, testCases, signature });
 }
 
-module.exports = { runSubmission };
+module.exports = { runSubmission, CPP_COMPILE_TIMEOUT_MS };
