@@ -666,6 +666,21 @@ to do: the systemd service. Its checkout `/srv/maxrecall/maxrecall-dsa.net`
 is on `master`, which doesn't have this work yet, and it runs as
 `maxrecall` with the containment in `deploy/maxrecall-dsa.test.service`.
 
+### Step 5, VPS part: fifth run, passing (2026-11-02, owner's run)
+
+Root's checkout, system-only `PATH`, after `6ea6395`/`b6c0ebd`:
+`Toolchains: … node v22.23.4 at /usr/local/bin/node`, `Sandbox: bubblewrap
+0.9.0 works`, and **12 contained, 1 skipped (G6d, 2 cores)**, with make
+exiting 0. The judge's sandbox now works on all three machines: cloud 13/13,
+Kubuntu 26.04 13/13, VPS 12/13 plus 1 skipped.
+
+**Left in step 5:** the systemd service (`maxrecall-dsa.test.service`, user
+`maxrecall`, checkout `/srv/maxrecall/maxrecall-dsa.net` on `master`). It
+needs this branch on `master`, or that checkout switched to it, and then a
+look at its `Sandbox:` log line, because the unit's own containment
+(`PrivateDevices=`, `ProtectSystem=strict`, `IPAddressDeny=`…) hasn't been
+tried with bubblewrap.
+
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
 - **D1.** Which tool? I recommend **bubblewrap** (§3).
