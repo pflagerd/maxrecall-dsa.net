@@ -12,6 +12,7 @@ each answer and what it changed.
 | 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile` in their user directory. | **New file**: `users/<email>/profile`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
 | 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's `Accepted`, all tests passing. There is **no "how easy"** in this requirement. Tests may also fail for timeouts, or for other reasons still to be decided. The result is recorded in **`order.json`**, in the user's directory, as an attribute **`pass`** whose value is the string `"yes"` or `"no"`. | Settles D1's file name: **`order.json`**. Each queue element now has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. D4 must say whether one `pass` is enough to decide how far to move, or whether a streak needs more history. |
 | 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**. It goes in its own file, **`advance.js`** (the name is for now). D4 will become much more nuanced over time; this is a starting point. | Replaces the 2^k table proposed in D4. A pair's element needs *k* (passes in a row), which one `pass` field can't give. D4's open details below, including what this rule does on a 65-element queue. |
+| 2026-11-03 | **D4 details (owner):** use **stochastic rounding**. k is **"correct in a row"**, kept in a counter called **`passesInARow`**, tracked as part of the queue element in `order.json`. | An element now has at least `question`, `pass` and `passesInARow`, so it's an object, settling D1's "element shape" detail. With stochastic rounding a fail and a first pass differ on average (1.03 vs 1.30 places). |
 
 ## What the owner asked for (from `TODO`)
 
@@ -102,10 +103,9 @@ Each has a recommendation; none is built until you choose.
 Details still open:
 
 - **File name:** `order.json` (owner, with D3).
-- **Element shape:** recommended an object, e.g. `{"question": "two-sum"}`,
-  not a bare string as in MaxRecall's `guidOrder.json`. Then the fields
-  still to be decided can be added later without changing what an
-  element *is*.
+- **Element shape:** an object, settled by D3 and D4, which put `pass`
+  and `passesInARow` in it alongside `question` (not a bare string as in
+  MaxRecall's `guidOrder.json`).
 - **Version:** recommended a top-level `schemaVersion`, as Submit records
   have, so a later change of format can be recognised.
 - **Name equals slug:** on 2026-11-03 all 13 question files had `slug`
@@ -226,13 +226,15 @@ The original options:
 starting point to be changed over time. Details still open, with
 recommendations:
 
-- **What k is:** passes in a row, including this Submit; 0 after a
-  `"no"`. That needs a counter in the element (a field name to choose,
-  e.g. `passesInARow`), since `pass` only holds the latest result.
-  Counting back through the Submit records instead would make the queue
-  depend on them again (D5).
-- **Rounding:** to the nearest whole place, and **at least 1**, so a pair
-  never comes straight back as the next question.
+- **What k is** (owner): correct in a row, kept in the element as
+  **`passesInARow`**. As I read it: a Submit first updates the counter
+  (a pass adds 1, a fail sets it to 0), and `advance.js` then uses the
+  new value, so k includes this Submit.
+- **Rounding** (owner): **stochastic rounding**. A value like 1.3 becomes
+  2 with probability 0.3 and 1 otherwise, so the *average* move is
+  exactly 1.3^k × (1 ± 10%). Recommended still **at least 1** place, so a
+  pair never comes straight back: after a fail, 0.9 to 1.1 would
+  otherwise round down to 0 some of the time.
 - **What `advance.js` does:** only works out *how many places*. Moving
   the element within `order.json` belongs to the code that reads and
   writes that file. Then changing the rule means editing `advance.js`
@@ -276,6 +278,20 @@ languages = 65 elements, all in the queue from the start):
   of the 65 has come up once. With 13 elements (one language) it's 111.
   In effect a working set of about a dozen forms at the front, which is
   what D6's backlog would otherwise do.
+
+**With stochastic rounding** (second simulation, 2026-11-03: 100,000
+samples per k; queues run 200 times):
+
+| k | 0 (failed) | 1 | 2 | 3 | 4 | 5 | 8 | 16 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Average places | 1.03 | 1.30 | 1.69 | 2.20 | 2.86 | 3.71 | 8.15 | 66.45 |
+| Range | 1–2 | 1–2 | 1–2 | 1–3 | 2–4 | 3–5 | 7–9 | 59–74 |
+
+- A fail and a first pass now differ on average, and the randomness has
+  an effect from the start.
+- The working set is about the same: a median of 12 different pairs in
+  the first 100 Submits, and a median of 921 Submits until all 65 have
+  come up once (106 for 13).
 
 The 2^k proposal it replaces:
 
