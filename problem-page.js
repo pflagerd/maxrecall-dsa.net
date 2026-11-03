@@ -15,6 +15,8 @@ const languageFilterNames = Array.from(languageFilterMenu.querySelectorAll('.lan
 const runBtn = document.getElementById('run-btn');
 const submitBtn = document.getElementById('submit-btn');
 const skipBtn = document.getElementById('skip-btn');
+const timerBtn = document.getElementById('elapsed-timer');
+const timerDigitsEl = document.getElementById('elapsed-timer-digits');
 const consoleStatusEl = document.getElementById('console-status');
 const consoleResultsEl = document.getElementById('console-results');
 const consoleResultsListEl = document.getElementById('console-results-list');
@@ -271,6 +273,79 @@ function updateSubmitButton() {
     ? `Already submitted in ${LANGUAGE_LABELS[currentLanguage]}. Go back to the list for the next question.`
     : SUBMIT_TITLE;
 }
+
+// --- Elapsed-time timer (issue #20, docs/plans/elapsed-timer.md) ---------
+// One stopwatch (timer.js) per language, like progress: it starts when the
+// question opens in that language and counts only while that language is
+// shown and this tab is visible (the Page Visibility API's document.hidden:
+// another tab, a minimized window or a locked screen pause it, another
+// window on top doesn't). A saved Submit freezes it, and Submit sends the
+// time so the record keeps it. While a Submit waits for its answer the
+// clock is held, so judging time isn't counted. A reload starts afresh.
+const clockByLanguage = {};
+const submittingLanguages = new Set();
+const TIMER_HIDDEN_STORAGE_KEY = 'maxrecall-dsa:timer-hidden';
+
+function clockFor(language) {
+  if (!clockByLanguage[language]) clockByLanguage[language] = createStopwatch();
+  return clockByLanguage[language];
+}
+
+// Runs the current language's clock when it should count, and pauses all
+// the others. Called whenever any of that changes.
+function updateClocks() {
+  for (const [language, clock] of Object.entries(clockByLanguage)) {
+    if (language !== currentLanguage) clock.pause();
+  }
+  if (!currentLanguage) return;
+  const clock = clockFor(currentLanguage);
+  if (document.hidden || submittingLanguages.has(currentLanguage)) clock.pause();
+  else clock.resume();
+  renderTimer();
+}
+
+function getStoredTimerHidden() {
+  try {
+    return localStorage.getItem(TIMER_HIDDEN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setStoredTimerHidden(hidden) {
+  try {
+    localStorage.setItem(TIMER_HIDDEN_STORAGE_KEY, String(hidden));
+  } catch {
+    // Storage unavailable (e.g. blocked): the choice lasts until a reload.
+  }
+}
+
+let timerHidden = getStoredTimerHidden();
+
+// Shows the current language's time, or only the clock icon if the learner
+// hid the digits. The clock counts either way.
+function renderTimer() {
+  if (!currentLanguage) return;
+  const clock = clockFor(currentLanguage);
+  const label = LANGUAGE_LABELS[currentLanguage];
+  timerDigitsEl.textContent = formatElapsed(clock.elapsedMs());
+  timerDigitsEl.hidden = timerHidden;
+  timerBtn.classList.toggle('frozen', clock.frozen);
+  const what = clock.frozen
+    ? `Time taken in ${label}, saved with your Submit.`
+    : `Time on this question in ${label}, counted while this tab is visible.`;
+  timerBtn.title = `${what} Click to ${timerHidden ? 'show' : 'hide'} the time.`;
+  timerBtn.setAttribute('aria-label', timerBtn.title);
+}
+
+timerBtn.addEventListener('click', () => {
+  timerHidden = !timerHidden;
+  setStoredTimerHidden(timerHidden);
+  renderTimer();
+});
+document.addEventListener('visibilitychange', updateClocks);
+// A quarter second, so the display never skips a second.
+setInterval(renderTimer, 250);
 const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
 
 function getStoredDefaultLanguage() {
@@ -596,6 +671,7 @@ function loadLanguage(language) {
   renderLanguageContent(language);
   restoreConsoleState(language);
   updateSubmitButton();
+  updateClocks();
 }
 
 // Switches the active editor language, saving whatever's in the editor for
@@ -717,6 +793,13 @@ async function execute(endpoint, button) {
   // is current when it arrives, and is only shown if it's still on screen.
   const language = currentLanguage;
   const stillShown = () => language === currentLanguage;
+  const isSubmit = endpoint === 'submit';
+  if (isSubmit) {
+    // Hold the clock while judging; the time sent is the time shown now.
+    submittingLanguages.add(language);
+    updateClocks();
+  }
+  const elapsedMs = Math.round(clockFor(language).elapsedMs());
   button.disabled = true;
   consoleStateByLanguage[language] = { kind: 'running' };
   restoreConsoleState(language);
@@ -725,14 +808,15 @@ async function execute(endpoint, button) {
     const res = await fetch(`/api/questions/${slug}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language: languageSelect.value, code: editor.getValue() }),
+      body: JSON.stringify({ language: languageSelect.value, code: editor.getValue(), ...(isSubmit && { elapsedMs }) }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     consoleStateByLanguage[language] = { kind: 'result', data };
     if (stillShown()) renderResults(data);
-    if (endpoint === 'submit' && data.saved) {
+    if (isSubmit && data.saved) {
       submittedLanguages.add(language);
+      clockFor(language).freeze();
       submissionsNotice = null;
       // A saved Submit becomes the submission named in the page address, so
       // a reload reopens what was just submitted rather than an older one;
@@ -752,6 +836,10 @@ async function execute(endpoint, button) {
     // error, judge busy, not saved) can be tried again.
     if (button === submitBtn) updateSubmitButton();
     else button.disabled = false;
+    if (isSubmit) {
+      submittingLanguages.delete(language);
+      updateClocks();
+    }
   }
 }
 

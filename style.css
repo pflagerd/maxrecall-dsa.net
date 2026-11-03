@@ -436,6 +436,28 @@ button.primary:disabled:hover {
   background: var(--accent);
 }
 
+/* The elapsed-time timer (issue #20): quiet, after Skip. tabular-nums
+   gives every digit the same width, so the time doesn't jiggle as it
+   counts. Green once frozen by a saved Submit. */
+button.elapsed-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  font-variant-numeric: tabular-nums;
+}
+button.elapsed-timer:hover {
+  background: rgba(148, 163, 184, 0.15);
+}
+button.elapsed-timer.frozen {
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.5);
+}
+
 #editor-host {
   flex: 1;
   min-height: 180px;

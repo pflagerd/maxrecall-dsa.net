@@ -326,7 +326,7 @@ app.all('/api/*', (req, res) => {
 
 // Explicitly serve only the front-end assets (project root also holds server
 // source and config, so we avoid a blanket express.static(__dirname)).
-const STATIC_FILES = ['index.html', 'style.css', 'problem.html', 'problems-list.js', 'problem-page.js', 'labels.json', 'bubbles.js', 'login.html', 'login-page.js', 'account.js'];
+const STATIC_FILES = ['index.html', 'style.css', 'problem.html', 'problems-list.js', 'problem-page.js', 'labels.json', 'bubbles.js', 'timer.js', 'login.html', 'login-page.js', 'account.js'];
 for (const file of STATIC_FILES) {
   app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
 }

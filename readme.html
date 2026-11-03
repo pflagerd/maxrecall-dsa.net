@@ -289,8 +289,16 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <li>Preferences are kept in the browser's <code>localStorage</code> under these keys:
   <code>maxrecall-dsa:description-pane-width</code>,
   <code>maxrecall-dsa:default-language</code>,
-  <code>maxrecall-dsa:available-languages</code>.</li>
+  <code>maxrecall-dsa:available-languages</code>,
+  <code>maxrecall-dsa:timer-hidden</code>.</li>
   <li>The Skip button is a placeholder that only shows an alert.</li>
+  <li><strong>Elapsed-time timer</strong> (issue #20, <a href="docs/plans/elapsed-timer.md">plan</a>), at the right of the editor toolbar
+  as <code>m:ss</code> (<code>h:mm:ss</code> from an hour). There's one clock per language, which starts when the question opens in that language and
+  counts only while that language is shown and the browser tab is visible: another tab, a minimized window or a locked screen pause
+  it (<code>document.hidden</code>), another window on top doesn't. A Submit sends the time shown (<code>elapsedMs</code>), and the clock is
+  held while it's judged. A saved Submit freezes it (green); a failed one lets it carry on. A reload starts again from zero. Clicking it
+  hides the digits, leaving a clock icon (remembered in <code>localStorage</code>); the clock counts either way.
+  <span class="src">Source: <code>timer.js</code>, <code>problem-page.js</code> (<code>clockFor</code>, <code>updateClocks</code>, <code>renderTimer</code>, <code>execute</code>), <code>style.css</code> (<code>button.elapsed-timer</code>).</span></li>
   <li><strong>One Submit per language, per page visit</strong> (issue #18): after a <em>saved</em> Submit, the Submit button is grayed out
   for that language, with the tooltip “Already submitted in Python. Go back to the list for the next question.” (named for the language).
   Other languages can still be submitted, and Run stays available. A Submit that fails (network error, judge busy, not saved) leaves
@@ -302,7 +310,7 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   <li>The <strong>Submissions</strong> tab lists your saved Submits for this question <em>in the current language only</em>, newest first (local time, verdict, tests passed, run time), and changes with the language, from <code>GET /api/submissions?question=</code>. It refreshes after each saved Submit. <strong>Load</strong> switches to that submission's language and puts its code in the editor. It asks first only if that language's code has been edited, and explains if the language is turned off in the language menu. Loading switches the editor's language but, unlike the dropdown, doesn't change your default language. It also adds <code>&amp;submission=&lt;id&gt;</code> to the page address (<code>history.replaceState</code>, no reload), so reloading or bookmarking reopens that submission's language and code; edits made since are not kept. A saved Submit puts its own id there, so a reload reopens what was just submitted (Run, or a Submit that failed to save, leaves the address alone). Choosing a language yourself (dropdown or language menu) removes it from the address. If the address names a submission that's missing, belongs to another question, or is in a language that's turned off, the page opens normally, drops it from the address, and the Submissions tab says why.</li>
   <li>The problem page header shows the difficulty, then the question's <code>sources</code> as outlined bubbles, then its <code>topics</code> as filled bubbles, each in file order, coloured from <code>labels.json</code>. The problem list shows the same bubbles in its “Sources &amp; topics” column.</li>
 </ul>
-<p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>, <code>index.html</code>, <code>problems-list.js</code>, <code>bubbles.js</code>.</p>
+<p class="src">Source: <code>problem.html</code>, <code>problem-page.js</code>, <code>timer.js</code>, <code>index.html</code>, <code>problems-list.js</code>, <code>bubbles.js</code>.</p>
 
 <h2 id="state">8. Where data lives</h2>
 <p><strong>Every Submit is saved; Run is not.</strong> Each Submit writes one file:</p>

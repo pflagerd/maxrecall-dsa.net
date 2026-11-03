@@ -109,6 +109,12 @@
         <button id="run-btn" title="Run against the non-hidden test cases">Run</button>
         <button id="submit-btn" class="primary" title="Run against all test cases, including hidden ones">Submit</button>
         <button id="skip-btn" title="Skip this problem">Skip</button>
+        <button id="elapsed-timer" class="elapsed-timer" type="button">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/>
+          </svg>
+          <span id="elapsed-timer-digits">0:00</span>
+        </button>
       </div>
 
       <div id="editor-host"></div>
@@ -139,6 +145,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
   <script src="account.js"></script>
   <script src="bubbles.js"></script>
+  <script src="timer.js"></script>
   <script src="problem-page.js"></script>
 </body>
 </html>
