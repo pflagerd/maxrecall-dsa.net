@@ -17,6 +17,8 @@
     "introduce.js",
     "introduce.test.js",
     "questions.test.js",
+    "profile.js",
+    "profile.test.js",
     "paths.js",
     "users.js",
     "auth.js",
