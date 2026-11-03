@@ -240,7 +240,8 @@ let currentLanguage = null;
 const codeByLanguage = {};
 
 // Last Run/Submit outcome shown for each language, so switching away and
-// back restores it too instead of clearing the console. Either
+// back restores it too instead of clearing the console. One of
+// { kind: 'running' } (a Run or Submit is waiting for its answer),
 // { kind: 'result', data } (a judge result, same shape renderResults takes)
 // or { kind: 'error', message } (a client-side failure — network/parse
 // error — before any judge result came back).
@@ -554,8 +555,8 @@ function renderLanguageContent(language) {
 // Results/stdout/stderr are restored the same way (see
 // consoleStateByLanguage/restoreConsoleState) rather than cleared, so
 // switching languages and back shows exactly what was there before.
-function clearConsoleOutput() {
-  consoleStatusEl.textContent = 'Run your code to see results.';
+function clearConsoleOutput(status = 'Run your code to see results.') {
+  consoleStatusEl.textContent = status;
   consoleStatusEl.className = '';
   consoleResultsListEl.innerHTML = '';
   consoleStdoutEl.textContent = '';
@@ -568,6 +569,7 @@ function clearConsoleOutput() {
 function restoreConsoleState(language) {
   const state = consoleStateByLanguage[language];
   if (!state) clearConsoleOutput();
+  else if (state.kind === 'running') clearConsoleOutput('Running...');
   else if (state.kind === 'error') renderClientError(state.message);
   else renderResults(state.data);
 }
@@ -710,14 +712,14 @@ function renderClientError(message) {
 }
 
 async function execute(endpoint, button) {
-  // The language submitted, in case the learner switches during the request.
+  // The language sent. The learner may switch languages while waiting for
+  // the answer, so the answer is filed under this language, not whichever
+  // is current when it arrives, and is only shown if it's still on screen.
   const language = currentLanguage;
+  const stillShown = () => language === currentLanguage;
   button.disabled = true;
-  consoleStatusEl.textContent = 'Running...';
-  consoleStatusEl.className = '';
-  consoleResultsListEl.innerHTML = '';
-  consoleStdoutEl.textContent = '';
-  consoleStderrEl.textContent = '';
+  consoleStateByLanguage[language] = { kind: 'running' };
+  restoreConsoleState(language);
 
   try {
     const res = await fetch(`/api/questions/${slug}/${endpoint}`, {
@@ -727,19 +729,24 @@ async function execute(endpoint, button) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    renderResults(data);
-    consoleStateByLanguage[currentLanguage] = { kind: 'result', data };
-    // A saved Submit becomes the submission named in the page address, so a
-    // reload reopens what was just submitted rather than an older one.
+    consoleStateByLanguage[language] = { kind: 'result', data };
+    if (stillShown()) renderResults(data);
     if (endpoint === 'submit' && data.saved) {
       submittedLanguages.add(language);
-      setSubmissionInAddress(data.submissionId);
       submissionsNotice = null;
-      refreshSubmissions();
+      // A saved Submit becomes the submission named in the page address, so
+      // a reload reopens what was just submitted rather than an older one;
+      // but not if the learner has meanwhile picked another language, which
+      // took the submission out of the address. Switching back to this
+      // language refreshes its Submissions tab anyway (showLanguage).
+      if (stillShown()) {
+        setSubmissionInAddress(data.submissionId);
+        refreshSubmissions();
+      }
     }
   } catch (err) {
-    renderClientError(err.message);
-    consoleStateByLanguage[currentLanguage] = { kind: 'error', message: err.message };
+    consoleStateByLanguage[language] = { kind: 'error', message: err.message };
+    if (stillShown()) renderClientError(err.message);
   } finally {
     // Submit stays grayed out after a saved Submit; a failed one (network
     // error, judge busy, not saved) can be tried again.

@@ -281,7 +281,10 @@ separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker 
   inserted a tab character while Enter indented with spaces, so Python code ended up mixed and was rejected with <code>TabError</code>.
   Source: <code>problem-page.js</code> (<code>EXTRA_KEYS</code>, <code>normalizeIndentation</code>, <code>normalizeChangedLines</code>).</li>
   <li>The browser keeps each language's code and console output in memory while you
-  switch languages on one page. A reload loses them.</li>
+  switch languages on one page. A reload loses them. A Run or Submit's answer belongs to the language it was sent in: if you switch
+  languages while it's running, it's kept for that language and shown when you switch back (“Running...” until it arrives), and a
+  saved Submit that finishes after you've switched doesn't put itself in the page address.
+  <span class="src">Source: <code>problem-page.js</code> (<code>execute</code>, <code>restoreConsoleState</code>).</span></li>
   <li>Preferences are kept in the browser's <code>localStorage</code> under these keys:
   <code>maxrecall-dsa:description-pane-width</code>,
   <code>maxrecall-dsa:default-language</code>,
@@ -430,6 +433,7 @@ of 5000, because the orphan held the output pipe open. <strong>Step 3 closed all
 <h2 id="decisions">11. Decisions &amp; plans</h2>
 <table>
   <tr><th>Date</th><th>Decision or status</th></tr>
+  <tr><td>2026-11-03</td><td><strong>Fixed</strong> (branch <code>console-language</code>, found while doing #18): a Run or Submit answer that arrived after switching languages was drawn in, and saved under, the language switched to, and a saved Submit put its id back in the page address. Now it's filed under the language sent, drawn only if that language is still shown, and a pending one shows “Running...” when you switch back. Tested in headless Chromium with the answer held back while switching: 10 checks pass, and the same test fails 3 of them against the old code before it stops.</td></tr>
   <tr><td>2026-11-03</td><td><strong>Done</strong> (issue #18, branch <code>submit-once</code>, owner accepted all five recommendations): Submit grays out after a saved Submit, per language; a failed Submit leaves it enabled; Run stays enabled; a reload enables it again, and the server isn't changed (a nudge toward the next question, not enforcement); grayed look, “not allowed” cursor and a tooltip saying why. Tested in headless Chromium against the real server (CodeMirror served locally): all 8 checks pass, including a 503 from <code>/submit</code> leaving the button enabled.</td></tr>
   <tr><td>2026-11-03</td><td><strong>Fixed</strong> (issues #15 and #16, branch <code>editor-indentation</code>, owner's choice of spaces): the editor indents only with spaces, 4 per level. Tab inserts spaces or indents a selection, Shift-Tab out-dents, and tabs at the start of lines in loaded, pasted or dropped code become spaces. The cause was CodeMirror's defaults: automatic indentation with spaces, but the Tab key inserting a tab character. Tested in headless Chromium against the real server, with CodeMirror 5.65.16 served locally (this cloud session blocks the CDN). With the old editor, typing a Two Sum solution gave mixed indentation and the server rejected it (Python's TabError), and Shift-Tab removed all indentation. With the fix, all 9 checks pass, including the typed solution being Accepted.</td></tr>
   <tr><td>2026-11-03</td><td><strong>Checked on the VPS</strong> (sandboxing step 8, merged to <code>master</code> without a pull request): <code>make deploy-server</code> at <code>52748ee</code>, then the escape test in a unit set up like the service gave <strong>16 probes: 15 contained, 1 skipped</strong>. G9 saw at most 2 together, with 12 judged and 8 refused, and G12 was OOM-killed at 768&nbsp;MB. <code>deploy-server.sh</code> now also shows the server's <code>Judge queue:</code> startup line.</td></tr>
