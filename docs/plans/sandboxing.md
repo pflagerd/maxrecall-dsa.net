@@ -1,9 +1,10 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–6
-done 2026-11-02, plus a CPU-time limit and a total time budget for program
-mode. The sandbox works in the cloud, on Kubuntu 26.04, and in the VPS's
-systemd service, seccomp included. Next: steps 7–8.** The VPS part of step 5 (AppArmor) moved
+Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–7
+done (step 7 on 2026-11-03), plus a CPU-time limit and a total time budget
+for program mode. The sandbox works in the cloud, on Kubuntu 26.04, and in
+the VPS's systemd service, with seccomp everywhere and cgroup limits in the
+service. Next: step 8.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -260,7 +261,7 @@ Notes:
 | 4 | **Done 2026-11-02.** Compile step under bwrap, plus compiler memory caps (added: none existed). | G7 and G10 contained; all 13 probes contained, as root and as `nobody`. C++/Java/D still compile and pass. See “Step 4 notes”. |
 | 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
 | 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 in the cloud (as root and as `nobody`) and on Kubuntu 26.04; the VPS service reports `works` with the filter checked. All languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
-| 7 | **Built 2026-11-02, branch `cgroup-limits`; VPS test pending.** cgroup v2 per submission in the VPS service (D5). | G12 (memory across processes) contained on the VPS; `judge-…` cgroups appear and vanish; all languages still Accepted. See “Step 7 notes”. |
+| 7 | **Done 2026-11-03.** cgroup v2 per submission in the VPS service (D5): 768 MB, no swap, 128 tasks, 1 CPU. | VPS escape test in a service-like unit: 14 contained, 1 skipped, G12 OOM-killed at 768 MB. The service itself, after `make deploy-server` at `f51edc5`: `Sandbox: … cgroup limits per submission: 768 MB, no swap, 128 tasks, 1 CPU`. See “Step 7 notes”. |
 | 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
 
 Each step updates `readme.html` (Judging, Known gaps, Environments,
@@ -930,9 +931,14 @@ io_uring_setup, kcmp, keyctl, ptrace`.
   limits work on the VPS** (in a `systemd-run` unit set up like the
   service: `Delegate=yes`, `DelegateSubgroup=server`,
   `MAXRECALL_REQUIRE_CGROUPS=1`).
-- **Still to do:** merge, then `make deploy-server` on the VPS, which
-  installs the unit with delegation; its `Sandbox:` line should then show
-  the cgroup limits.
+- **Done.** Merged to `master` (fast-forward, no pull request, owner's
+  choice). `make deploy-server` on the VPS, at `f51edc5`, installed the
+  unit with delegation and restarted the service, which reports
+  `Sandbox: bubblewrap 0.9.0 works (self-test passed); compilers and
+  submissions run inside it; cgroup limits per submission: 768 MB, no
+  swap, 128 tasks, 1 CPU`. That line needs the startup self-test to have
+  run inside a test cgroup and been counted there. Ports are still
+  127.0.0.1 only. **Step 7 is complete.**
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
