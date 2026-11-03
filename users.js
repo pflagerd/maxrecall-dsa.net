@@ -108,7 +108,8 @@ const SUBMISSION_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
  * request is from (server.js, req.userEmail). Checked again here before it
  * becomes part of a path, whatever the caller did.
  *
- * @param {unknown} email - The user's email, as the caller has it.
+ * @param {string} email - The user's email. Checked here all the same: a
+ *   value that isn't a string, or doesn't match EMAIL_PATTERN, throws.
  * @returns {string} The absolute path of users/<email>/submissions (it may
  *   not exist yet).
  * @throws {Error} "Invalid user" if email isn't a string matching EMAIL_PATTERN.

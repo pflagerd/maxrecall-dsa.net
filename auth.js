@@ -79,8 +79,9 @@ fs.mkdirSync(SESSIONS_DIR, { recursive: true, mode: 0o700 });
 /**
  * An email as typed, made comparable: trimmed and lower-cased.
  *
- * @param {unknown} email - From the request body.
- * @returns {string} The normalized email, or "" if it isn't a string.
+ * @param {string} email - The email as typed. (Checked all the same: a
+ *   value that isn't a string gives "".)
+ * @returns {string} The normalized email, or "" if it wasn't a string.
  */
 function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -90,19 +91,20 @@ function normalizeEmail(email) {
  * Compares two strings in time that doesn't depend on where they differ.
  * Hashing first gives timingSafeEqual the equal-length inputs it requires.
  *
- * @param {unknown} a - One secret (converted with String()).
- * @param {unknown} b - The other.
+ * @param {string} a - One secret. (Passed through String() all the same.)
+ * @param {string} b - The other.
  * @returns {boolean} Whether they're equal.
  */
 function sameSecret(a, b) {
-  const digest = (/** @type {unknown} */ s) => crypto.createHash('sha256').update(String(s)).digest();
+  const digest = (/** @type {string} */ s) => crypto.createHash('sha256').update(String(s)).digest();
   return crypto.timingSafeEqual(digest(a), digest(b));
 }
 
 /**
  * Hashes a password with scrypt, as stored in an account.
  *
- * @param {unknown} password - The password (converted with String()).
+ * @param {string} password - The password. (Passed through String() all
+ *   the same.)
  * @param {Buffer} salt - The account's salt, or a random one.
  * @param {{ N: number, r: number, p: number }} [params=SCRYPT_PARAMS] - scrypt's
  *   cost parameters: an account's own, or the current defaults.
@@ -210,8 +212,9 @@ function throttled(key) {
  * open, the email is OWNER_EMAIL, the password is MAXRECALL_PASSWORD, and
  * there's no account yet. Every refusal gives the same message.
  *
- * @param {unknown} rawEmail - The email as typed.
- * @param {unknown} password - The password as typed.
+ * @param {string} rawEmail - The email as typed (server.js refuses a
+ *   request without string email and password before calling this).
+ * @param {string} password - The password as typed.
  * @returns {Promise<AuthResult>} The new session, or why not (with
  *   retryAfterMs when throttled).
  * @throws {Error} If an account file can't be read or written for a reason
@@ -225,7 +228,8 @@ async function register(rawEmail, password) {
 
   const allowed = registrationOpen()
     && email === OWNER_EMAIL
-    && sameSecret(password, REGISTRATION_PASSWORD)
+    // registrationOpen() above means REGISTRATION_PASSWORD is set.
+    && sameSecret(password, /** @type {string} */ (REGISTRATION_PASSWORD))
     && !(await readAccount(email));
   if (!allowed) {
     recordFailure(key);
@@ -258,8 +262,9 @@ async function register(rawEmail, password) {
  * Checks an email and password against the stored account and starts a
  * session. Takes about as long whether or not the account exists.
  *
- * @param {unknown} rawEmail - The email as typed.
- * @param {unknown} password - The password as typed.
+ * @param {string} rawEmail - The email as typed (server.js refuses a
+ *   request without string email and password before calling this).
+ * @param {string} password - The password as typed.
  * @returns {Promise<AuthResult>} The new session, or why not (with
  *   retryAfterMs when throttled).
  * @throws {Error} If the account file exists but can't be read or parsed.
@@ -322,7 +327,9 @@ async function createSession(email) {
  * The email a session token belongs to, or null if it's missing, malformed,
  * unknown or expired (expired sessions are deleted when found).
  *
- * @param {unknown} token - From the session cookie, if there was one.
+ * @param {string | null} token - From the session cookie; null if there
+ *   was none. (Checked all the same: anything that isn't a well-formed
+ *   token gives null.)
  * @returns {Promise<string | null>} The session's email, or null.
  * @throws {Error} If the session file exists but can't be read or parsed.
  */
@@ -347,7 +354,9 @@ async function sessionEmail(token) {
  * Ends a session by deleting its file. Does nothing for a missing or
  * malformed token, or one with no session.
  *
- * @param {unknown} token - From the session cookie, if there was one.
+ * @param {string | null} token - From the session cookie; null if there
+ *   was none. (Checked all the same: anything that isn't a well-formed
+ *   token is ignored.)
  * @returns {Promise<void>}
  * @throws {Error} If the session file exists but can't be deleted.
  */

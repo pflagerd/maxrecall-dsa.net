@@ -35,6 +35,14 @@ From the owner's review of pull request #27, and since 2026-11-03 in
   in wrong on purpose in each file; the code with every comment removed
   (printed by TypeScript's own parser) is compared with `master`'s, and
   must differ only by those parentheses; and the code is run.
+- **Parameter types are what the callers pass,** even where the function
+  checks its argument itself (owner, review of pull request #29): e.g.
+  `{string}`, not `{unknown}`, for an email that `normalizeEmail` also
+  checks is a string. The description says what the check does with
+  anything else. `unknown` is only for a value that really can be anything,
+  such as a test case's expected JSON value.
+- **Words:** a function's *signature* is its parameters' and return value's
+  types (`@param`, `@returns`); a `@typedef` for a record is a *type*.
 - **Inline callbacks** (Express route handlers, `.map()` callbacks) get
   their types from what they're passed to, and are described by the
   comment above them. A parameter of one gets a JSDoc type only where the
@@ -45,7 +53,7 @@ From the owner's review of pull request #27, and since 2026-11-03 in
 `server.js`, `users.js`, `auth.js`, `paths.js`: 32 functions, 116 errors
 under `strict` beforehand.
 
-- **Named shapes** (`@typedef`): `SubmissionRecord` and `SavedSubmission`
+- **Named types** (`@typedef`): `SubmissionRecord` and `SavedSubmission`
   (`users.js`); `Account`, `Session`, `AuthResult` (`auth.js`);
   `AppRequest` (Express's request plus `userEmail` and `viaTrustedPort`),
   `Problem`, `TestCase`, `ProblemSummary`, `SubmissionSummary`,
