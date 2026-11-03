@@ -59,11 +59,14 @@ TEST_FILES := $(wildcard *.test.js)
 test: toolchain-deps
 	node --test $(TEST_FILES)
 
-# Checks the JSDoc types in the files tsconfig.json lists, with TypeScript
-# (a development dependency, so it needs npm install, hence node_modules).
-# Compiles nothing. Fails (make prints an Error line) if a type doesn't match.
+# Checks the JSDoc types with TypeScript (a development dependency, so it
+# needs npm install, hence node_modules): the Node files tsconfig.json lists,
+# then the browser files tsconfig.browser.json lists, which need the DOM's
+# types instead of Node's. Compiles nothing. Fails (make prints an Error
+# line) if a type doesn't match.
 typecheck: node_modules
 	./node_modules/.bin/tsc -p tsconfig.json
+	./node_modules/.bin/tsc -p tsconfig.browser.json
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

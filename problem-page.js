@@ -1,43 +1,48 @@
 const slug = new URLSearchParams(window.location.search).get('slug');
 
-const titleEl = document.getElementById('problem-title');
-const difficultyEl = document.getElementById('problem-difficulty');
-const bubblesEl = document.getElementById('problem-bubbles');
-const descriptionEl = document.getElementById('problem-description');
-const examplesEl = document.getElementById('problem-examples');
-const constraintsEl = document.getElementById('problem-constraints');
-const learningEl = document.getElementById('tab-learning');
-const languageSelect = document.getElementById('language-select');
-const languageFilterBtn = document.getElementById('language-filter-btn');
-const languageFilterMenu = document.getElementById('language-filter-menu');
-const languageCheckboxes = Array.from(languageFilterMenu.querySelectorAll('input[type="checkbox"]'));
-const languageFilterNames = Array.from(languageFilterMenu.querySelectorAll('.language-filter-name'));
-const runBtn = document.getElementById('run-btn');
-const submitBtn = document.getElementById('submit-btn');
-const skipBtn = document.getElementById('skip-btn');
-const timerBtn = document.getElementById('elapsed-timer');
-const timerDigitsEl = document.getElementById('elapsed-timer-digits');
-const consoleStatusEl = document.getElementById('console-status');
-const consoleResultsEl = document.getElementById('console-results');
-const consoleResultsListEl = document.getElementById('console-results-list');
-const consoleStdoutEl = document.getElementById('console-stdout');
-const consoleStderrEl = document.getElementById('console-stderr');
+// Every element looked up below is in problem.html, so each lookup is cast
+// to the element it finds there, without null (decision 2 in
+// docs/plans/documentation-standard.md: casts, not null checks). If one went
+// missing from problem.html, the page would fail as it always has.
+
+const titleEl = /** @type {HTMLElement} */ (document.getElementById('problem-title'));
+const difficultyEl = /** @type {HTMLElement} */ (document.getElementById('problem-difficulty'));
+const bubblesEl = /** @type {HTMLElement} */ (document.getElementById('problem-bubbles'));
+const descriptionEl = /** @type {HTMLElement} */ (document.getElementById('problem-description'));
+const examplesEl = /** @type {HTMLElement} */ (document.getElementById('problem-examples'));
+const constraintsEl = /** @type {HTMLElement} */ (document.getElementById('problem-constraints'));
+const learningEl = /** @type {HTMLElement} */ (document.getElementById('tab-learning'));
+const languageSelect = /** @type {HTMLSelectElement} */ (document.getElementById('language-select'));
+const languageFilterBtn = /** @type {HTMLButtonElement} */ (document.getElementById('language-filter-btn'));
+const languageFilterMenu = /** @type {HTMLElement} */ (document.getElementById('language-filter-menu'));
+const languageCheckboxes = Array.from(/** @type {NodeListOf<HTMLInputElement>} */ (languageFilterMenu.querySelectorAll('input[type="checkbox"]')));
+const languageFilterNames = Array.from(/** @type {NodeListOf<HTMLElement>} */ (languageFilterMenu.querySelectorAll('.language-filter-name')));
+const runBtn = /** @type {HTMLButtonElement} */ (document.getElementById('run-btn'));
+const submitBtn = /** @type {HTMLButtonElement} */ (document.getElementById('submit-btn'));
+const skipBtn = /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn'));
+const timerBtn = /** @type {HTMLButtonElement} */ (document.getElementById('elapsed-timer'));
+const timerDigitsEl = /** @type {HTMLElement} */ (document.getElementById('elapsed-timer-digits'));
+const consoleStatusEl = /** @type {HTMLElement} */ (document.getElementById('console-status'));
+const consoleResultsEl = /** @type {HTMLElement} */ (document.getElementById('console-results'));
+const consoleResultsListEl = /** @type {HTMLElement} */ (document.getElementById('console-results-list'));
+const consoleStdoutEl = /** @type {HTMLElement} */ (document.getElementById('console-stdout'));
+const consoleStderrEl = /** @type {HTMLElement} */ (document.getElementById('console-stderr'));
 const consoleTabPanels = { results: consoleResultsEl, stdout: consoleStdoutEl, stderr: consoleStderrEl };
 const descriptionTabPanels = {
-  learning: document.getElementById('tab-learning'),
-  applying: document.getElementById('tab-applying'),
-  submissions: document.getElementById('tab-submissions'),
-  insights: document.getElementById('tab-insights'),
+  learning: /** @type {HTMLElement} */ (document.getElementById('tab-learning')),
+  applying: /** @type {HTMLElement} */ (document.getElementById('tab-applying')),
+  submissions: /** @type {HTMLElement} */ (document.getElementById('tab-submissions')),
+  insights: /** @type {HTMLElement} */ (document.getElementById('tab-insights')),
 };
-const fullscreenBtn = document.getElementById('fullscreen-btn');
-const fullscreenIcon = document.getElementById('fullscreen-icon');
-const resetSplitBtn = document.getElementById('reset-split-btn');
-const paneResizer = document.getElementById('pane-resizer');
-const descriptionPaneEl = document.querySelector('.description-pane');
-const editorPaneEl = document.querySelector('.editor-pane');
-const rowResizer = document.getElementById('row-resizer');
-const editorHostEl = document.getElementById('editor-host');
-const consolePanelEl = document.querySelector('.console-panel');
+const fullscreenBtn = /** @type {HTMLButtonElement} */ (document.getElementById('fullscreen-btn'));
+const fullscreenIcon = /** @type {Element} */ (document.getElementById('fullscreen-icon'));
+const resetSplitBtn = /** @type {HTMLButtonElement} */ (document.getElementById('reset-split-btn'));
+const paneResizer = /** @type {HTMLElement} */ (document.getElementById('pane-resizer'));
+const descriptionPaneEl = /** @type {HTMLElement} */ (document.querySelector('.description-pane'));
+const editorPaneEl = /** @type {HTMLElement} */ (document.querySelector('.editor-pane'));
+const rowResizer = /** @type {HTMLElement} */ (document.getElementById('row-resizer'));
+const editorHostEl = /** @type {HTMLElement} */ (document.getElementById('editor-host'));
+const consolePanelEl = /** @type {HTMLElement} */ (document.querySelector('.console-panel'));
 
 // Drag-to-resize the description/editor split. Pointer capture keeps the
 // drag tracking even if the cursor moves off the thin resizer bar. The
@@ -51,8 +56,17 @@ const MIN_PANE_FRACTION = 0.2;
 const DEFAULT_PANE_FRACTION = 0.382;
 const PANE_WIDTH_STORAGE_KEY = 'maxrecall-dsa:description-pane-width';
 
-// Resizer width + both flex gaps, measured rather than hardcoded so this
-// doesn't need to track the CSS gap/padding values separately.
+/**
+ * Where the description/editor split can go: the space both panes share,
+ * less the resizer and both flex gaps, measured rather than hardcoded so
+ * this doesn't need to track the CSS gap/padding values separately.
+ *
+ * @typedef {{ paneLeft: number, span: number, minWidth: number, maxWidth: number }} PaneBounds
+ *
+ * @returns {PaneBounds} In pixels: the description pane's left edge, the
+ *   width both panes span, and the smallest and largest width the
+ *   description pane may have.
+ */
 function getPaneWidthBounds() {
   const paneLeft = descriptionPaneEl.getBoundingClientRect().left;
   const editorRight = editorPaneEl.getBoundingClientRect().right;
@@ -62,12 +76,25 @@ function getPaneWidthBounds() {
   return { paneLeft, span, minWidth, maxWidth: span - fixedOverhead - minWidth };
 }
 
+/**
+ * Sets the description pane's width, kept within its bounds.
+ *
+ * @param {number} width - The width wanted, in pixels.
+ * @param {PaneBounds} [bounds] - From getPaneWidthBounds(); measured now if
+ *   not given.
+ * @returns {void}
+ */
 function setDescriptionPaneWidth(width, bounds) {
   const { minWidth, maxWidth } = bounds || getPaneWidthBounds();
   const clamped = Math.max(minWidth, Math.min(width, maxWidth));
   descriptionPaneEl.style.flex = `0 0 ${clamped}px`;
 }
 
+/**
+ * Remembers the description pane's width in localStorage, if it can.
+ *
+ * @returns {void}
+ */
 function savePaneWidth() {
   try {
     localStorage.setItem(PANE_WIDTH_STORAGE_KEY, String(descriptionPaneEl.getBoundingClientRect().width));
@@ -76,6 +103,12 @@ function savePaneWidth() {
   }
 }
 
+/**
+ * Restores the description pane's remembered width, if there is one. Runs
+ * once, as the page loads.
+ *
+ * @returns {void}
+ */
 (function restorePaneWidth() {
   let saved;
   try {
@@ -102,10 +135,22 @@ paneResizer.addEventListener('pointerdown', (e) => {
 
   const bounds = getPaneWidthBounds();
 
+  /**
+   * Follows the pointer while dragging.
+   *
+   * @param {PointerEvent} moveEvent - The pointer's move.
+   * @returns {void}
+   */
   function onMove(moveEvent) {
     setDescriptionPaneWidth(moveEvent.clientX - bounds.paneLeft, bounds);
   }
 
+  /**
+   * Ends the drag and remembers the width.
+   *
+   * @param {PointerEvent} upEvent - The pointer's release.
+   * @returns {void}
+   */
   function onUp(upEvent) {
     paneResizer.releasePointerCapture(upEvent.pointerId);
     paneResizer.classList.remove('dragging');
@@ -148,11 +193,23 @@ rowResizer.addEventListener('pointerdown', (e) => {
   consolePanelEl.style.flex = '1 1 auto';
   consolePanelEl.style.maxHeight = 'none';
 
+  /**
+   * Follows the pointer while dragging.
+   *
+   * @param {PointerEvent} moveEvent - The pointer's move.
+   * @returns {void}
+   */
   function onMove(moveEvent) {
     const newEditorHeight = Math.max(MIN_EDITOR_HEIGHT, Math.min(moveEvent.clientY - editorTop, maxEditorHeight));
     editorHostEl.style.flex = `0 0 ${newEditorHeight}px`;
   }
 
+  /**
+   * Ends the drag.
+   *
+   * @param {PointerEvent} upEvent - The pointer's release.
+   * @returns {void}
+   */
   function onUp(upEvent) {
     rowResizer.releasePointerCapture(upEvent.pointerId);
     rowResizer.classList.remove('dragging');
@@ -170,6 +227,12 @@ rowResizer.addEventListener('pointerdown', (e) => {
 const EXPAND_ICON_PATHS = '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>';
 const COMPRESS_ICON_PATHS = '<path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/>';
 
+/**
+ * Shows the expand or compress icon, and the matching label, for whether
+ * the page is in full screen now.
+ *
+ * @returns {void}
+ */
 function updateFullscreenButton() {
   const isFullscreen = Boolean(document.fullscreenElement);
   fullscreenIcon.innerHTML = isFullscreen ? COMPRESS_ICON_PATHS : EXPAND_ICON_PATHS;
@@ -197,9 +260,25 @@ if (fullscreenBtn && document.documentElement.requestFullscreen) {
 // and the description pane (Learning/Applying/Submissions/Insights). Switching
 // tabs only changes which panel is visible — every panel stays populated/alive
 // underneath, nothing is torn down or re-fetched on tab switch.
+/**
+ * Wires up one group of tabs: clicking a .tab-button shows the panel named
+ * by its data-tab, and hides the others.
+ *
+ * @param {string} tabsContainerSelector - A CSS selector for the element
+ *   holding the group's .tab-button elements.
+ * @param {Record<string, HTMLElement>} panels - The panels, by tab name.
+ * @param {string} defaultTab - The tab shown to begin with.
+ * @returns {(tabName: string) => void} A function that shows a tab by name.
+ */
 function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
-  const tabs = document.querySelectorAll(`${tabsContainerSelector} .tab-button`);
+  const tabs = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(`${tabsContainerSelector} .tab-button`));
 
+  /**
+   * Shows one tab's panel and marks its button, hiding the others.
+   *
+   * @param {string} tabName - The tab to show.
+   * @returns {void}
+   */
   function setActive(tabName) {
     tabs.forEach((tab) => {
       const isActive = tab.dataset.tab === tabName;
@@ -212,7 +291,8 @@ function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
   }
 
   tabs.forEach((tab) => {
-    tab.addEventListener('click', () => setActive(tab.dataset.tab));
+    // Every .tab-button has a data-tab (problem.html).
+    tab.addEventListener('click', () => setActive(/** @type {string} */ (tab.dataset.tab)));
   });
   setActive(defaultTab);
   return setActive;
@@ -227,18 +307,51 @@ const setDescriptionTab = setupTabGroup('.description-tabs', descriptionTabPanel
 // itself — not attached per-render — since both tabs' content gets
 // replaced wholesale on every language switch.
 descriptionPaneEl.addEventListener('click', (e) => {
-  const link = e.target.closest('.tab-ref-link');
-  if (link) setDescriptionTab(link.dataset.tab);
+  // A click's target is an element; a .tab-ref-link has a data-tab.
+  const link = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.tab-ref-link'));
+  if (link) setDescriptionTab(/** @type {string} */ (link.dataset.tab));
 });
 
+/**
+ * One example in a question's description.
+ *
+ * @typedef {object} Example
+ * @property {string} input
+ * @property {string} output
+ * @property {string} [explanation]
+ */
+
+/**
+ * A question as GET /api/questions/:slug sends it: the question file with
+ * its hidden test cases taken out (server.js, toPublicProblem). Only the
+ * fields this page uses are listed.
+ *
+ * @typedef {object} PublicProblem
+ * @property {string} slug
+ * @property {string} title
+ * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string[]} [topics]
+ * @property {string[]} [sources]
+ * @property {Record<string, string>} [learning] - The Learning tab's HTML, by language.
+ * @property {Record<string, string>} description - HTML, by language.
+ * @property {Record<string, Example[]>} [examples] - By language.
+ * @property {Record<string, string[]>} [constraints] - HTML items, by language.
+ * @property {Record<string, string>} starterCode - By language; the
+ *   languages this question can be answered in.
+ */
+
+/** The question shown; null until it has loaded. @type {PublicProblem | null} */
 let problem = null;
+/** The CodeMirror editor; null until the first language is loaded. @type {CodeMirror.Editor | null} */
 let editor = null;
+/** The language shown, e.g. "python"; null until the first is loaded. @type {string | null} */
 let currentLanguage = null;
 
 // Code the user has typed for each language on this problem, so switching
 // away and back doesn't lose it. In-memory only (scoped to this page load,
 // same as `problem`/`currentLanguage`) — a fresh page load for this
 // problem starts from starterCode again, same as before this existed.
+/** @type {Record<string, string>} */
 const codeByLanguage = {};
 
 // Last Run/Submit outcome shown for each language, so switching away and
@@ -247,6 +360,11 @@ const codeByLanguage = {};
 // { kind: 'result', data } (a judge result, same shape renderResults takes)
 // or { kind: 'error', message } (a client-side failure — network/parse
 // error — before any judge result came back).
+/**
+ * @typedef {{ kind: 'running' } | { kind: 'result', data: JudgeResult } | { kind: 'error', message: string }} ConsoleState
+ */
+
+/** @type {Record<string, ConsoleState>} */
 const consoleStateByLanguage = {};
 
 // Default language used to open problems, remembered across problems/reloads
@@ -254,6 +372,7 @@ const consoleStateByLanguage = {};
 // (not just the editor-toolbar one) — picking a language is "what I want to
 // use from now on", not just a one-off for the current problem.
 const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
+/** Each language's name as shown. @type {Record<string, string>} */
 const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java', d: 'D' };
 
 // Languages this question has been Submitted in, and saved, since the page
@@ -261,16 +380,21 @@ const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++'
 // the learner on to the next question. Per language because progress is per
 // (question, language). Run stays available, and a reload starts afresh:
 // it's a nudge, not a rule the server enforces (owner's decisions).
+/** @type {Set<string | null>} */
 const submittedLanguages = new Set();
 const SUBMIT_TITLE = submitBtn.title;
 
-// Grays out Submit for a language already submitted, with a tooltip that
-// says why; otherwise enables it.
+/**
+ * Grays out Submit for a language already submitted, with a tooltip that
+ * says why; otherwise enables it.
+ *
+ * @returns {void}
+ */
 function updateSubmitButton() {
   const done = submittedLanguages.has(currentLanguage);
   submitBtn.disabled = done;
   submitBtn.title = done
-    ? `Already submitted in ${LANGUAGE_LABELS[currentLanguage]}. Go back to the list for the next question.`
+    ? `Already submitted in ${LANGUAGE_LABELS[/** @type {string} */ (currentLanguage)]}. Go back to the list for the next question.`
     : SUBMIT_TITLE;
 }
 
@@ -282,17 +406,29 @@ function updateSubmitButton() {
 // window on top doesn't). A saved Submit freezes it, and Submit sends the
 // time so the record keeps it. While a Submit waits for its answer the
 // clock is held, so judging time isn't counted. A reload starts afresh.
+/** One stopwatch per language, made when first needed. @type {Record<string, import('./timer').Stopwatch>} */
 const clockByLanguage = {};
+/** Languages whose Submit is waiting for its answer. @type {Set<string>} */
 const submittingLanguages = new Set();
 const TIMER_HIDDEN_STORAGE_KEY = 'maxrecall-dsa:timer-hidden';
 
+/**
+ * A language's stopwatch, made (paused at zero) the first time it's asked for.
+ *
+ * @param {string} language - e.g. "python".
+ * @returns {import('./timer').Stopwatch} Its stopwatch.
+ */
 function clockFor(language) {
   if (!clockByLanguage[language]) clockByLanguage[language] = createStopwatch();
   return clockByLanguage[language];
 }
 
-// Runs the current language's clock when it should count, and pauses all
-// the others. Called whenever any of that changes.
+/**
+ * Runs the current language's clock when it should count, and pauses all
+ * the others. Called whenever any of that changes.
+ *
+ * @returns {void}
+ */
 function updateClocks() {
   for (const [language, clock] of Object.entries(clockByLanguage)) {
     if (language !== currentLanguage) clock.pause();
@@ -304,6 +440,11 @@ function updateClocks() {
   renderTimer();
 }
 
+/**
+ * Whether the learner hid the timer's digits, as remembered in localStorage.
+ *
+ * @returns {boolean} True if hidden; false if not, or if storage can't be read.
+ */
 function getStoredTimerHidden() {
   try {
     return localStorage.getItem(TIMER_HIDDEN_STORAGE_KEY) === 'true';
@@ -312,6 +453,12 @@ function getStoredTimerHidden() {
   }
 }
 
+/**
+ * Remembers whether the timer's digits are hidden, if storage allows.
+ *
+ * @param {boolean} hidden - Whether they're hidden.
+ * @returns {void}
+ */
 function setStoredTimerHidden(hidden) {
   try {
     localStorage.setItem(TIMER_HIDDEN_STORAGE_KEY, String(hidden));
@@ -322,8 +469,12 @@ function setStoredTimerHidden(hidden) {
 
 let timerHidden = getStoredTimerHidden();
 
-// Shows the current language's time, or only the clock icon if the learner
-// hid the digits. The clock counts either way.
+/**
+ * Shows the current language's time, or only the clock icon if the learner
+ * hid the digits. The clock counts either way.
+ *
+ * @returns {void}
+ */
 function renderTimer() {
   if (!currentLanguage) return;
   const clock = clockFor(currentLanguage);
@@ -348,6 +499,12 @@ document.addEventListener('visibilitychange', updateClocks);
 setInterval(renderTimer, 250);
 const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
 
+/**
+ * The learner's default language, as remembered in localStorage.
+ *
+ * @returns {string} One of KNOWN_LANGUAGES: the remembered one, or
+ *   "javascript" if there isn't one or storage can't be read.
+ */
 function getStoredDefaultLanguage() {
   let saved;
   try {
@@ -355,9 +512,16 @@ function getStoredDefaultLanguage() {
   } catch {
     return 'javascript';
   }
-  return KNOWN_LANGUAGES.includes(saved) ? saved : 'javascript';
+  // includes() accepts null at runtime (it's just not found).
+  return KNOWN_LANGUAGES.includes(/** @type {string} */ (saved)) ? /** @type {string} */ (saved) : 'javascript';
 }
 
+/**
+ * Remembers the learner's default language, if storage allows.
+ *
+ * @param {string} language - e.g. "python".
+ * @returns {void}
+ */
 function setStoredDefaultLanguage(language) {
   try {
     localStorage.setItem(DEFAULT_LANGUAGE_STORAGE_KEY, language);
@@ -371,10 +535,18 @@ function setStoredDefaultLanguage(language) {
 // language here removes it as an option from language-select everywhere.
 const AVAILABLE_LANGUAGES_STORAGE_KEY = 'maxrecall-dsa:available-languages';
 
+/**
+ * Which languages the learner has left switched on in the language menu, as
+ * remembered in localStorage.
+ *
+ * @returns {Set<string>} The remembered languages that are known, or all of
+ *   KNOWN_LANGUAGES if none are remembered or storage can't be read.
+ */
 function getAvailableLanguages() {
   let saved;
   try {
-    saved = JSON.parse(localStorage.getItem(AVAILABLE_LANGUAGES_STORAGE_KEY));
+    // JSON.parse(null) is null, which the check below turns into "none saved".
+    saved = JSON.parse(/** @type {string} */ (localStorage.getItem(AVAILABLE_LANGUAGES_STORAGE_KEY)));
   } catch {
     return new Set(KNOWN_LANGUAGES);
   }
@@ -382,6 +554,12 @@ function getAvailableLanguages() {
   return new Set(filtered.length ? filtered : KNOWN_LANGUAGES);
 }
 
+/**
+ * Remembers which languages are switched on, if storage allows.
+ *
+ * @param {Set<string>} languageSet - The languages switched on.
+ * @returns {void}
+ */
 function setAvailableLanguages(languageSet) {
   try {
     localStorage.setItem(AVAILABLE_LANGUAGES_STORAGE_KEY, JSON.stringify(Array.from(languageSet)));
@@ -390,8 +568,13 @@ function setAvailableLanguages(languageSet) {
   }
 }
 
-// Rebuilds language-select's <option> list from the available set, keeping
-// the current selection if it's still available.
+/**
+ * Rebuilds language-select's <option> list from the available set, keeping
+ * the current selection if it's still available.
+ *
+ * @param {Set<string>} available - The languages switched on.
+ * @returns {void}
+ */
 function renderLanguageSelectOptions(available) {
   const previousValue = languageSelect.value;
   languageSelect.innerHTML = KNOWN_LANGUAGES.filter((l) => available.has(l))
@@ -405,6 +588,10 @@ function renderLanguageSelectOptions(available) {
 // first known language that satisfies both. The stored preference itself is
 // never touched here — a problem/availability mismatch is a one-off
 // fallback for this load, not a change to what the user actually wants.
+/**
+ * @param {PublicProblem} problem - The question being opened.
+ * @returns {string} The language to open it in.
+ */
 function pickInitialLanguage(problem) {
   const preferred = getStoredDefaultLanguage();
   const available = getAvailableLanguages();
@@ -414,6 +601,7 @@ function pickInitialLanguage(problem) {
 
 // A checkbox for the only remaining checked language can't be unchecked —
 // language-select must never end up with zero options.
+/** @returns {void} */
 function updateCheckboxDisabledStates() {
   const checkedCount = languageCheckboxes.filter((cb) => cb.checked).length;
   languageCheckboxes.forEach((cb) => {
@@ -421,6 +609,11 @@ function updateCheckboxDisabledStates() {
   });
 }
 
+/**
+ * Closes the language menu.
+ *
+ * @returns {void}
+ */
 function closeLanguageFilterMenu() {
   languageFilterMenu.hidden = true;
   languageFilterBtn.setAttribute('aria-expanded', 'false');
@@ -428,6 +621,7 @@ function closeLanguageFilterMenu() {
 
 // Marks whichever language name is the current default — independent of
 // the checkboxes, which only control availability.
+/** @returns {void} */
 function updateDefaultLanguageHighlight() {
   const defaultLanguage = getStoredDefaultLanguage();
   languageFilterNames.forEach((el) => {
@@ -447,7 +641,8 @@ languageFilterBtn.addEventListener('click', (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  if (!languageFilterMenu.hidden && !e.target.closest('.language-filter')) closeLanguageFilterMenu();
+  // A click's target is an element.
+  if (!languageFilterMenu.hidden && !/** @type {Element} */ (e.target).closest('.language-filter')) closeLanguageFilterMenu();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -462,9 +657,10 @@ languageCheckboxes.forEach((checkbox) => {
     // another available language this problem supports first, or revert
     // the checkbox if there's no such language to fall back to.
     if (!checkbox.checked && problem && lang === currentLanguage) {
+      // problem was checked just above; the checker can't see that inside this callback.
       const fallback = KNOWN_LANGUAGES.find((l) =>
         l !== lang
-        && problem.starterCode[l]
+        && /** @type {PublicProblem} */ (problem).starterCode[l]
         && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
       );
       if (!fallback || !(await switchLanguage(fallback))) {
@@ -473,7 +669,7 @@ languageCheckboxes.forEach((checkbox) => {
       }
     }
 
-    const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => cb.dataset.lang));
+    const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => /** @type {string} */ (cb.dataset.lang))); // every checkbox has data-lang
     setAvailableLanguages(available);
     renderLanguageSelectOptions(available);
     updateCheckboxDisabledStates();
@@ -487,8 +683,9 @@ languageCheckboxes.forEach((checkbox) => {
 // language-select wouldn't make sense.
 languageFilterNames.forEach((nameEl) => {
   nameEl.addEventListener('click', async () => {
-    const lang = nameEl.dataset.lang;
-    const checkbox = languageCheckboxes.find((cb) => cb.dataset.lang === lang);
+    const lang = /** @type {string} */ (nameEl.dataset.lang); // every name has data-lang (problem.html)
+    // Every language name in the menu has a checkbox for the same language (problem.html).
+    const checkbox = /** @type {HTMLInputElement} */ (languageCheckboxes.find((cb) => cb.dataset.lang === lang));
     const wasChecked = checkbox.checked;
     checkbox.checked = true;
 
@@ -499,7 +696,7 @@ languageFilterNames.forEach((nameEl) => {
     }
 
     if (!wasChecked) {
-      const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => cb.dataset.lang));
+      const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => /** @type {string} */ (cb.dataset.lang))); // every checkbox has data-lang
       setAvailableLanguages(available);
       renderLanguageSelectOptions(available);
       updateCheckboxDisabledStates();
@@ -508,9 +705,15 @@ languageFilterNames.forEach((nameEl) => {
   });
 });
 
+/**
+ * Sets the language menu's checkboxes and language-select from what's
+ * remembered. Runs once, as the page loads.
+ *
+ * @returns {void}
+ */
 (function initLanguageFilter() {
   const available = getAvailableLanguages();
-  languageCheckboxes.forEach((cb) => { cb.checked = available.has(cb.dataset.lang); });
+  languageCheckboxes.forEach((cb) => { cb.checked = available.has(/** @type {string} */ (cb.dataset.lang)); });
   updateCheckboxDisabledStates();
   renderLanguageSelectOptions(available);
   updateDefaultLanguageHighlight();
@@ -535,6 +738,10 @@ const INDENT_WIDTH = 4;
 // Turns tabs in the indentation at the start of each line into spaces, each
 // tab reaching the next multiple of INDENT_WIDTH. Only leading whitespace:
 // a tab later in a line (in a string, say) is left alone.
+/**
+ * @param {string} text - Code, possibly with tabs in its indentation.
+ * @returns {string} The same code with those tabs turned into spaces.
+ */
 function normalizeIndentation(text) {
   return text.replace(/^[ \t]+/gm, (lead) => {
     if (!lead.includes('\t')) return lead;
@@ -547,19 +754,29 @@ function normalizeIndentation(text) {
 // After any edit that isn't our own (typing, paste, drag-and-drop, undo),
 // the lines it touched get the same treatment, so a tab can't get in by
 // another route. Code put in with setValue is normalized beforehand.
+/**
+ * CodeMirror's "change" handler.
+ *
+ * @param {CodeMirror.Editor} cm - The editor.
+ * @param {CodeMirror.EditorChange} change - What changed, and how
+ *   (change.origin).
+ * @returns {void}
+ */
 function normalizeChangedLines(cm, change) {
   if (change.origin === 'setValue' || change.origin === 'normalize-indentation') return;
   const last = change.from.line + change.text.length - 1;
   cm.operation(() => {
     for (let line = change.from.line; line <= last && line < cm.lineCount(); line++) {
       const text = cm.getLine(line);
-      const lead = text.match(/^[ \t]*/)[0];
+      // ^[ \t]* always matches, if only the empty string.
+      const lead = /** @type {RegExpMatchArray} */ (text.match(/^[ \t]*/))[0];
       if (!lead.includes('\t')) continue;
       cm.replaceRange(normalizeIndentation(lead), { line, ch: 0 }, { line, ch: lead.length }, 'normalize-indentation');
     }
   });
 }
 
+/** Key bindings added to CodeMirror's defaults. @type {CodeMirror.KeyMap} */
 const EXTRA_KEYS = {
   ...Object.fromEntries(BLOCKED_KEYS.map((k) => [`Mod-${k}`, () => {}])),
   // Tab: with a selection, indent the selected lines one level; otherwise
@@ -575,6 +792,12 @@ const EXTRA_KEYS = {
 // Renders $...$ math (powers, inequalities, etc.) within an element's
 // existing content in place; throwOnError: false means a typo in the
 // source LaTeX degrades to showing the raw text instead of breaking the page.
+/**
+ * Does nothing if KaTeX didn't load (e.g. the CDN is blocked).
+ *
+ * @param {HTMLElement} el - The element whose text may hold math.
+ * @returns {void}
+ */
 function renderMath(el) {
   if (typeof renderMathInElement !== 'function') return;
   renderMathInElement(el, {
@@ -584,20 +807,32 @@ function renderMath(el) {
 }
 
 // Language-independent header: title, difficulty, then source and topic
-// bubbles (bubbles.js). Rendered once.
+// bubbles (bubbles.js). Rendered once, after the question has loaded (init),
+// hence the casts: problem is set by then.
+/**
+ * @param {Labels} labels - The bubble styles (bubbles.js).
+ * @returns {void}
+ */
 function renderHeader(labels) {
-  titleEl.textContent = problem.title;
-  difficultyEl.textContent = problem.difficulty;
-  difficultyEl.className = `badge difficulty-${String(problem.difficulty || '').toLowerCase()}`;
-  renderBubbles(bubblesEl, problem, labels);
+  titleEl.textContent = /** @type {PublicProblem} */ (problem).title;
+  difficultyEl.textContent = /** @type {PublicProblem} */ (problem).difficulty;
+  difficultyEl.className = `badge difficulty-${String(/** @type {PublicProblem} */ (problem).difficulty || '').toLowerCase()}`;
+  renderBubbles(bubblesEl, /** @type {PublicProblem} */ (problem), labels);
 }
 
 // Description/examples/constraints are per-language (like starterCode), so this
 // re-renders whenever the language changes, same as the editor's starter code.
+// Only called once the question has loaded, hence the casts.
+/**
+ * @param {string} language - The language to show the question in.
+ * @returns {void}
+ */
 function renderLanguageContent(language) {
-  descriptionEl.innerHTML = problem.description[language] ?? '';
+  descriptionEl.innerHTML = /** @type {PublicProblem} */ (problem).description[language] ?? '';
 
-  examplesEl.innerHTML = (problem.examples[language] || [])
+  // Read as before: a question with no examples (or constraints) at all
+  // would throw here, so every question has both.
+  examplesEl.innerHTML = (/** @type {Record<string, Example[]>} */ (/** @type {PublicProblem} */ (problem).examples)[language] || [])
     .map(
       (ex, i) => `
       <div class="example">
@@ -609,27 +844,28 @@ function renderLanguageContent(language) {
     )
     .join('');
 
-  constraintsEl.innerHTML = (problem.constraints[language] || []).map((c) => `<li>${c}</li>`).join('');
+  constraintsEl.innerHTML = (/** @type {Record<string, string[]>} */ (/** @type {PublicProblem} */ (problem).constraints)[language] || []).map((c) => `<li>${c}</li>`).join('');
   renderMath(constraintsEl);
 
   // Learning content is optional per problem — most don't have it yet, so
   // fall back to the "Coming Soon!" placeholder already in the HTML. The
   // call-to-action is appended here (not per-problem content) so any future
   // problem with learning content gets it automatically, with no duplication.
-  if (problem.learning && problem.learning[language]) {
-    learningEl.innerHTML = `${problem.learning[language]}<p class="learning-cta">Ready? Click the <button type="button" class="tab-ref-link" data-tab="applying">Applying</button> tab to try it yourself.</p>`;
+  // learning is checked first, so the second and third casts hold.
+  if (/** @type {PublicProblem} */ (problem).learning && /** @type {Record<string, string>} */ (/** @type {PublicProblem} */ (problem).learning)[language]) {
+    learningEl.innerHTML = `${/** @type {Record<string, string>} */ (/** @type {PublicProblem} */ (problem).learning)[language]}<p class="learning-cta">Ready? Click the <button type="button" class="tab-ref-link" data-tab="applying">Applying</button> tab to try it yourself.</p>`;
     renderMath(learningEl);
   } else {
     learningEl.innerHTML = '<p class="coming-soon">Coming Soon!</p>';
   }
 }
 
-// Loads a language's code into the editor — whatever the user last had
-// there (see codeByLanguage), or its starter template on first visit — and
-// swaps the description/examples/constraints to match.
-// Results/stdout/stderr are restored the same way (see
-// consoleStateByLanguage/restoreConsoleState) rather than cleared, so
-// switching languages and back shows exactly what was there before.
+/**
+ * Empties the console, with a status line.
+ *
+ * @param {string} [status='Run your code to see results.'] - The text shown.
+ * @returns {void}
+ */
 function clearConsoleOutput(status = 'Run your code to see results.') {
   consoleStatusEl.textContent = status;
   consoleStatusEl.className = '';
@@ -641,6 +877,10 @@ function clearConsoleOutput(status = 'Run your code to see results.') {
 // Restores whatever Run/Submit outcome was last shown for `language`
 // (see consoleStateByLanguage), or shows the "nothing run yet" state if
 // there isn't one.
+/**
+ * @param {string} language - The language whose console to show.
+ * @returns {void}
+ */
 function restoreConsoleState(language) {
   const state = consoleStateByLanguage[language];
   if (!state) clearConsoleOutput();
@@ -649,11 +889,24 @@ function restoreConsoleState(language) {
   else renderResults(state.data);
 }
 
+/**
+ * Loads a language's code into the editor — whatever the user last had
+ * there (see codeByLanguage), or its starter template on first visit — and
+ * swaps the description/examples/constraints to match.
+ * Results/stdout/stderr are restored the same way (see
+ * consoleStateByLanguage/restoreConsoleState) rather than cleared, so
+ * switching languages and back shows exactly what was there before.
+ * Creates the editor the first time. Only called once the question has
+ * loaded.
+ *
+ * @param {string} language - The language to show.
+ * @returns {void}
+ */
 function loadLanguage(language) {
-  const code = codeByLanguage[language] ?? problem.starterCode[language] ?? '';
+  const code = codeByLanguage[language] ?? /** @type {PublicProblem} */ (problem).starterCode[language] ?? '';
 
   if (!editor) {
-    editor = CodeMirror(document.getElementById('editor-host'), {
+    editor = CodeMirror(/** @type {HTMLElement} */ (document.getElementById('editor-host')), {
       value: normalizeIndentation(code),
       lineNumbers: true,
       indentUnit: INDENT_WIDTH,
@@ -685,6 +938,13 @@ function loadLanguage(language) {
 // from the page address so a reload doesn't bring it back over their
 // choice. Loading a submission passes { chosenByUser: false }: it does
 // neither.
+/**
+ * @param {string} newLanguage - The language to switch to.
+ * @param {{ chosenByUser?: boolean }} [options] - chosenByUser (default
+ *   true): false when loading a submission.
+ * @returns {Promise<boolean>} Always true as written (callers still check
+ *   it, from when a switch could be refused).
+ */
 async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
   if (!problem) {
     setStoredDefaultLanguage(newLanguage);
@@ -702,12 +962,25 @@ async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
   return true;
 }
 
+/**
+ * language-select's change handler.
+ *
+ * @param {HTMLSelectElement} selectEl - language-select.
+ * @returns {Promise<void>}
+ */
 async function handleLanguageChange(selectEl) {
   const newLanguage = selectEl.value;
   const switched = await switchLanguage(newLanguage);
-  if (!switched) selectEl.value = currentLanguage;
+  if (!switched) selectEl.value = /** @type {string} */ (currentLanguage);
 }
 
+/**
+ * A value from a test case, as shown in the console.
+ *
+ * @param {unknown} v - An input, expected or actual value.
+ * @returns {string | undefined} Its JSON (undefined for undefined, which
+ *   JSON.stringify gives back as undefined).
+ */
 function formatValue(v) {
   return JSON.stringify(v);
 }
@@ -715,6 +988,10 @@ function formatValue(v) {
 // result.error/r.error come from the submission's own exception message (or
 // compiler stderr) — unlike other fields here, that's text the submission's
 // author controls, so it's escaped before going into innerHTML.
+/**
+ * @param {unknown} str - Text (converted with String()).
+ * @returns {string} The text with &, < and > escaped for HTML.
+ */
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -727,6 +1004,12 @@ function escapeHtml(str) {
 // doesn't depend on which input was used), so it's safe to show even for a
 // hidden case, unlike a per-test exception message which might incidentally
 // reveal something about that hidden case's input.
+/**
+ * @param {TestResult} r - One test case's result.
+ * @param {{ showErrorIfHidden?: boolean }} [options] - showErrorIfHidden
+ *   (default false): show the error even for a hidden case.
+ * @returns {string} The entry's HTML.
+ */
 function renderTestCase(r, { showErrorIfHidden = false } = {}) {
   if (r.hidden) {
     const errorLine = showErrorIfHidden && r.error
@@ -751,6 +1034,44 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
   </div>`;
 }
 
+/**
+ * One test case's result, as the judge sends it. Hidden cases have only
+ * index, hidden and passed (and error).
+ *
+ * @typedef {object} TestResult
+ * @property {number} index - Its position in the question's test cases, from 0.
+ * @property {boolean} hidden
+ * @property {boolean} passed
+ * @property {unknown} [input]
+ * @property {unknown} [expected]
+ * @property {unknown} [actual]
+ * @property {string} [error] - The submission's own error text, for this case.
+ */
+
+/**
+ * What POST /api/questions/:slug/run or /submit answers (server.js,
+ * handleExecution).
+ *
+ * @typedef {object} JudgeResult
+ * @property {string} status - e.g. "Accepted", "Wrong Answer", "Compile Error".
+ * @property {number} [passed]
+ * @property {number} [total]
+ * @property {number} [runtimeMs]
+ * @property {string} [error] - When judging failed as a whole (compile error, timeout).
+ * @property {string} [stdout]
+ * @property {string} [stderr]
+ * @property {TestResult[]} [results]
+ * @property {boolean} [saved] - Submit only: whether the record was saved.
+ * @property {string} [saveError] - Submit only, when not saved: why.
+ * @property {string} [submissionId] - Submit only, when saved.
+ */
+
+/**
+ * Shows a judge result in the console.
+ *
+ * @param {JudgeResult} result - The result.
+ * @returns {void}
+ */
 function renderResults(result) {
   consoleStatusEl.textContent = `${result.status}${
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
@@ -781,17 +1102,30 @@ function renderResults(result) {
 // A client-side failure (network/parse error) before any judge result came
 // back — distinct from a judge result that itself reports an error (e.g.
 // Compile Error), which renderResults already handles.
+/**
+ * @param {string} message - What went wrong.
+ * @returns {void}
+ */
 function renderClientError(message) {
   consoleStatusEl.textContent = 'Error';
   consoleStatusEl.className = 'status-fail';
   consoleResultsListEl.innerHTML = `<pre class="error-block">${escapeHtml(message)}</pre>`;
 }
 
+/**
+ * Runs or submits the editor's code, and shows and files the answer.
+ *
+ * @param {'run' | 'submit'} endpoint - Which to do.
+ * @param {HTMLButtonElement} button - Run or Submit, disabled meanwhile.
+ * @returns {Promise<void>} Never rejects: failures are shown in the console.
+ */
 async function execute(endpoint, button) {
   // The language sent. The learner may switch languages while waiting for
   // the answer, so the answer is filed under this language, not whichever
   // is current when it arrives, and is only shown if it's still on screen.
-  const language = currentLanguage;
+  // Run and Submit are wired up only after the first language is shown
+  // (init), so there is one.
+  const language = /** @type {string} */ (currentLanguage);
   const stillShown = () => language === currentLanguage;
   const isSubmit = endpoint === 'submit';
   if (isSubmit) {
@@ -808,7 +1142,7 @@ async function execute(endpoint, button) {
     const res = await fetch(`/api/questions/${slug}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language: languageSelect.value, code: editor.getValue(), ...(isSubmit && { elapsedMs }) }),
+      body: JSON.stringify({ language: languageSelect.value, code: /** @type {CodeMirror.Editor} */ (editor).getValue(), ...(isSubmit && { elapsedMs }) }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -829,8 +1163,8 @@ async function execute(endpoint, button) {
       }
     }
   } catch (err) {
-    consoleStateByLanguage[language] = { kind: 'error', message: err.message };
-    if (stillShown()) renderClientError(err.message);
+    consoleStateByLanguage[language] = { kind: 'error', message: /** @type {Error} */ (err).message };
+    if (stillShown()) renderClientError(/** @type {Error} */ (err).message);
   } finally {
     // Submit stays grayed out after a saved Submit; a failed one (network
     // error, judge busy, not saved) can be tried again.
@@ -848,6 +1182,16 @@ async function execute(endpoint, button) {
 // newest first, and can load one's code back into the editor. Built with
 // createElement/textContent, so nothing from a record is treated as HTML.
 
+/**
+ * Makes an element, with text and a class if given.
+ *
+ * @template {keyof HTMLElementTagNameMap} K
+ * @param {K} tag - The tag name, e.g. "td". (A type parameter, K: the
+ *   result's type follows the tag, as with document.createElement.)
+ * @param {string} [text] - Its text, set as textContent, so never HTML.
+ * @param {string} [className] - Its class attribute.
+ * @returns {HTMLElementTagNameMap[K]} The element, not yet in the page.
+ */
 function makeEl(tag, text, className) {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -857,8 +1201,15 @@ function makeEl(tag, text, className) {
 
 // A message shown above the Submissions list, e.g. why the submission named
 // in the page address couldn't be opened. Null when there's nothing to say.
+/** @type {string | null} */
 let submissionsNotice = null;
 
+/**
+ * Replaces the Submissions tab's content, with the notice (if any) first.
+ *
+ * @param {...Node} nodes - What to show.
+ * @returns {void}
+ */
 function showInSubmissionsPanel(...nodes) {
   const notice = submissionsNotice ? [makeEl('p', submissionsNotice, 'status-fail')] : [];
   descriptionTabPanels.submissions.replaceChildren(...notice, ...nodes);
@@ -870,8 +1221,29 @@ function showInSubmissionsPanel(...nodes) {
 
 // This question's saved Submits for the signed-in user in one language,
 // newest first.
+/**
+ * One line of the Submissions tab, as GET /api/submissions sends it.
+ *
+ * @typedef {object} SubmissionSummary
+ * @property {string} id
+ * @property {string} submittedAt - UTC ISO 8601.
+ * @property {string} question
+ * @property {string} language
+ * @property {string} status
+ * @property {number} passed
+ * @property {number} total
+ * @property {number} runtimeMs
+ * @property {number | null} elapsedMs - null for submissions before the timer.
+ */
+
+/**
+ * @param {string} language - The language.
+ * @returns {Promise<SubmissionSummary[]>} Newest first.
+ * @throws {Error} If the request fails (rejects the promise).
+ */
 async function fetchSubmissionSummaries(language) {
-  const params = new URLSearchParams({ question: slug, language });
+  // init() stops before anything here runs when there's no slug.
+  const params = new URLSearchParams({ question: /** @type {string} */ (slug), language });
   const res = await fetch(`/api/submissions?${params}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -884,9 +1256,14 @@ async function fetchSubmissionSummaries(language) {
 // for that language shows Applying. If the Submits can't be loaded, treat it
 // as never submitted. Otherwise the user moves between tabs freely, and
 // submitting doesn't move them.
+/**
+ * @param {string} language - The language being shown.
+ * @param {Promise<SubmissionSummary[]>} summariesPromise - Its submissions.
+ * @returns {Promise<'learning' | 'applying'>} The tab to show.
+ */
 async function tabForLanguage(language, summariesPromise) {
   const submitted = await summariesPromise.then((summaries) => summaries.length > 0, () => false);
-  const hasLearning = Boolean(problem.learning && problem.learning[language]);
+  const hasLearning = Boolean(/** @type {PublicProblem} */ (problem).learning && /** @type {Record<string, string>} */ (/** @type {PublicProblem} */ (problem).learning)[language]); // learning checked first
   return !submitted && hasLearning ? 'learning' : 'applying';
 }
 
@@ -897,6 +1274,10 @@ async function tabForLanguage(language, summariesPromise) {
 // Returns false if a later call took over while this one was waiting (e.g.
 // two quick language changes), so the slower answer can't overwrite it.
 let latestShowLanguage = 0;
+/**
+ * @param {string} language - The language to show.
+ * @returns {Promise<boolean>} False if a later call took over meanwhile.
+ */
 async function showLanguage(language) {
   const call = ++latestShowLanguage;
   const summaries = fetchSubmissionSummaries(language);
@@ -912,15 +1293,24 @@ async function showLanguage(language) {
 
 // Fills the Submissions tab with one language's submissions. Pass a fetch
 // already in flight to reuse it; otherwise it fetches afresh for the
-// current language. Ignored if the language has changed meanwhile.
-async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(currentLanguage), language = currentLanguage) {
+// current language. Ignored if the language has changed meanwhile. Only
+// called once a language is shown, so the defaults' casts hold.
+/**
+ * @param {Promise<SubmissionSummary[]>} [summariesPromise] - A fetch already
+ *   in flight; by default, a new one for the current language.
+ * @param {string} [language] - The language they're for; by default, the
+ *   current one.
+ * @returns {Promise<void>} Never rejects: failures are shown in the tab.
+ */
+async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(/** @type {string} */ (currentLanguage)), language = /** @type {string} */ (currentLanguage)) {
+  /** @type {SubmissionSummary[]} */
   let summaries;
   try {
     summaries = await summariesPromise;
     if (language !== currentLanguage) return;
   } catch (err) {
     if (language !== currentLanguage) return;
-    showInSubmissionsPanel(makeEl('p', `Couldn't load submissions: ${err.message}`, 'status-fail'));
+    showInSubmissionsPanel(makeEl('p', `Couldn't load submissions: ${/** @type {Error} */ (err).message}`, 'status-fail'));
     return;
   }
   const label = LANGUAGE_LABELS[language] || language;
@@ -963,6 +1353,11 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(cu
 // The page address records which submission is loaded
 // (problem.html?slug=…&submission=<id>), so a reload reopens it.
 // replaceState changes the address without reloading or adding history.
+/**
+ * @param {string | null} id - The submission to name in the address, or
+ *   null to take it out.
+ * @returns {void}
+ */
 function setSubmissionInAddress(id) {
   const url = new URL(window.location.href);
   if (id) url.searchParams.set('submission', id);
@@ -970,6 +1365,22 @@ function setSubmissionInAddress(id) {
   history.replaceState(null, '', url);
 }
 
+/**
+ * One saved Submit in full, as GET /api/submissions/:id sends it. Only the
+ * fields this page uses are listed.
+ *
+ * @typedef {object} SubmissionRecord
+ * @property {string} id
+ * @property {string} question
+ * @property {string} language
+ * @property {string} code
+ */
+
+/**
+ * @param {string} id - The submission's id.
+ * @returns {Promise<SubmissionRecord>} The record.
+ * @throws {Error} If the request fails (rejects the promise).
+ */
 async function fetchSubmission(id) {
   const res = await fetch(`/api/submissions/${encodeURIComponent(id)}`);
   const record = await res.json();
@@ -977,7 +1388,12 @@ async function fetchSubmission(id) {
   return record;
 }
 
-// Why a submission can't be loaded on this page, or null if it can.
+/**
+ * Why a submission can't be loaded on this page, or null if it can.
+ *
+ * @param {SubmissionRecord} record - The submission.
+ * @returns {string | null} The reason, or null.
+ */
 function whyNotLoadable(record) {
   if (record.question !== slug) return `That submission is for a different question (${record.question}).`;
   if (![...languageSelect.options].some((o) => o.value === record.language)) {
@@ -989,9 +1405,14 @@ function whyNotLoadable(record) {
 
 // Switches to the submission's language (without making it the default),
 // puts its code in the editor, and records it in the page address.
+/**
+ * @param {SubmissionRecord} record - The submission.
+ * @returns {Promise<void>}
+ */
 async function applySubmission(record) {
   await switchLanguage(record.language, { chosenByUser: false });
-  editor.setValue(normalizeIndentation(record.code));
+  // The editor exists once a language has been shown, which switchLanguage just did.
+  /** @type {CodeMirror.Editor} */ (editor).setValue(normalizeIndentation(record.code));
   setSubmissionInAddress(record.id);
   if (submissionsNotice) {
     submissionsNotice = null;
@@ -1002,12 +1423,16 @@ async function applySubmission(record) {
 // The Submissions tab's Load button. Asks first only if that language's
 // current code has been edited (it's neither the starter code nor already
 // this submission's code).
+/**
+ * @param {string} id - The submission's id.
+ * @returns {Promise<void>} Never rejects: failures are shown in an alert.
+ */
 async function loadSubmissionIntoEditor(id) {
   let record;
   try {
     record = await fetchSubmission(id);
   } catch (err) {
-    alert(`Couldn't load that submission: ${err.message}`);
+    alert(`Couldn't load that submission: ${/** @type {Error} */ (err).message}`);
     return;
   }
   const problemWithIt = whyNotLoadable(record);
@@ -1016,8 +1441,9 @@ async function loadSubmissionIntoEditor(id) {
     return;
   }
   const label = LANGUAGE_LABELS[record.language] || record.language;
-  const starter = problem.starterCode[record.language] ?? '';
-  const current = record.language === currentLanguage ? editor.getValue() : codeByLanguage[record.language] ?? starter;
+  // The Submissions tab only exists once the question and a language are shown.
+  const starter = /** @type {PublicProblem} */ (problem).starterCode[record.language] ?? '';
+  const current = record.language === currentLanguage ? /** @type {CodeMirror.Editor} */ (editor).getValue() : codeByLanguage[record.language] ?? starter;
   if (current !== starter && current !== record.code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
     return;
   }
@@ -1028,6 +1454,7 @@ async function loadSubmissionIntoEditor(id) {
 // been edited yet, so there's nothing to confirm. If it can't be opened,
 // the page stays as it opened, the address is cleaned up, and the
 // Submissions tab says why.
+/** @returns {Promise<void>} Never rejects. */
 async function openSubmissionFromAddress() {
   const id = new URLSearchParams(window.location.search).get('submission');
   if (!id) return;
@@ -1043,7 +1470,7 @@ async function openSubmissionFromAddress() {
       return;
     }
   } catch (err) {
-    reason = `Couldn't open submission ${id} from the page address: ${err.message}.`;
+    reason = `Couldn't open submission ${id} from the page address: ${/** @type {Error} */ (err).message}.`;
   }
   submissionsNotice = reason;
   setSubmissionInAddress(null);
@@ -1051,6 +1478,12 @@ async function openSubmissionFromAddress() {
   refreshSubmissions();
 }
 
+/**
+ * Loads the question named by ?slug= and opens it, then wires up Run,
+ * Submit, Skip and language-select. Runs once, as the page loads.
+ *
+ * @returns {Promise<void>} Never rejects: failures are shown in the title.
+ */
 async function init() {
   if (!slug) {
     titleEl.textContent = 'No problem specified';
@@ -1065,14 +1498,14 @@ async function init() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     problem = await res.json();
   } catch (err) {
-    titleEl.textContent = `Failed to load problem: ${err.message}`;
+    titleEl.textContent = `Failed to load problem: ${/** @type {Error} */ (err).message}`;
     return;
   }
 
   renderHeader(await labelsPromise);
   // Opening the question in its initial language applies the same
   // per-language rules as switching to one (showLanguage).
-  await showLanguage(pickInitialLanguage(problem));
+  await showLanguage(pickInitialLanguage(/** @type {PublicProblem} */ (problem)));
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));

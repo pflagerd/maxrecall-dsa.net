@@ -1,0 +1,13 @@
+{
+  "//": "make typecheck, for the files that run in the browser: the DOM's types instead of Node's, and CodeMirror's. A file is listed once its functions are documented; see readme.html.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": ["codemirror"]
+  },
+  "files": ["browser-globals.d.ts", "account.js", "bubbles.js", "timer.js", "problems-list.js", "problem-page.js", "login-page.js"]
+}
