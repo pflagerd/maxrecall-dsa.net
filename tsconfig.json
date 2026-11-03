@@ -14,6 +14,8 @@
   "files": [
     "advance.js",
     "advance.test.js",
+    "introduce.js",
+    "introduce.test.js",
     "paths.js",
     "users.js",
     "auth.js",
