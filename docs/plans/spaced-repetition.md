@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **planned, 2026-11-03.** Nothing is built yet. All eight
+Status: **being built.** Step 1 (`advance.js`) is done; nothing uses it yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -467,7 +467,7 @@ own, and merged before the next starts. Tests use Node's built-in test
 runner ([`node:test`](https://nodejs.org/docs/latest-v22.x/api/test.html)),
 each checked to fail against a deliberately wrong version first.
 
-1. **`advance.js`**: `advance(k, random = Math.random)` returns how many
+1. **Done 2026-11-03.** **`advance.js`**: `advance(k, random = Math.random)` returns how many
    places, 1.3^k ± 10%, stochastically rounded, at least 1. Nothing uses
    it yet. Tested by `advance.test.js` beside it, run by a new
    `make test` (`node --test`): fixed "random" numbers, and a statistical
