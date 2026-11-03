@@ -1,5 +1,3 @@
-// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
-// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -7,6 +5,76 @@ const path = require('path');
 const cgroups = require('./cgroups');
 const { withJudgeSlot } = require('./queue');
 const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, spawnSandboxed, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
+
+/** @typedef {import('./cgroups').SubmissionCgroup} SubmissionCgroup */
+
+/**
+ * One test case, from the question file. Function judging uses args,
+ * program judging input.
+ *
+ * @typedef {object} TestCase
+ * @property {unknown[]} [args] - Function judging: the arguments to call with.
+ * @property {string} [input] - Program judging: the program's standard input.
+ * @property {unknown} expected - The expected return value (any JSON value),
+ *   or the expected standard output.
+ * @property {boolean} [hidden] - Only used by Submit; its details aren't
+ *   sent back.
+ */
+
+/**
+ * A question's "signature" field for one language: the declared types of
+ * the function's parameters and return value, which the compiled
+ * languages' harnesses need (e.g. { params: ["vector<int>", "int"],
+ * returns: "vector<int>" } for C++).
+ *
+ * @typedef {object} FunctionSignature
+ * @property {string[]} [params] - Each parameter's type, as the language writes it.
+ * @property {string} [returns] - The return type.
+ * @property {string} [customSerializer] - Code in that language spliced into
+ *   the harness, to turn a type of the question's own into JSON: e.g. a
+ *   buildJson() overload for C++ (singly-linked-list-hello-world.json).
+ */
+
+/**
+ * What to judge: runSubmission()'s argument.
+ *
+ * @typedef {object} Submission
+ * @property {string} language - javascript, python, cpp, java or d.
+ * @property {string} code - The learner's code.
+ * @property {string} [functionName] - Function judging: the function to call.
+ * @property {TestCase[]} testCases - The cases to judge against.
+ * @property {FunctionSignature} [signature] - Function judging, cpp/java/d.
+ * @property {string} [judgeMode] - "function" (the default) or "program".
+ */
+
+/**
+ * One test case's result. Hidden cases carry no input, expected or actual.
+ *
+ * @typedef {object} TestResult
+ * @property {number} index - Its position in testCases, from 0.
+ * @property {boolean | undefined} hidden
+ * @property {boolean} passed
+ * @property {unknown} [input]
+ * @property {unknown} [expected]
+ * @property {unknown} [actual]
+ * @property {string} [error] - The submission's own error text, for this case.
+ */
+
+/**
+ * The judge's verdict on a submission.
+ *
+ * @typedef {object} JudgeResult
+ * @property {string} status - "Accepted", "Wrong Answer", "Runtime Error",
+ *   "Time Limit Exceeded" or "Compile Error".
+ * @property {number} passed - Test cases passed.
+ * @property {number} total - Test cases.
+ * @property {number} runtimeMs - From the start of judging (compiling
+ *   included) to the verdict.
+ * @property {string} [error] - When judging failed as a whole: why.
+ * @property {string} stdout - The submission's own standard output.
+ * @property {string} stderr - Its standard error.
+ * @property {TestResult[]} results - One per test case, in order.
+ */
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
 const CPU_LIMIT_MESSAGE = `CPU time limit exceeded (${RUN_LIMITS.cpuSoftSeconds} s of CPU time in one process, all its threads together).`;
@@ -59,6 +127,10 @@ const CPP_JSON_OBJECT = path.join(CPP_DIR, 'judge_json.o');
 // ~250 lines of JSON parser/serializer). Rebuilt automatically whenever the
 // source is newer than the cached object file, so there's no separate
 // build step to remember after an edit to judge_json.cpp.
+/**
+ * @returns {void}
+ * @throws {Error} If g++ fails.
+ */
 function ensureCppJsonObjectBuilt() {
   const sourceFile = path.join(CPP_DIR, 'judge_json.cpp');
   const sourceMtime = fs.statSync(sourceFile).mtimeMs;
@@ -74,6 +146,10 @@ const JAVA_DIR = path.join(__dirname, 'java');
 // load) into JudgeJson.class and put on both javac's and java's classpath
 // for every submission, rather than recompiled from source on every single
 // Run/Submit — the same role ensureCppJsonObjectBuilt() plays for C++.
+/**
+ * @returns {void}
+ * @throws {Error} If javac fails.
+ */
 function ensureJudgeJsonClassBuilt() {
   const sourceFile = path.join(JAVA_DIR, 'JudgeJson.java');
   const classFile = path.join(JAVA_DIR, 'JudgeJson.class');
@@ -89,6 +165,10 @@ ensureJudgeJsonClassBuilt();
 // Not bound from the checkout, which the sandbox's user may not be able to
 // enter (/root on the VPS). Permissions are set explicitly, because a copy
 // can keep a strict mode from the checkout.
+/**
+ * @returns {void}
+ * @throws {Error} If a folder can't be made or a file copied.
+ */
 function stageHelpers() {
   const cppDir = path.join(HELPER_DIR, 'cpp');
   const javaDir = path.join(HELPER_DIR, 'java');
@@ -96,7 +176,7 @@ function stageHelpers() {
     fs.mkdirSync(dir, { recursive: true });
     fs.chmodSync(dir, 0o755);
   }
-  const copy = (from, to) => {
+  const copy = (/** @type {string} */ from, /** @type {string} */ to) => {
     fs.copyFileSync(from, to);
     fs.chmodSync(to, 0o644);
   };
@@ -109,6 +189,7 @@ stageHelpers();
 
 // Maps a C++ parameter type (as written in a problem's signature.cpp.params)
 // to the judge_json.hpp helper that extracts it from a JsonValue.
+/** @type {Record<string, string>} */
 const CPP_PARAM_EXTRACTORS = {
   int: 'extractInt',
   bool: 'extractBool',
@@ -118,6 +199,7 @@ const CPP_PARAM_EXTRACTORS = {
 
 // Maps a Java parameter type (as written in a problem's signature.java.params)
 // to the JudgeJson.Value instance method that extracts it.
+/** @type {Record<string, string>} */
 const JAVA_PARAM_EXTRACTORS = {
   int: 'asInt',
   boolean: 'asBoolean',
@@ -129,6 +211,7 @@ const JAVA_PARAM_EXTRACTORS = {
 // the harness's own __judge_extract* helper (defined inline in
 // buildDSource — D's std.json is part of Phobos, so there's no need for a
 // precompiled JSON helper like judge_json.cpp/JudgeJson.java).
+/** @type {Record<string, string>} */
 const D_PARAM_EXTRACTORS = {
   int: '__judge_extractInt',
   bool: '__judge_extractBool',
@@ -150,6 +233,11 @@ const D_PARAM_EXTRACTORS = {
 // stack that's in the learner's code, which is lines 1 to
 // __judge_userLines of main.js (the harness follows). Only the "at ..."
 // lines are searched, not the message, which the code controls.
+/**
+ * @param {string} userCode - The learner's code, which comes first in main.js.
+ * @param {string} functionName - The function the harness calls.
+ * @returns {string} main.js: the learner's code, then the harness.
+ */
 function buildJavascriptSource(userCode, functionName) {
   return `${userCode}
 const __judge_userLines = ${userCode.split('\n').length};
@@ -184,6 +272,10 @@ process.stdin.on('end', () => {
 // which it could use without importing when it was pasted into this file,
 // and runs as __main__, as it did then. run_path returns its globals, which
 // the functions defined there keep using.
+/**
+ * @param {string} functionName - The function the harness calls.
+ * @returns {string} main.py, the harness; the learner's code is solution.py.
+ */
 function buildPythonSource(functionName) {
   return `import sys, json, os, runpy, traceback
 try:
@@ -235,6 +327,11 @@ sys.stdout.write('\\n${RESULT_MARKER}\\n' + json.dumps(__judge_results, default=
 // includes, so it still sees them and `using namespace std;`, and g++
 // reports its lines as solution.cpp:N, with the source excerpt (g++ reads
 // excerpts from the named file, so it must exist).
+/**
+ * @param {string} functionName - The function the harness calls.
+ * @param {FunctionSignature} signature - Its parameter types.
+ * @returns {string} main.cpp, the harness; the learner's code is solution.cpp.
+ */
 function buildCppSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
@@ -298,6 +395,11 @@ int main() {
 // return type.
 // The learner's code is Solution.java, compiled together with this Main.java
 // (compileCommand), so javac and stack traces report Solution.java:N.
+/**
+ * @param {string} functionName - The method the harness calls.
+ * @param {FunctionSignature} signature - Its parameter types.
+ * @returns {string} Main.java, the harness; the learner's code is Solution.java.
+ */
 function buildJavaSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
@@ -373,6 +475,11 @@ ${signature.customSerializer || ''}
 // The function is called as solution.<name>: it's in another module than
 // std.algorithm and the rest, so a name they also have (reverse, find, ...)
 // would otherwise be ambiguous.
+/**
+ * @param {string} functionName - The function the harness calls.
+ * @param {FunctionSignature} signature - Its parameter types.
+ * @returns {string} main.d, the harness; the learner's code is solution.d.
+ */
 function buildDSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
@@ -453,6 +560,13 @@ void main() {
 // depend on which input was used), so it's attached even if the first case
 // happens to be hidden; input itself still follows the usual hidden-case
 // privacy rule.
+/**
+ * @param {TestCase[]} testCases - The cases being judged.
+ * @param {string} errorText - What went wrong, for the first case.
+ * @param {(tc: TestCase) => unknown} [getInput] - The input to show for the
+ *   first case: its args by default; program judging passes its input.
+ * @returns {TestResult[]} Every case failed, the first with the error.
+ */
 function buildFailureResults(testCases, errorText, getInput = (tc) => tc.args) {
   return testCases.map((tc, index) => {
     if (index !== 0) return { index, hidden: tc.hidden, passed: false };
@@ -462,6 +576,14 @@ function buildFailureResults(testCases, errorText, getInput = (tc) => tc.args) {
   });
 }
 
+/**
+ * Whether two JSON values are equal: the same primitive, or arrays or
+ * objects with equal members.
+ *
+ * @param {unknown} a - Any JSON value (an expected answer, say).
+ * @param {unknown} b - Another (what the submission returned).
+ * @returns {boolean} Whether they're equal.
+ */
 function deepEqual(a, b) {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
@@ -473,7 +595,8 @@ function deepEqual(a, b) {
     const aKeys = Object.keys(a);
     const bKeys = Object.keys(b);
     if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every((k) => deepEqual(a[k], b[k]));
+    // Both are objects here (checked just above), so they can be read by key.
+    return aKeys.every((k) => deepEqual(/** @type {Record<string, unknown>} */ (a)[k], /** @type {Record<string, unknown>} */ (b)[k]));
   }
   return false;
 }
@@ -481,16 +604,25 @@ function deepEqual(a, b) {
 // Each submission gets its own folder (fs.mkdtempSync, owner-only), with
 // fixed file names inside. javac needs the public class's file to be named
 // after it (Main.java); the rest just keep the same shape.
+/** @type {Record<string, string>} */
 const SOURCE_FILE_NAMES = { javascript: 'main.js', python: 'main.py', cpp: 'main.cpp', java: 'Main.java', d: 'main.d' };
 // Function judging: the learner's code, in a file of its own next to the
 // harness (see the build*Source functions). JavaScript has none: its
 // harness follows the learner's code in main.js.
+/** @type {Record<string, string>} */
 const SOLUTION_FILE_NAMES = { python: 'solution.py', cpp: 'solution.cpp', java: 'Solution.java', d: 'solution.d' };
 // What D's harness imports, and judge_prelude.d passes on to solution.d.
 const D_STANDARD_IMPORTS = ['std.json', 'std.stdio', 'std.algorithm', 'std.array', 'std.container', 'std.conv', 'std.math', 'std.range', 'std.string', 'std.typecons'];
 const D_PRELUDE_FILE_NAME = 'judge_prelude.d';
 
-// The files function judging writes for the learner's code: { name: text }.
+/**
+ * The files function judging writes for the learner's code.
+ *
+ * @param {string} language - The language.
+ * @param {string} code - The learner's code.
+ * @returns {Record<string, string>} Each file's text, by name; none for
+ *   JavaScript, whose harness and code share main.js.
+ */
 function solutionFiles(language, code) {
   if (language === 'd') {
     return {
@@ -502,6 +634,10 @@ function solutionFiles(language, code) {
 }
 const BINARY_FILE_NAME = 'main';
 
+/**
+ * @returns {string} A new, empty work folder for one submission, usable by
+ *   the sandbox's user.
+ */
 function makeWorkDir() {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'judge-'));
   prepareWorkDir(workDir);
@@ -518,6 +654,17 @@ const SANDBOX_PATHS = Object.freeze({
   javaHelpers: path.posix.join(HELPER_SANDBOX_PATH, 'java'),
   cppHelperObject: path.posix.join(HELPER_SANDBOX_PATH, 'cpp', 'judge_json.o'),
 });
+/**
+ * Where things are, as the compiler and the submission see them.
+ *
+ * @typedef {{ work: string, javaHelpers: string, cppHelperObject: string }} JudgePaths
+ */
+
+/**
+ * @param {string} workDir - The submission's work folder, on the host.
+ * @returns {JudgePaths} The paths inside the sandbox, or the real ones
+ *   when judging without it.
+ */
 function judgePaths(workDir) {
   return sandboxStatus.ok
     ? SANDBOX_PATHS
@@ -538,8 +685,19 @@ const JAVAC_HEAP_MB = 256;
 // the paths the compiler sees, or null for interpreted languages. Function
 // judging also compiles the learner's own files (Java, D); program judging
 // has just the one file.
+/**
+ * @typedef {{ argv: string[], timeoutMs: number, addressSpaceBytes?: number }} CompileCommand
+ */
+
+/**
+ * @param {string} language - The language.
+ * @param {JudgePaths} paths - From judgePaths().
+ * @param {string} [judgeMode='function'] - "function" or "program".
+ * @returns {CompileCommand | null} The compiler command line, its timeout
+ *   and its memory cap, or null for interpreted languages.
+ */
 function compileCommand(language, paths, judgeMode = 'function') {
-  const file = (name) => path.posix.join(paths.work, name);
+  const file = (/** @type {string} */ name) => path.posix.join(paths.work, name);
   const functionJudging = judgeMode === 'function';
   switch (language) {
     case 'cpp':
@@ -579,6 +737,24 @@ function compileCommand(language, paths, judgeMode = 'function') {
 // workDir. Killing the result kills bwrap, and with it everything inside.
 // With a submission cgroup (cg, judge/cgroups.js), the command starts inside
 // it, so its limits cover everything the sandbox runs.
+/**
+ * What to start, and how.
+ *
+ * @typedef {object} ProcessSpec
+ * @property {string} command
+ * @property {string[]} args
+ * @property {string} [cwd] - Without the sandbox: the work folder.
+ * @property {boolean} sandboxed - Whether it's inside the sandbox.
+ */
+
+/**
+ * @param {string[]} argv - The command line, as [command, ...args].
+ * @param {string} workDir - The submission's work folder, on the host.
+ * @param {{ writableWork?: boolean, addressSpaceBytes?: number, cg?: SubmissionCgroup | null }} [options] -
+ *   writableWork: /work writable (compiling only; default false);
+ *   addressSpaceBytes: an RLIMIT_AS cap; cg: the submission's cgroup.
+ * @returns {ProcessSpec} What to pass to startProcess().
+ */
 function sandboxedArgs([command, ...args], workDir, { writableWork = false, addressSpaceBytes, cg = null } = {}) {
   if (!sandboxStatus.ok) return { command, args, cwd: workDir, sandboxed: false };
   const proc = sandboxedRun(command, args, {
@@ -594,8 +770,15 @@ function sandboxedArgs([command, ...args], workDir, { writableWork = false, addr
 
 // The command line ([command, ...args]) that runs a submission, in the
 // paths it sees (judgePaths).
+/**
+ * @param {string} language - The language.
+ * @param {string} judgeMode - "function" or "program".
+ * @param {JudgePaths} paths - From judgePaths().
+ * @returns {string[]} The command line.
+ * @throws {Error} For an unknown language.
+ */
 function runCommand(language, judgeMode, paths) {
-  const file = (name) => path.posix.join(paths.work, name);
+  const file = (/** @type {string} */ name) => path.posix.join(paths.work, name);
   switch (language) {
     case 'javascript':
       return ['node', `--max-old-space-size=${NODE_MEMORY_MB}`, file(SOURCE_FILE_NAMES.javascript)];
@@ -624,6 +807,12 @@ function runCommand(language, judgeMode, paths) {
 
 // Starts what sandboxedArgs returned: through spawnSandboxed (which hands
 // bwrap the seccomp filter) when it's sandboxed, else a plain spawn.
+/**
+ * @param {ProcessSpec} proc - From sandboxedArgs().
+ * @param {import('child_process').SpawnOptions} options - As spawn() takes them.
+ * @returns {import('child_process').ChildProcess} The running process, with
+ *   its standard streams piped (the default).
+ */
 function startProcess(proc, options) {
   return proc.sandboxed
     ? spawnSandboxed(spawn, proc.command, proc.args, options)
@@ -637,6 +826,23 @@ function startProcess(proc, options) {
 // compiler runs inside the sandbox, killing it on timeout kills all of it:
 // g++'s child cc1plus used to survive and hold the judge's pipe open.
 // memoryExceeded: the cgroup's OOM killer ended a process meanwhile.
+/**
+ * @typedef {object} CompileOutcome
+ * @property {boolean} success - Compiled, in time, within its memory.
+ * @property {string} stderr - The compiler's messages (or why it couldn't start).
+ * @property {boolean} timedOut - Killed by its timeout or the CPU limit.
+ * @property {boolean} memoryExceeded - The cgroup's OOM killer ended a process.
+ * @property {boolean} memoryLimitHit - The cgroup's memory limit was reached.
+ */
+
+/**
+ * @param {string} language - The language.
+ * @param {string} workDir - The submission's work folder, with its sources.
+ * @param {SubmissionCgroup | null} [cg=null] - The submission's cgroup, if any.
+ * @param {string} [judgeMode='function'] - "function" or "program".
+ * @returns {Promise<CompileOutcome | null>} How compiling went, or null for
+ *   interpreted languages. Never rejects.
+ */
 function compileSubmission(language, workDir, cg = null, judgeMode = 'function') {
   const compile = compileCommand(language, judgePaths(workDir), judgeMode);
   if (!compile) return Promise.resolve(null);
@@ -653,7 +859,8 @@ function compileSubmission(language, workDir, cg = null, judgeMode = 'function')
     let stderr = '';
     let timedOut = false;
 
-    child.stderr.on('data', (chunk) => {
+    // The streams are pipes (startProcess's default), so they exist.
+    /** @type {import('stream').Readable} */ (child.stderr).on('data', (chunk) => {
       if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
     });
     child.on('error', (err) => {
@@ -661,8 +868,9 @@ function compileSubmission(language, workDir, cg = null, judgeMode = 'function')
     });
     child.on('close', (code, signal) => {
       const after = cg ? cg.memory() : null;
-      const memoryExceeded = Boolean(cg) && after.oomKills > before.oomKills;
-      const memoryLimitHit = Boolean(cg) && after.limitHits > before.limitHits;
+      // With a cgroup (the Boolean(cg) first), before and after were both read.
+      const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
+      const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
       if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE)) timedOut = true;
       resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded, memoryLimitHit });
     });
@@ -672,6 +880,26 @@ function compileSubmission(language, workDir, cg = null, judgeMode = 'function')
 // Runs one submission process: inside the sandbox when it works, with its
 // folder read-only at /work (sandboxedArgs), and inside the submission's
 // cgroup when there is one. memoryExceeded: its OOM killer ended a process.
+/** @typedef {ReturnType<SubmissionCgroup['memory']>} MemoryCounters */
+
+/**
+ * @typedef {object} RunOutcome
+ * @property {string} stdout - Up to MAX_CAPTURED_OUTPUT characters.
+ * @property {string} stderr - Likewise (or why it couldn't start).
+ * @property {boolean} timedOut - Killed by its timeout.
+ * @property {number | null} exitCode - null if killed by a signal or not started.
+ * @property {boolean} memoryExceeded - The cgroup's OOM killer ended a process.
+ * @property {boolean} memoryLimitHit - The cgroup's memory limit was reached.
+ */
+
+/**
+ * @param {string[]} argv - The command line, from runCommand().
+ * @param {string} stdinPayload - Written to its standard input, which is then closed.
+ * @param {string} workDir - The submission's work folder, on the host.
+ * @param {number} [timeoutMs=TIMEOUT_MS] - Its wall-clock limit.
+ * @param {SubmissionCgroup | null} [cg=null] - The submission's cgroup, if any.
+ * @returns {Promise<RunOutcome>} How it ended, and its output. Never rejects.
+ */
 function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = null) {
   const proc = sandboxedArgs(argv, workDir, { cg });
   const before = cg ? cg.memory() : null;
@@ -687,10 +915,11 @@ function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = n
     let stderr = '';
     let timedOut = false;
 
-    child.stdout.on('data', (chunk) => {
+    // The streams are pipes (startProcess's default), so they exist.
+    /** @type {import('stream').Readable} */ (child.stdout).on('data', (chunk) => {
       if (stdout.length < MAX_CAPTURED_OUTPUT) stdout += chunk;
     });
-    child.stderr.on('data', (chunk) => {
+    /** @type {import('stream').Readable} */ (child.stderr).on('data', (chunk) => {
       if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
     });
 
@@ -700,14 +929,15 @@ function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = n
 
     child.on('close', (code, signal) => {
       const after = cg ? cg.memory() : null;
-      const memoryExceeded = Boolean(cg) && after.oomKills > before.oomKills;
-      const memoryLimitHit = Boolean(cg) && after.limitHits > before.limitHits;
+      // With a cgroup (the Boolean(cg) first), before and after were both read.
+      const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
+      const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
       if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM')) timedOut = true;
       resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded, memoryLimitHit });
     });
 
-    child.stdin.write(stdinPayload);
-    child.stdin.end();
+    /** @type {import('stream').Writable} */ (child.stdin).write(stdinPayload);
+    /** @type {import('stream').Writable} */ (child.stdin).end();
   });
 }
 
@@ -718,15 +948,23 @@ function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = n
 // outside the sandboxed process. `signature` is only used by
 // compiled/statically-typed languages (cpp, java, d) that need to know
 // argument/return types to generate a harness that compiles.
+/**
+ * @param {Submission} submission - What to judge (judgeMode "function").
+ * @returns {Promise<JudgeResult>} The verdict.
+ * @throws {Error} For an unknown language (rejects the promise).
+ */
 async function runFunctionSubmission({ language, code, functionName, testCases, signature }) {
   const started = Date.now();
 
+  // Function judging always has a functionName (server.js takes it from the
+  // question file), hence the casts.
+  /** @type {Record<string, () => string>} */
   const SOURCE_BUILDERS = {
-    javascript: () => buildJavascriptSource(code, functionName),
-    python: () => buildPythonSource(functionName),
-    cpp: () => buildCppSource(functionName, signature || {}),
-    java: () => buildJavaSource(functionName, signature || {}),
-    d: () => buildDSource(functionName, signature || {}),
+    javascript: () => buildJavascriptSource(code, /** @type {string} */ (functionName)),
+    python: () => buildPythonSource(/** @type {string} */ (functionName)),
+    cpp: () => buildCppSource(/** @type {string} */ (functionName), signature || {}),
+    java: () => buildJavaSource(/** @type {string} */ (functionName), signature || {}),
+    d: () => buildDSource(/** @type {string} */ (functionName), signature || {}),
   };
   if (!SOURCE_BUILDERS[language]) throw new Error(`Unsupported language: ${language}`);
   const source = SOURCE_BUILDERS[language]();
@@ -863,6 +1101,12 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 // the same tolerance most line-based full-program judges use, so a
 // trailing newline from println/cout/writeln doesn't cause a false Wrong
 // Answer.
+/**
+ * @param {Submission} submission - What to judge (judgeMode "program"):
+ *   language, code and testCases.
+ * @returns {Promise<JudgeResult>} The verdict.
+ * @throws {Error} For an unknown language (rejects the promise).
+ */
 async function runProgramSubmission({ language, code, testCases }) {
   const started = Date.now();
   if (!SOURCE_FILE_NAMES[language]) throw new Error(`Unsupported language: ${language}`);
@@ -900,6 +1144,7 @@ async function runProgramSubmission({ language, code, testCases }) {
     let passedCount = 0;
     let anyTimedOut = false;
     let anyCrashed = false;
+    /** @type {TestResult[]} */
     const results = [];
 
     const runsStarted = Date.now();
@@ -985,6 +1230,13 @@ async function runProgramSubmission({ language, code, testCases }) {
 // Then it waits for a slot in the judge's queue (judge/queue.js), and
 // rejects with JudgeBusyError (err.code 'JUDGE_BUSY') if the queue is full.
 // The judging's own clock starts once it has a slot.
+/**
+ * @param {Submission} submission - What to judge.
+ * @returns {Promise<JudgeResult>} The verdict.
+ * @throws {Error} SandboxUnavailableError, straight away; and, by rejecting
+ *   the promise, JudgeBusyError when the queue is full, or an Error for an
+ *   unknown language.
+ */
 function runSubmission({ language, code, functionName, testCases, signature, judgeMode }) {
   assertJudgingAllowed();
   return withJudgeSlot(() => (judgeMode === 'program'

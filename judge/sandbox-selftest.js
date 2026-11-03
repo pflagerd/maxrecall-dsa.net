@@ -36,6 +36,8 @@ const { cgroupStatus, MEMORY_LIMIT_MB } = cgroupsModule;
 // For G12's report: the last submission cgroup's memory figures (peak,
 // times the limit was reached, OOM kills), read just before the runner
 // removes it. Only this test wraps forSubmission; the server doesn't.
+/** @typedef {ReturnType<import('./cgroups').SubmissionCgroup['memory']>} MemoryCounters */
+/** @type {MemoryCounters | null} */
 let lastCgroupMemory = null;
 const originalForSubmission = cgroupsModule.forSubmission;
 cgroupsModule.forSubmission = () => {
@@ -75,9 +77,43 @@ const PYTHON_CASE = [{ args: [], expected: 'unused', hidden: false }];
 
 // Python string literals for paths and tokens: JSON string syntax is a
 // subset of Python's for these ASCII values.
+/**
+ * @param {string | number} value - A path, token or number.
+ * @returns {string} It as a Python literal.
+ */
 const py = (value) => JSON.stringify(value);
 
+/**
+ * One function-mode Python probe.
+ *
+ * @typedef {object} Probe
+ * @property {string} id - e.g. "G1", as in docs/plans/sandboxing.md section 1.
+ * @property {string} what - What it tries, for the report.
+ * @property {string} code - The Python source, defining probe().
+ * @property {string} [preamble] - Source put before code.
+ * @property {'after-return' | 'after-timeout'} [checkOrphan] - Whether the
+ *   verdict comes from outside, by looking for a leftover process after the
+ *   probe returned or after it timed out.
+ */
+
+/**
+ * The outcome of one probe.
+ *
+ * @typedef {object} ProbeOutcome
+ * @property {string} verdict - "contained", "ESCAPED", "skipped" or "inconclusive".
+ * @property {string} detail - What was seen.
+ * @property {number} runtimeMs - How long the judge took.
+ */
+
+/**
+ * @param {{ canaryDir: string, secretFile: string, listenerPort: number }} canaries -
+ *   The private folder and file, and the port of the listener on 127.0.0.1.
+ * @returns {Probe[]} The probes that try to reach them, and the rest of the
+ *   Python probes.
+ */
 function pythonProbes({ canaryDir, secretFile, listenerPort }) {
+  // ENV_CANARY is set by now: without it, this script restarted itself
+  // with it (at the top), which the checker can't see from in here.
   return [
     {
       id: 'G1',
@@ -85,14 +121,14 @@ function pythonProbes({ canaryDir, secretFile, listenerPort }) {
       code: `
 import os
 def probe():
-    if os.environ.get(${py(ENV_CANARY_NAME)}) == ${py(ENV_CANARY)}:
+    if os.environ.get(${py(ENV_CANARY_NAME)}) == ${py(/** @type {string} */ (ENV_CANARY))}:
         return 'ESCAPED: canary is in os.environ (%d variables in all)' % len(os.environ)
     for pid in os.listdir('/proc'):
         if not pid.isdigit():
             continue
         try:
             with open('/proc/%s/environ' % pid, 'rb') as f:
-                if ${py(ENV_CANARY)}.encode() in f.read():
+                if ${py(/** @type {string} */ (ENV_CANARY))}.encode() in f.read():
                     return 'ESCAPED: own env is clean (%s), but the canary is readable in /proc/%s/environ' % (sorted(os.environ), pid)
         except OSError:
             pass
@@ -303,6 +339,12 @@ def probe():
 // or loops until the judge's timeout kills it. The grandchild runs a shell
 // whose command line carries TOKEN, so this script can look for it in /proc
 // from outside afterwards.
+/**
+ * @param {string} label - Added to TOKEN on the grandchild's command line.
+ * @param {boolean} loopForever - Whether probe() loops until killed instead
+ *   of returning.
+ * @returns {string} The probe's Python source.
+ */
 function orphanProbe(label, loopForever) {
   return `
 import os
@@ -320,7 +362,12 @@ def probe():
 // Command lines of every process on the machine that carry `marker`. The
 // sandbox's PID namespace hides the host from a submission, not the other
 // way round, so this sees sandboxed processes too.
+/**
+ * @param {string} marker - Text to look for in each command line.
+ * @returns {number[]} The PIDs of those processes, other than this one.
+ */
 function findProcesses(marker) {
+  /** @type {number[]} */
   const pids = [];
   for (const entry of fs.readdirSync('/proc')) {
     if (!/^\d+$/.test(entry) || Number(entry) === process.pid) continue;
@@ -334,6 +381,12 @@ function findProcesses(marker) {
   return pids;
 }
 
+/**
+ * Sends SIGKILL to each process, ignoring ones already gone.
+ *
+ * @param {number[]} pids - The processes.
+ * @returns {void}
+ */
 function killAll(pids) {
   for (const pid of pids) {
     try {
@@ -344,11 +397,20 @@ function killAll(pids) {
   }
 }
 
+/**
+ * @param {number} ms - How long to wait.
+ * @returns {Promise<void>} Resolves after that long.
+ */
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Turns a judge result into one probe outcome. A probe that didn't get as
 // far as returning its string is "inconclusive", never "contained", so a
 // broken probe can't pass by accident.
+/**
+ * @param {import('./runner').JudgeResult} result - A probe's verdict from the judge.
+ * @returns {{ verdict: string, detail: string }} The probe's own verdict,
+ *   or "inconclusive".
+ */
 function readVerdict(result) {
   const actual = result.results && result.results[0] && result.results[0].actual;
   if (typeof actual === 'string' && /^(ESCAPED|contained|inconclusive):/.test(actual)) {
@@ -359,6 +421,10 @@ function readVerdict(result) {
   return { verdict: 'inconclusive', detail: `judge said ${result.status}${why ? `: ${why}` : ''}` };
 }
 
+/**
+ * @param {Probe} probe - The probe to run.
+ * @returns {Promise<ProbeOutcome>} Its outcome.
+ */
 async function runPythonProbe(probe) {
   const code = `${probe.preamble || ''}${probe.code}`;
   const result = await runSubmission({
@@ -377,7 +443,8 @@ async function runPythonProbe(probe) {
   // these probes wrongly said "contained"). After-return needs the probe's
   // own return value back; after-timeout needs Time Limit Exceeded.
   const ran = probe.checkOrphan === 'after-return'
-    ? /^started an orphan/.test((result.results && result.results[0] && result.results[0].actual) || '')
+    // test() turns a value that isn't a string into text, as before.
+    ? /^started an orphan/.test(/** @type {string} */ ((result.results && result.results[0] && result.results[0].actual) || ''))
     : result.status === 'Time Limit Exceeded';
   if (!ran) {
     killAll(findProcesses(`${TOKEN}-${probe.checkOrphan}`));
@@ -395,6 +462,10 @@ async function runPythonProbe(probe) {
 // G7: the compile step. The C++ submission #includes the canary header by
 // absolute path. If it compiles, the compiler could read a file outside its
 // sandbox; if the compiler reports it missing, it couldn't.
+/**
+ * @param {string} canaryHeader - The owner-only header's path.
+ * @returns {Promise<ProbeOutcome>} G7's outcome.
+ */
 async function runCompileProbe(canaryHeader) {
   const result = await runSubmission({
     language: 'cpp',
@@ -420,6 +491,7 @@ async function runCompileProbe(canaryHeader) {
 // G6d: one process keeping several cores busy. The wall-clock timeout
 // alone allows 5 s x cores of CPU time; the CPU-time limit should stop it
 // sooner. One busy worker thread per core (at least 4), plus the main one.
+/** @returns {Promise<ProbeOutcome>} G6d's outcome. */
 async function runCpuProbe() {
   const cores = os.cpus().length;
   const result = await runSubmission({
@@ -496,13 +568,15 @@ def probe():
     return 'ESCAPED: 4 processes held 800 MB together'
 `;
 
+/** @returns {Promise<ProbeOutcome>} G12's outcome. */
 async function runMemoryProbe() {
   if (!cgroupStatus.ok) {
     return { verdict: 'skipped', detail: "cgroup limits aren't in use here (only in the VPS service, MAXRECALL_REQUIRE_CGROUPS=1); per-process memory caps still apply", runtimeMs: 0 };
   }
   lastCgroupMemory = null;
   const result = await runSubmission({ language: 'python', code: MEMORY_PROBE, functionName: 'probe', testCases: PYTHON_CASE, judgeMode: 'function' });
-  const m = lastCgroupMemory;
+  // Set meanwhile by the wrapped destroy() above, which the checker can't see.
+  const m = /** @type {MemoryCounters | null} */ (lastCgroupMemory);
   const figures = m ? ` [cgroup: peak ${m.peakMb} MB, limit reached ${m.limitHits} time(s), ${m.oomKills} OOM kill(s)]` : '';
   // Contained either way the limit shows: an OOM kill ("exceeded"), or
   // crawling at the limit until the time ran out ("reached").
@@ -527,7 +601,9 @@ constexpr long a = spin(1), b = spin(2), c = spin(3), d = spin(4), e = spin(5), 
 int probe(int x) { return (int)((a + b + c + d + e + f + g + h) & 1) + x; }
 `;
 
+/** @returns {number[]} The PIDs of every cc1plus (g++'s compiler proper) running. */
 function compilerPids() {
+  /** @type {number[]} */
   const pids = [];
   for (const entry of fs.readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) continue;
@@ -543,6 +619,7 @@ function compilerPids() {
 // How many processes this one has as direct children right now. Each
 // judging has exactly one at a time (its compiler or its run: bwrap, or the
 // cgroup wrapper or setpriv in front of it, which exec into it).
+/** @returns {number} This process's direct children now. */
 function countChildren() {
   let count = 0;
   for (const entry of fs.readdirSync('/proc')) {
@@ -565,6 +642,7 @@ function countChildren() {
 // many really run together is measured from outside the queue, by sampling
 // this process's children every 50 ms, so a bypassed queue shows as
 // ESCAPED rather than relying on the queue's own count.
+/** @returns {Promise<ProbeOutcome>} G9's outcome. */
 async function runConcurrencyProbe() {
   const total = 20;
   queue.resetPeak();
@@ -592,6 +670,7 @@ async function runConcurrencyProbe() {
   return { verdict: 'contained', detail, runtimeMs };
 }
 
+/** @returns {Promise<ProbeOutcome>} G10's outcome. */
 async function runSlowCompileProbe() {
   const before = new Set(compilerPids());
   const newCompilers = () => compilerPids().filter((pid) => !before.has(pid));
@@ -634,6 +713,13 @@ async function runSlowCompileProbe() {
   return { verdict: 'inconclusive', detail: `judge said ${result.status} after ${elapsed} ms: ${why}`, runtimeMs: elapsed };
 }
 
+/**
+ * Plants the canaries, runs every probe, prints the report, and sets the
+ * exit code: 0 if every probe was contained or skipped, 1 if not, 2 if the
+ * judge refuses to run anything.
+ *
+ * @returns {Promise<void>}
+ */
 async function main() {
   console.log(`Sandbox: ${describeSandbox()}\n`);
   if (!sandboxStatus.ok && !sandboxStatus.unsandboxedOverride) {
@@ -651,9 +737,11 @@ async function main() {
   fs.writeFileSync(canaryHeader, '#define SELFTEST_CANARY 1\n', { mode: 0o600 });
 
   const listener = net.createServer((socket) => socket.destroy());
-  await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
-  const listenerPort = listener.address().port;
+  await /** @type {Promise<void>} */ (new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve)));
+  // Listening on TCP, address() is an AddressInfo, not a path or null.
+  const listenerPort = /** @type {import('net').AddressInfo} */ (listener.address()).port;
 
+  /** @type {(ProbeOutcome & { id: string, what: string })[]} */
   const outcomes = [];
   try {
     for (const probe of pythonProbes({ canaryDir, secretFile, listenerPort })) {
@@ -694,7 +782,7 @@ async function main() {
     console.log(`\n${o.id.padEnd(4)} ${o.verdict.toUpperCase() === 'ESCAPED' ? 'ESCAPED  ' : o.verdict.padEnd(9)} ${o.what}`);
     console.log(`     ${o.detail} [${o.runtimeMs} ms]`);
   }
-  const counts = outcomes.reduce((acc, o) => ({ ...acc, [o.verdict]: (acc[o.verdict] || 0) + 1 }), {});
+  const counts = outcomes.reduce((acc, o) => ({ ...acc, [o.verdict]: (acc[o.verdict] || 0) + 1 }), /** @type {Record<string, number>} */ ({}));
   console.log(`\n${outcomes.length} probes: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}.`);
   process.exitCode = outcomes.every((o) => o.verdict === 'contained' || o.verdict === 'skipped') ? 0 : 1;
 }

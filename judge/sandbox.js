@@ -1,5 +1,3 @@
-// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
-// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // The judge's sandbox: builds bubblewrap (bwrap) command lines, checks at
 // startup that bwrap really works here, and refuses judging when it doesn't
 // ("fail closed"). Steps 2 onwards of docs/plans/sandboxing.md.
@@ -88,13 +86,18 @@ const REPO_DIR = path.join(__dirname, '..');
 // stopped servers.
 const HELPER_DIR_PREFIX = 'judge-helpers-';
 
-// Removes helper folders left by servers that are no longer running: named
-// judge-helpers-<pid>-..., owned by this user, and no process <pid>.
-// process.kill(pid, 0) sends no signal; it fails with ESRCH if there's no
-// such process (EPERM means there is one, owned by someone else). Folders
-// from before this naming (no pid) are left alone.
+/**
+ * Removes helper folders left by servers that are no longer running: named
+ * judge-helpers-<pid>-..., owned by this user, and no process <pid>.
+ * process.kill(pid, 0) sends no signal; it fails with ESRCH if there's no
+ * such process (EPERM means there is one, owned by someone else). Folders
+ * from before this naming (no pid) are left alone.
+ *
+ * @returns {void}
+ */
 function removeStaleHelperDirs() {
   const myUid = typeof process.getuid === 'function' ? process.getuid() : null;
+  /** @type {string[]} */
   let entries = [];
   try {
     entries = fs.readdirSync(os.tmpdir());
@@ -109,7 +112,7 @@ function removeStaleHelperDirs() {
       if (myUid !== null && fs.statSync(dir).uid !== myUid) continue;
       process.kill(Number(match[1]), 0);
     } catch (err) {
-      if (err.code === 'ESRCH') fs.rmSync(dir, { recursive: true, force: true });
+      if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ESRCH') fs.rmSync(dir, { recursive: true, force: true });
     }
   }
 }
@@ -120,6 +123,13 @@ const HELPER_SANDBOX_PATH = '/judge';
 if (RUNNING_AS_ROOT) fs.chmodSync(HELPER_DIR, 0o755);
 process.on('exit', () => fs.rmSync(HELPER_DIR, { recursive: true, force: true }));
 
+/**
+ * Where a command is on SUBMISSION_ENV's PATH, as the sandbox will find it.
+ *
+ * @param {string} command - e.g. "g++".
+ * @returns {string | null} The first executable file of that name in a PATH
+ *   folder, or null if there's none.
+ */
 function findOnPath(command) {
   for (const dir of (SUBMISSION_ENV.PATH || '').split(path.delimiter)) {
     if (!dir) continue;
@@ -138,6 +148,7 @@ function findOnPath(command) {
 // are copied into the sandbox the way they are on this machine: as symlinks
 // into /usr on systems with a merged /usr (Ubuntu), or as read-only binds
 // where they're real folders.
+/** @returns {string[]} bwrap arguments: --symlink or --ro-bind for each. */
 function systemDirArgs() {
   const args = [];
   for (const dir of ['/bin', '/sbin', '/lib', '/lib32', '/lib64', '/libx32']) {
@@ -158,8 +169,10 @@ function systemDirArgs() {
 // symlinks behind python3, java and others; java needs /etc/java-<n>-openjdk;
 // ldc2 needs /etc/ldc2.conf and dmd /etc/dmd.conf; ld.so.cache only makes
 // library lookups faster.
+/** @returns {string[]} bwrap arguments binding those files read-only. */
 function etcArgs() {
   const args = ['--ro-bind-try', '/etc/alternatives', '/etc/alternatives', '--ro-bind-try', '/etc/ld.so.cache', '/etc/ld.so.cache', '--ro-bind-try', '/etc/ldc2.conf', '/etc/ldc2.conf', '--ro-bind-try', '/etc/dmd.conf', '/etc/dmd.conf'];
+  /** @type {string[]} */
   let entries = [];
   try {
     entries = fs.readdirSync('/etc');
@@ -175,8 +188,13 @@ function etcArgs() {
 // Install folders of toolchains outside /usr, bound read-only at the same
 // path so PATH finds them inside too. For /opt/node22/bin/node that's
 // /opt/node22. Never a top-level folder like / or /opt itself.
+/**
+ * @returns {Map<string, Set<string>>} Each install folder, with the
+ *   TOOLCHAIN_COMMANDS found in it.
+ */
 function toolchainRoots() {
-  const roots = new Map(); // install folder -> the commands found in it
+  /** @type {Map<string, Set<string>>} */
+  const roots = new Map();
   for (const command of TOOLCHAIN_COMMANDS) {
     const found = findOnPath(command);
     if (!found) continue;
@@ -185,7 +203,7 @@ function toolchainRoots() {
       const root = path.dirname(path.dirname(file));
       if (root.split('/').filter(Boolean).length < 2) continue;
       if (!roots.has(root)) roots.set(root, new Set());
-      roots.get(root).add(command);
+      /** @type {Set<string>} */ (roots.get(root)).add(command); // set just above if missing
     }
   }
   return roots;
@@ -200,6 +218,10 @@ function toolchainRoots() {
 // Found on the VPS on 2026-11-02: root ran the server with DMD and Node in
 // /root/.local/share, which nobody can't enter (/root is private), and
 // bwrap failed with "Can't find source path …: Permission denied".
+/**
+ * @param {string} dir - An absolute folder path.
+ * @returns {boolean} Whether the sandbox's user can open it.
+ */
 function sandboxUserCanReach(dir) {
   if (!RUNNING_AS_ROOT) {
     try {
@@ -232,6 +254,7 @@ const TOOLCHAIN_ROOTS = toolchainRoots();
 const REACHABLE_TOOLCHAIN_ROOTS = [...TOOLCHAIN_ROOTS.keys()].filter(sandboxUserCanReach).sort();
 const UNREACHABLE_TOOLCHAIN_ROOTS = [...TOOLCHAIN_ROOTS.keys()].filter((root) => !sandboxUserCanReach(root)).sort();
 
+/** @returns {string[]} bwrap arguments binding the reachable toolchain folders read-only. */
 function toolchainArgs() {
   return REACHABLE_TOOLCHAIN_ROOTS.flatMap((root) => ['--ro-bind', root, root]);
 }
@@ -271,6 +294,7 @@ const SECCOMP_DENYLIST = Object.freeze([
 // namespace flags. null when built; otherwise why not, which fails the
 // self-test, so the server refuses to judge rather than run unfiltered.
 const SECCOMP_FILTER = path.join(HELPER_DIR, 'seccomp.bpf');
+/** @returns {string | null} null when built; otherwise why not. */
 function buildSeccompFilter() {
   const gxx = findOnPath('g++');
   if (!gxx) return "g++ isn't installed, so the seccomp filter can't be built";
@@ -278,7 +302,7 @@ function buildSeccompFilter() {
   // The compiler's first error line says what's wrong ("fatal error:
   // seccomp.h: No such file or directory"); its last is often just
   // "compilation terminated.".
-  const errorLine = (text) => {
+  const errorLine = (/** @type {string | undefined} */ text) => {
     const lines = (text || '').trim().split('\n').filter(Boolean);
     return lines.find((line) => /error/i.test(line)) || lines.slice(-1)[0] || '';
   };
@@ -292,8 +316,11 @@ function buildSeccompFilter() {
 }
 const SECCOMP_BUILD_ERROR = buildSeccompFilter();
 
-// Computed once: the toolchains don't move while the server runs.
-const BASE_ARGS = Object.freeze([
+// Computed once: the toolchains don't move while the server runs. The cast:
+// SUBMISSION_ENV.PATH is undefined if the server itself has no PATH, and
+// then the --setenv below would pass undefined, which spawn() refuses. A
+// server always has a PATH in practice, so this assumes one.
+const BASE_ARGS = Object.freeze(/** @type {string[]} */ ([
   // New user, PID, network, IPC, UTS (hostname) and cgroup namespaces. The
   // explicit --unshare-user makes a missing user namespace an error rather
   // than silently skipped, and is required by --disable-userns, which stops
@@ -318,11 +345,35 @@ const BASE_ARGS = Object.freeze([
   // opens. bwrap installs it just before running the command, so it holds
   // for the command and everything it starts, but not for bwrap's setup.
   '--seccomp', '3',
-]);
+]));
 
-// Returns { command, args } that runs `command args` inside the sandbox.
-// `binds` adds host folders or files: [{ hostPath, sandboxPath, writable }].
-// The caller passes { env: SUBMISSION_ENV } to spawn (see SUBMISSION_ENV).
+/**
+ * A host folder or file to make visible inside the sandbox.
+ *
+ * @typedef {object} Bind
+ * @property {string} hostPath - Where it is outside.
+ * @property {string} [sandboxPath] - Where it appears inside; hostPath if not given.
+ * @property {boolean} [writable] - true for --bind, otherwise --ro-bind (read-only).
+ */
+
+/**
+ * A command line, as spawn() takes it.
+ *
+ * @typedef {{ command: string, args: string[] }} CommandLine
+ */
+
+/**
+ * The command line that runs `command args` inside the sandbox. The caller
+ * passes { env: SUBMISSION_ENV } to spawn (see SUBMISSION_ENV).
+ *
+ * @param {string} command - The program to run inside.
+ * @param {string[]} args - Its arguments.
+ * @param {{ binds?: Bind[], cwd?: string }} [options] - binds: host folders
+ *   or files to add (default none); cwd: the folder to start in, inside
+ *   (default "/").
+ * @returns {CommandLine} bwrap (or setpriv, then bwrap, when the server is
+ *   root) with its arguments.
+ */
 function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
   const bindArgs = binds.flatMap(({ hostPath, sandboxPath, writable }) => [writable ? '--bind' : '--ro-bind', hostPath, sandboxPath || hostPath]);
   const bwrapArgs = [...BASE_ARGS, ...bindArgs, '--chdir', cwd, '--', command, ...args];
@@ -338,10 +389,36 @@ function sandboxedCommand(command, args, { binds = [], cwd = '/' } = {}) {
 // filter open as file descriptor 3 (in Node, stdio[3] becomes the child's
 // fd 3). It's opened for each start because bwrap reads it to the end, and
 // the parent's copy is closed straight after: the child has its own.
-// spawnFn is child_process.spawn or spawnSync.
+// spawnFn is child_process.spawn or spawnSync. Two signatures, one for each:
+/**
+ * @overload
+ * @param {typeof import('child_process').spawnSync} spawnFn - spawnSync: runs it to the end.
+ * @param {string} command - From sandboxedCommand or sandboxedRun.
+ * @param {string[]} args - Likewise.
+ * @param {import('child_process').SpawnSyncOptionsWithStringEncoding} options -
+ *   With an encoding, so its output is text.
+ * @returns {import('child_process').SpawnSyncReturns<string>} How it ended, and its output.
+ */
+/**
+ * @overload
+ * @param {typeof import('child_process').spawn} spawnFn - spawn: starts it.
+ * @param {string} command - From sandboxedCommand or sandboxedRun.
+ * @param {string[]} args - Likewise.
+ * @param {import('child_process').SpawnOptions} [options] - As spawn takes them.
+ * @returns {import('child_process').ChildProcess} The running process.
+ */
+/**
+ * @param {Function} spawnFn - spawn or spawnSync.
+ * @param {string} command - From sandboxedCommand or sandboxedRun.
+ * @param {string[]} args - Likewise.
+ * @param {{ stdio?: unknown }} [options] - As spawnFn takes them; stdio[3]
+ *   is set to the filter.
+ * @returns {unknown} What spawnFn returns.
+ */
 function spawnSandboxed(spawnFn, command, args, options = {}) {
   const fd = fs.openSync(SECCOMP_FILTER, 'r');
   try {
+    /** @type {unknown[]} */
     const stdio = Array.isArray(options.stdio) ? [...options.stdio] : ['pipe', 'pipe', 'pipe'];
     stdio[3] = fd;
     return spawnFn(command, args, { ...options, stdio });
@@ -353,6 +430,14 @@ function spawnSandboxed(spawnFn, command, args, options = {}) {
 // sandboxedCommand plus RUN_LIMITS, for running a submission or compiling
 // it. addressSpaceBytes adds an RLIMIT_AS cap (prlimit --as), which children
 // inherit: used for compilers, whose memory is otherwise unlimited.
+/**
+ * @param {string} command - The program to run inside.
+ * @param {string[]} args - Its arguments.
+ * @param {{ addressSpaceBytes?: number, binds?: Bind[], cwd?: string }} [options] -
+ *   addressSpaceBytes: the RLIMIT_AS cap, if any; the rest as for
+ *   sandboxedCommand.
+ * @returns {CommandLine} The sandboxed command line, with prlimit inside.
+ */
 function sandboxedRun(command, args, { addressSpaceBytes, ...options } = {}) {
   const limits = [`--nproc=${RUN_LIMITS.nproc}`, `--fsize=${RUN_LIMITS.fsizeBytes}`, `--cpu=${RUN_LIMITS.cpuSoftSeconds}:${RUN_LIMITS.cpuHardSeconds}`, '--core=0'];
   if (addressSpaceBytes) limits.push(`--as=${addressSpaceBytes}`);
@@ -364,6 +449,10 @@ function sandboxedRun(command, args, { addressSpaceBytes, ...options } = {}) {
 // binary or classes) must be able to write to it, so it's handed to nobody.
 // root, the server, can still read and delete it. Otherwise it stays as
 // mkdtemp made it: the server's user's, 0700.
+/**
+ * @param {string} dir - The work folder, made by mkdtemp.
+ * @returns {void}
+ */
 function prepareWorkDir(dir) {
   if (RUNNING_AS_ROOT) fs.chownSync(dir, NOBODY_UID, NOBODY_UID);
 }
@@ -388,6 +477,20 @@ done
 echo ok
 `;
 
+/**
+ * What the self-test found.
+ *
+ * @typedef {object} SelfTestResult
+ * @property {boolean} ok - Whether the sandbox works.
+ * @property {string} [version] - bwrap's version, once it's found.
+ * @property {string} [reason] - When not ok: why not.
+ */
+
+/**
+ * Checks once, at startup, that the sandbox really works here.
+ *
+ * @returns {SelfTestResult} ok, or why not.
+ */
 function runSelfTest() {
   const bwrap = findOnPath('bwrap');
   if (!bwrap) return { ok: false, reason: 'bubblewrap is not installed: no executable bwrap on PATH' };
@@ -399,7 +502,8 @@ function runSelfTest() {
 
   if (UNREACHABLE_TOOLCHAIN_ROOTS.length) {
     const who = RUNNING_AS_ROOT ? 'nobody (sandboxes run as nobody when the server is root)' : "the server's user";
-    const which = UNREACHABLE_TOOLCHAIN_ROOTS.map((root) => `${[...TOOLCHAIN_ROOTS.get(root)].join(', ')} in ${root}`).join('; ');
+    // Every unreachable root is one of TOOLCHAIN_ROOTS' keys.
+    const which = UNREACHABLE_TOOLCHAIN_ROOTS.map((root) => `${[.../** @type {Set<string>} */ (TOOLCHAIN_ROOTS.get(root))].join(', ')} in ${root}`).join('; ');
     return {
       ok: false,
       version: versionText,
@@ -414,11 +518,12 @@ function runSelfTest() {
   if (cgroups.cgroupStatus.required && !cgroups.cgroupStatus.ok) {
     return { ok: false, version: versionText, reason: `cgroup limits are required (MAXRECALL_REQUIRE_CGROUPS=1) but unavailable: ${cgroups.cgroupStatus.reason}` };
   }
+  /** @type {import('./cgroups').SubmissionCgroup | null} */
   let testCgroup = null;
   try {
     testCgroup = cgroups.forSubmission();
   } catch (err) {
-    return { ok: false, version: versionText, reason: `couldn't create a submission cgroup: ${err.message}` };
+    return { ok: false, version: versionText, reason: `couldn't create a submission cgroup: ${/** @type {Error} */ (err).message}` };
   }
 
   // Binds the helper folder the way every run does, so a folder the
@@ -452,7 +557,11 @@ function runSelfTest() {
 
 const status = Object.freeze({ ...runSelfTest(), unsandboxedOverride: UNSANDBOXED_OVERRIDE });
 
-// One line for the server's startup log.
+/**
+ * One line for the server's startup log.
+ *
+ * @returns {string} Whether the sandbox works, and what that means for judging.
+ */
 function describeSandbox() {
   if (status.ok) {
     const who = RUNNING_AS_ROOT ? ', as nobody because the server is root' : '';
@@ -467,15 +576,24 @@ function describeSandbox() {
   return `UNAVAILABLE (${status.reason}), so Run and Submit are refused. Fix it (docs/plans/sandboxing.md), or set MAXRECALL_UNSANDBOXED=1 to judge without a sandbox`;
 }
 
+/**
+ * Thrown by assertJudgingAllowed(). server.js answers it with 503.
+ */
 class SandboxUnavailableError extends Error {
+  /** Says why, from the self-test. */
   constructor() {
     super(`Judging is turned off on this server because its sandbox isn't working: ${status.reason}. The server's startup log says more.`);
     this.code = 'SANDBOX_UNAVAILABLE';
   }
 }
 
-// Throws SandboxUnavailableError unless judging is allowed: the sandbox
-// works, or MAXRECALL_UNSANDBOXED=1 says to judge without one.
+/**
+ * Throws SandboxUnavailableError unless judging is allowed: the sandbox
+ * works, or MAXRECALL_UNSANDBOXED=1 says to judge without one.
+ *
+ * @returns {void}
+ * @throws {SandboxUnavailableError} If judging isn't allowed.
+ */
 function assertJudgingAllowed() {
   if (!status.ok && !status.unsandboxedOverride) throw new SandboxUnavailableError();
 }

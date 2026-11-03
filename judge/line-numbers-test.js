@@ -14,6 +14,28 @@ const twoSum = require(path.join(QUESTIONS, 'two-sum.json'));
 const linkedList = require(path.join(QUESTIONS, 'singly-linked-list-hello-world.json'));
 const helloWorld = require(path.join(QUESTIONS, 'hello-world.json'));
 
+/** @typedef {import('./runner').JudgeResult} JudgeResult */
+
+/**
+ * The parts of a question file this test uses.
+ *
+ * @typedef {object} Question
+ * @property {string} [judgeMode]
+ * @property {Record<string, string>} [functionName]
+ * @property {import('./runner').TestCase[]} testCases
+ * @property {Record<string, import('./runner').FunctionSignature>} [signature]
+ * @property {Record<string, string>} starterCode
+ */
+
+/**
+ * Judges code against a question's test cases, as the server's Submit does.
+ *
+ * @param {Question} question - The question file.
+ * @param {string} language - The language.
+ * @param {string} code - The code to judge.
+ * @param {string} [judgeMode] - The question's judgeMode, or "function".
+ * @returns {Promise<JudgeResult>} The verdict.
+ */
 function submit(question, language, code, judgeMode = question.judgeMode || 'function') {
   return runSubmission({
     language,
@@ -25,14 +47,20 @@ function submit(question, language, code, judgeMode = question.judgeMode || 'fun
   });
 }
 
-// Everything the judge says about a failure: its error, each test's error,
-// and stderr.
+/**
+ * Everything the judge says about a failure: its error, each test's error,
+ * and stderr.
+ *
+ * @param {JudgeResult} result - The verdict.
+ * @returns {string} Those, one per line.
+ */
 function reportText(result) {
   return [result.error, ...(result.results || []).map((r) => r.error), result.stderr].filter(Boolean).join('\n');
 }
 
 // A mistake on line 3 in each language; `expect` is how the message should
 // name that line.
+/** [language, kind of mistake, code, pattern the report must match]. @type {[string, string, string, RegExp][]} */
 const FUNCTION_MISTAKES = [
   ['javascript', 'syntax error', 'function twoSum(nums, target) {\n    const a = 1;\n    const c = ;\n}\n', /main\.js:3\b/],
   ['python', 'syntax error', 'def two_sum(nums, target):\n    x = 1\n    return (\n', /solution\.py", line 3\b/],
@@ -49,6 +77,7 @@ const FUNCTION_MISTAKES = [
 // Function judging, runtime errors (step 2): the harness catches the
 // exception and adds "(line N)", the deepest line of the learner's code on
 // its stack. `lib` cases throw inside a library function called on line 3.
+/** [language, kind of mistake, code, pattern the report must match]. @type {[string, string, string, RegExp][]} */
 const RUNTIME_MISTAKES = [
   ['javascript', 'runtime error', 'function twoSum(nums, target) {\n    const a = null;\n    return a.boom;\n}\n', /\(line 3\)$/],
   ['javascript', 'library error', 'function twoSum(nums, target) {\n    const a = 1;\n    return JSON.parse("{oops");\n}\n', /\(line 3\)$/],
@@ -65,6 +94,7 @@ const RUNTIME_MISTAKES = [
 ];
 
 // Program judging: the code is the whole file, so its own name and lines.
+/** [language, kind of mistake, code, pattern the report must match]. @type {[string, string, string, RegExp][]} */
 const PROGRAM_MISTAKES = [
   ['javascript', 'syntax error', 'const a = 1;\nconst b = 2;\nconst c = ;\n', /main\.js:3\b/],
   ['python', 'runtime error', 'a = 1\nb = 2\nNone.boom\n', /main\.py", line 3\b/],
@@ -73,6 +103,7 @@ const PROGRAM_MISTAKES = [
   ['d', 'compile error', 'import std.stdio;\nvoid main() {\n    int x = undefinedName;\n}\n', /main\.d\(3\)/],
 ];
 
+/** A correct answer, by language. @type {Record<string, string>} */
 const TWO_SUM_ANSWERS = {
   javascript: 'function twoSum(nums, target) {\n    const seen = new Map();\n    for (let i = 0; i < nums.length; i++) {\n        if (seen.has(target - nums[i])) return [seen.get(target - nums[i]), i];\n        seen.set(nums[i], i);\n    }\n}\n',
   // Uses sys without importing it, a helper and a constant, and an
@@ -87,18 +118,29 @@ const TWO_SUM_ANSWERS = {
   d: 'int[] twoSum(int[] nums, int target) {\n    int[int] seen;\n    foreach (i, n; nums) {\n        if (auto j = (target - n) in seen) return [*j, cast(int) i];\n        seen[n] = cast(int) i;\n    }\n    writeln("no pair");\n    return [];\n}\n',
 };
 
-// The starter code with its empty function body filled in.
+/**
+ * The starter code with its empty function body filled in.
+ *
+ * @param {string} language - The language.
+ * @returns {string} A correct answer to singly-linked-list-hello-world.
+ */
 function linkedListAnswer(language) {
   const starter = linkedList.starterCode[language];
   if (language === 'python') return starter.replace('    pass', '    return SinglyLinkedListNode("Hello", SinglyLinkedListNode("World!"))');
   const value = language === 'javascript' ? "new SinglyLinkedListNode('Hello', new SinglyLinkedListNode('World!'))" : 'new SinglyLinkedListNode("Hello", new SinglyLinkedListNode("World!"))';
-  return starter.replace(/\{\n(\s*)\n(\s*)\}/, (_, inner, outer) => `{\n${inner}return ${value};\n${outer}}`);
+  return starter.replace(/\{\n(\s*)\n(\s*)\}/, (/** @type {string} */ _, /** @type {string} */ inner, /** @type {string} */ outer) => `{\n${inner}return ${value};\n${outer}}`);
 }
 
+/**
+ * Runs every check and prints the results; sets exit code 1 if any fail.
+ *
+ * @returns {Promise<void>}
+ */
 async function main() {
+  /** @type {string[]} */
   const lines = [];
   let failures = 0;
-  const check = (name, ok, detail) => {
+  const check = (/** @type {string} */ name, /** @type {boolean} */ ok, /** @type {string} */ detail) => {
     if (!ok) failures += 1;
     lines.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `\n      ${detail.replace(/\n/g, '\n      ').slice(0, 600)}`}`);
   };

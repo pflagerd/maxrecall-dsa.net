@@ -1,8 +1,9 @@
 # Plan: bringing existing code up to the documentation standard
 
-Status: **in progress, 2026-11-03.** Pull requests 1 (`jsdoc-server`,
-#29) and 3 (`jsdoc-frontend`, built on #29) done on their branches;
-`jsdoc-judge` to come.
+Status: **done, 2026-11-03.** All three pull requests: `jsdoc-server`
+(#29) and `jsdoc-frontend` (#30) merged; `jsdoc-judge` on its branch,
+built on #30. Every JavaScript file in the repository is documented and
+listed in `tsconfig.json` or `tsconfig.browser.json`.
 
 ## The standard
 
@@ -144,7 +145,58 @@ into it), so #29 goes first.
   Submissions tab and Load, the timer and language menu, KaTeX, a missing
   submission's notice, logging out, and the console errors.
 
-## Still to do
+## Pull request 2: `jsdoc-judge` (2026-11-03)
 
-- **`jsdoc-judge`:** `judge/*.js` (82 functions, 166 errors), and remove
-  the four `@ts-nocheck` lines.
+`judge/runner.js`, `sandbox.js`, `cgroups.js`, `queue.js`,
+`line-numbers-test.js`, `sandbox-selftest.js`: 82 functions, 166 errors
+under `strict` beforehand. Built on `jsdoc-frontend` (#30), which was
+merged meanwhile. Removes the four `// @ts-nocheck` lines #29 added, and
+lists all six files in `tsconfig.json`.
+
+- **Types** (`@typedef`): `TestCase`, `FunctionSignature` (a question's
+  `signature` field: its parameters' and return value's types, a
+  signature in the owner's sense), `Submission`, `TestResult`,
+  `JudgeResult`, `JudgePaths`, `CompileCommand`, `ProcessSpec`,
+  `CompileOutcome`, `RunOutcome`, `MemoryCounters` (`runner.js`); `Bind`,
+  `CommandLine`, `SelfTestResult` (`sandbox.js`); `SubmissionCgroup`,
+  `CgroupStatus` (`cgroups.js`); `Question` (`line-numbers-test.js`);
+  `Probe`, `ProbeOutcome` (`sandbox-selftest.js`).
+- **Techniques:** `withJudgeSlot` and `cgroups.wrap` are generic
+  (`@template`): the first returns whatever its task returns, the second
+  keeps its command object's other fields. `spawnSandboxed` has two
+  signatures (`@overload`), one for `spawn` (a `ChildProcess`) and one for
+  `spawnSync` (a finished result). The line-number test's cases are
+  *tuples*, `[string, string, string, RegExp][]`.
+- **`server.js`:** with `runSubmission` typed, `server.js` adding
+  `saved`, `submissionId` and `saveError` to its result showed up as an
+  error; Submit's answer is now typed as `JudgeResult` plus those three.
+  `Problem.signature` is now `FunctionSignature`.
+- **Found:**
+  - `signature.customSerializer`: code spliced into the C++, Java and D
+    harnesses so a question can return a type of its own (only
+    `singly-linked-list-hello-world.json` uses it). It wasn't in
+    `readme.html`'s problem file format; it is now.
+  - `BASE_ARGS` in `sandbox.js` passes `--setenv PATH <the server's
+    PATH>` to bwrap. If the server had no `PATH` at all, that would be
+    `undefined`, which `spawn()` refuses, so no sandbox could start. A
+    server always has a `PATH` in practice, so the cast assumes one; not
+    changed, as it's behaviour.
+- **Casts, and why** (no behaviour change in any): caught errors; a
+  `cg.memory()` reading compared before and after only when there's a
+  cgroup (`Boolean(cg) &&` first); a child's piped stdin/stdout/stderr,
+  which exist with the default pipes; `functionName` in function judging,
+  which always has one; `found.dir` once `found.error` is falsy (a
+  truthiness test can't narrow the union for the checker, since the error
+  could in principle be `""`); `status.parent` when `status.ok`; values a
+  callback sets that the checker can't follow (`lastCgroupMemory`), or
+  that a check at the top of a file guarantees (`ENV_CANARY`).
+- **Checked:** `make typecheck` passes, and a wrong type put in on purpose
+  fails it for each file. With comments removed, the code differs from
+  `master`'s only by cast parentheses (`queue.js` and
+  `line-numbers-test.js` not at all). Against `master`'s own runs:
+  `make line-numbers-test` 36 of 36 with every line the same (apart from
+  the JVM's one-off "Picked up JAVA_TOOL_OPTIONS" while `master`'s fresh
+  checkout compiled `JudgeJson.class`); the escape test 16 probes, 15
+  contained, 1 skipped, every probe's verdict the same; the server's 39
+  requests the same, apart from the static `timer.js` itself, whose
+  comments #30 changed. `make test`: 9 of 9.

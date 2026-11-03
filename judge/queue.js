@@ -1,5 +1,3 @@
-// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
-// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // A limit on how many submissions are judged at once: sandboxing step 8
 // (docs/plans/sandboxing.md, gap G9).
 //
@@ -24,11 +22,17 @@ const MAX_WAITING = 10;
 const RETRY_AFTER_SECONDS = 5;
 
 let running = 0;
-const waiting = []; // resolve functions, oldest first
+/** Each waiting judging's resolve function, oldest first. @type {((value?: unknown) => void)[]} */
+const waiting = [];
 // The most judgings seen running at once, for the escape test (probe G9).
 let peakRunning = 0;
 
+/**
+ * Thrown by withJudgeSlot() when the waiting list is full. server.js answers
+ * it with 503 and Retry-After.
+ */
 class JudgeBusyError extends Error {
+  /** Says how many are running and waiting. */
   constructor() {
     super(`The judge is busy (${MAX_RUNNING} running, ${MAX_WAITING} waiting); try again in a few seconds.`);
     this.code = 'JUDGE_BUSY';
@@ -36,9 +40,17 @@ class JudgeBusyError extends Error {
   }
 }
 
-// Runs task() (which returns a promise) when a slot is free, and passes on
-// its result. Throws JudgeBusyError straight away if the waiting list is
-// full.
+/**
+ * Runs task() when a slot is free, and passes on its result. Throws
+ * JudgeBusyError straight away if the waiting list is full.
+ *
+ * @template T
+ * @param {() => Promise<T>} task - The judging to run. (T is a type
+ *   parameter: whatever task's promise gives, this one gives too.)
+ * @returns {Promise<T>} task's result, or its rejection.
+ * @throws {JudgeBusyError} If MAX_RUNNING are running and MAX_WAITING are
+ *   already waiting (rejects the promise).
+ */
 async function withJudgeSlot(task) {
   if (running >= MAX_RUNNING) {
     if (waiting.length >= MAX_WAITING) throw new JudgeBusyError();
@@ -58,10 +70,22 @@ async function withJudgeSlot(task) {
   }
 }
 
+/**
+ * The queue's limits and state, for the escape test (probe G9).
+ *
+ * @returns {{ maxRunning: number, maxWaiting: number, running: number, waiting: number, peakRunning: number }}
+ *   The limits, how many are running and waiting now, and the most seen
+ *   running at once since resetPeak().
+ */
 function queueStats() {
   return { maxRunning: MAX_RUNNING, maxWaiting: MAX_WAITING, running, waiting: waiting.length, peakRunning };
 }
 
+/**
+ * Starts counting peakRunning afresh, from how many are running now.
+ *
+ * @returns {void}
+ */
 function resetPeak() {
   peakRunning = running;
 }
