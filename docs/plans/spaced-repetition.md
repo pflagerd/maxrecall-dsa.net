@@ -18,6 +18,8 @@ each answer and what it changed.
 | 2026-11-03 | **D5 (owner):** accepted the consistency check as proposed, with the adjustments the later decisions imply, and the four recommendations: `make delete-question` / `make rename-question` commands (also usable after a `git pull`), every user, a rename log `questions/renames.json` for old Submit records, and records of deleted questions ignored. | D5 is fully decided. The check now also covers `backlog.json` and `renames.json` (D5 section). |
 | 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. | A sixth source of truth. Remove/update references cover `backlog.json` too. Still open: where creation order comes from (git can't tell in a shallow clone), pairs vs questions, and when a pair moves from the backlog into the queue. |
 | 2026-11-03 | **D6 details (owner):** accepted all seven: a `created` field in each question file (ties broken by file name); the backlog holds (question, language) pairs, by question then by the profile's language order; at least 3 pairs kept in the queue, plus one more from the backlog every 5 Submits, in a function of its own beside `advance.js`; an introduced pair goes to the front; missing pairs are appended to backlogs automatically (server start, a newly allowed language); a new user starts with everything in the backlog; a `submitsSinceLastIntroduced` counter at the top of `order.json`. | D6 is fully decided. Settles D2's "pairs" detail and its "where a new language's pairs go". Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
+| 2026-11-03 | **D7 (owner):** (a), stay on the results after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. The D7 details below are still recommendations. |
+| 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. | Skip now changes `order.json`, though on 2026-10-29 Skips were decided not to be recorded. Unless Skips get a record of their own, check 6 (records agree) will report every Skip, and recalculating from the records will lose them. See D8. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -510,7 +512,27 @@ is how you see what went wrong.
 whose question is missing (D5). With one queue (D2), **next may be in
 another language**.
 
-**Options:**
+**Decided 2026-11-03 (owner): (a), but the Submit button turns into a
+Next button** once the Submit is saved, rather than being grayed out with
+a second button beside it.
+
+- **Per language, as now:** Submit becomes Next for the language just
+  submitted. Switched to another language, it's Submit again, since
+  that's another pair.
+- **What the button says:** recommended "Next" on the button, with what's
+  next in its tooltip ("Two Sum, in C++"), since a long label would push
+  the toolbar around. Or the full name on the button.
+- **Guarding against a double click:** Submit and Next are the same
+  button in the same place, so a second click on Submit while it's
+  judging could land on Next the moment the result arrives, and the
+  learner would leave before reading it. Recommended: Next does nothing
+  for the first second after it appears (and looks disabled for that
+  second).
+- **A reload** shows Submit again, as the grayed-out Submit is enabled
+  again today: still a nudge, not a rule.
+- **A Submit that wasn't saved** leaves Submit as Submit.
+
+The original options:
 
 - **(a) Stay on the results, and show a "Next →" button** once the Submit
   is saved, naming what's next, e.g. "Next: Two Sum (C++)"
@@ -550,15 +572,45 @@ another language**.
 
 ### D8. What does Skip do?
 
-This one touches an earlier decision: Skip isn't recorded (2026-10-29),
-so with D5 (a) a Skip can't change the order.
+**Decided 2026-11-03 (owner): Skip marks the current pair `pass` =
+`"no"`, then loads the next pair, as Next would.**
 
-- **(a) Skip just opens the next question** without changing the order
-  (recommended for now). The skipped pair stays at the front, so it's
-  still first next time.
-- **(b) Record Skips** (a new record type, revisiting 2026-10-29) so Skip
-  can move the pair down a little, like MaxRecall's
-  `moveFlashCardGuidToEndOfBacklog`.
+**Open, with recommendations:**
+
+- **Does Skip need a record?** On 2026-10-29 it was decided that only
+  Submit is recorded, not Run or Skip. Now a Skip changes `order.json`,
+  but nothing in the Submit records shows it. Then:
+  - **check 6** (records agree) would report every skipped pair, since
+    its `"no"` matches no `Accepted`-or-not Submit, or contradicts the
+    latest one;
+  - **recalculating from the records** later would bring back the streak
+    the Skip reset.
+
+  Options: **(a) a Skip record** of its own (recommended), e.g.
+  `users/<email>/skips/<timestamp>.json` holding `schemaVersion`,
+  `skippedAt`, `question`, `language`, saved the same way as Submit
+  records (temporary file, then `link()`). A separate folder keeps Skips
+  out of the Submissions tab and `GET /api/submissions`. Check 6 and the
+  recalculation then read both, in time order. This revisits the
+  2026-10-29 decision. **(b) No record**, and check 6 accepts a `"no"`
+  that no Submit explains. That's simpler, but the check gets weaker and
+  recalculation can't be exact.
+- **Exactly like a failed Submit?** Recommended yes: `passesInARow` goes
+  to 0, the pair moves `advance(0)` places (about 1), and it counts
+  towards `submitsSinceLastIntroduced`, so Skipping still brings in new
+  pairs.
+- **After a saved Submit,** when the button already says Next:
+  recommended hiding (or disabling) Skip, so a Skip can't overwrite the
+  `"yes"` just earned. Next does the same job without that.
+- **Skipping a long streak:** one click sets `passesInARow` from, say, 9
+  to 0. Recommended: a confirmation ("Skipping resets your 9 passes in a
+  row") only when `passesInARow` is more than 0.
+- **Skipping (or Submitting) a pair that's still in the backlog,** opened
+  from the problem list: recommended moving it from `backlog.json` into
+  `order.json` first, then treating it as above. It has now been seen,
+  and check 6 reports a backlog pair with records.
+- **The server does it:** a `POST /api/questions/:slug/skip` with the
+  language, which updates `order.json` and answers with what's next.
 
 ## Steps (once decided)
 
