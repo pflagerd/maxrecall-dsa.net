@@ -2,8 +2,8 @@
 
 Status: **planned, 2026-11-03.** Nothing is built yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
-per decision, and the sections under "Decisions for the owner" give the
-reasoning and options behind each.
+per decision, and the Decisions section gives each one in full, with the
+reasoning behind it.
 
 ## Decision log
 
@@ -96,22 +96,21 @@ numbers, one right answer (16 places) or even a wrong one (8) sends a pair
 to the end or near it, so the queue turns into plain round-robin and hard
 questions don't come back any sooner. The steps have to start small.
 
-## Decisions for the owner
+## Decisions
 
-Each has a recommendation; none is built until you choose.
+All made by the owner on 2026-11-03. The options not chosen are in the
+plan's git history (last in `26bc929`).
 
-### D1. Queue positions or due dates?
+### D1. Queue positions, stored in `order.json`
 
-**Decided 2026-11-03 (owner): (a), queue positions, stored in a file
-`order.json` in the user's directory, as described in the decision log.**
-All four details below were accepted by the owner on 2026-11-03:
+**Questions are ordered by queue position, as in MaxRecall, not by due
+dates, with flexibility in how a question advances (D4). The queue is
+`users/<email>/order.json`, to be replaced by a real database
+eventually. Each element is an object naming the question by its file
+name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), with
+the fields D2–D4 add; the file has a top-level `schemaVersion`; and it's
+written safely.**
 
-- **File name:** `order.json` (owner, with D3).
-- **Element shape:** an object, settled by D3 and D4, which put `pass`
-  and `passesInARow` in it alongside `question` (not a bare string as in
-  MaxRecall's `guidOrder.json`).
-- **Version:** recommended a top-level `schemaVersion`, as Submit records
-  have, so a later change of format can be recognised.
 - **Name equals slug:** on 2026-11-03 all 13 question files had `slug`
   equal to the file name, and `loadProblem` in `server.js` finds a
   question by file name. Submit records' `question` field is the same
@@ -120,206 +119,123 @@ All four details below were accepted by the owner on 2026-11-03:
   `order.json`, so a crash never leaves half a file. Here replacing the
   file is the point, so `rename()` is right (unlike Submit records, which
   use `link()` so they *can't* be replaced). Reading, changing and writing
-  it should happen with no `await` in between, so two Submits from two
-  tabs can't each read the old queue and one overwrite the other's change
-  (a lost update).
+  it happen with no `await` in between, so two Submits from two tabs
+  can't each read the old queue and one overwrite the other's change (a
+  lost update).
+- **Time away doesn't count:** after a month off, the queue is exactly
+  where it was left. Every Submit has `submittedAt`, so a later step could
+  still pull long-unseen pairs forward.
 
-The original options:
+### D2. One queue for everything, and `profile.json`
 
-- **(a) Queue positions, like MaxRecall** (recommended). It's what `TODO`
-  describes ("moved down the list by some number of problems"), you
-  already know how it behaves, and it works with a small bank: there's
-  always a next question. Downside: time away doesn't count. After a
-  month off, the queue is exactly where you left it, though you've
-  probably forgotten more.
-- **(b) Due dates (Leitner, SM-2 or FSRS).** Models forgetting over real
-  time. With 13 questions, most days nothing would be due, and FSRS needs
-  a lot of review history to fit its parameters.
-- **(c) Positions now, time later.** (a), but with the records' timestamps
-  kept in mind so a later step could, say, pull long-unseen pairs forward.
-  Since every Submit already has `submittedAt`, choosing (a) now doesn't
-  rule this out.
+**One queue holds every (question, language) pair, e.g.
+`{"question": "two-sum", "language": "python"}`, keeping the 2026-10-30
+design that progress is per (question, language). Not every learner will
+have every language: which languages a learner has, and whether they may
+switch languages or set a default at all, come from their profile,
+`users/<email>/profile.json`.**
 
-### D2. One queue per language, or one for everything?
+- **Allowed and preferred are kept apart** in the profile: what the
+  learner is *allowed* (languages, may they switch, may they set a
+  default), set by the owner or a teacher; and what the learner *prefers*
+  (their default language), set by the learner within those limits. For
+  now the owner edits the file by hand; an API for the learner's
+  preferences can come later.
+- **The server enforces it:** Run and Submit refuse a language the
+  profile doesn't allow (`403`). Today the server accepts all five
+  languages (`SUPPORTED_LANGUAGES`, `server.js`) from anyone.
+- **No `profile.json`** means all five languages, switching allowed, so
+  the owner's current setup keeps working until a profile is written.
+- **When the profile changes:** a newly allowed language's pairs go into
+  the backlog (D6); a removed language's pairs are skipped, not deleted,
+  so the progress is there if it comes back.
+- **The two `localStorage` language settings go**
+  (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`):
+  the default language and the language menu come from the profile, so
+  there's one source.
+- **"Next" may be in another language** (see D7).
 
-**Decided 2026-11-03 (owner): one queue for everything**, with a per-user
-profile, `users/<email>/profile.json`, deciding which languages a learner has
-and whether they may switch languages or set a default. Details, all
-accepted by the owner on 2026-11-03:
+### D3. A pass is `Accepted`, recorded as `"pass": "yes"` or `"no"`
 
-- **What an element is:** recommended a **(question, language) pair**,
-  e.g. `{"question": "two-sum", "language": "python"}`, keeping the
-  2026-10-30 design that progress is per (question, language). The
-  alternative, one element per question with the language picked from
-  the profile when it comes up, would lose per-language progress.
-- **File name:** `profile.json` (owner, 2026-11-03).
-- **Who may change what:** recommended keeping two kinds of field apart in
-  the profile: what the learner is *allowed* (languages, may they switch,
-  may they set a default), set by the owner or a teacher; and what the
-  learner *prefers* (their default language), set by the learner within
-  those limits. For now the owner edits the file by hand; an API for the
-  learner's preferences can come later.
-- **Enforced by the server, or only hidden in the page?** Today the
-  server accepts all five languages (`SUPPORTED_LANGUAGES`, `server.js`)
-  from anyone. Recommended: Run and Submit refuse a language the profile
-  doesn't allow (a `403`), so "no access" is real and not only a hidden
-  menu item.
-- **No profile file:** what a user with no `profile.json` gets. Recommended:
-  all five languages, may switch, so the owner's current setup keeps
-  working until a profile is written.
-- **When the profile changes:** a language added means its pairs have to
-  enter the queue (where? the same question as new questions, D6); a
-  language removed means its pairs are skipped or removed (recommended
-  skipped, so the progress isn't lost if it comes back).
-- **What happens to the `localStorage` settings:** the default language
-  and the language menu would come from the profile instead. Recommended:
-  remove both keys' use once the profile exists, so there's one source.
-
-The original options:
-
-- **(a) One queue per language** (recommended). You work in one language
-  at a time (the default language), and the list and "next question"
-  follow the language you're in.
-- **(b) One queue of all (question, language) pairs.** "Next" could jump
-  from Python to D.
-
-### D3. What counts as right, and does "how easy" matter yet?
-
-**Decided 2026-11-03 (owner): right = `Accepted`, recorded as
-`"pass": "yes"` or `"pass": "no"` in the element's entry in
-`order.json`. No "how easy".** Notes and details, all accepted by the
-owner on 2026-11-03:
+**A Submit passes only if it's `Accepted`, all tests passing; there is no
+"how easy". The result is recorded in the pair's element in `order.json`
+as `pass`, the string `"yes"` or `"no"`.**
 
 - **Timeouts already fail.** The judge returns `Time Limit Exceeded` with
   `passed: 0` (`judge/runner.js`, the `outcome.timedOut` branch), and
-  memory-limit kills and runtime and compile errors also aren't
-  `Accepted`. So today `pass` is `"yes"` exactly when `status` is
-  `Accepted`.
-- **Other failure reasons, still to be decided** (for example, perhaps,
-  a countdown running out, issue #21): recommended deciding `pass` in one
-  small function, so a new reason is added in one place.
-- **Strings, not JSON's `true`/`false`:** owner's choice. One advantage:
-  a string leaves room for more values later. The cost: `"Yes"` or a typo
-  in a hand-edited file is still valid JSON, so the server should check
-  that the value is exactly `"yes"` or `"no"` when it reads the file.
-- **Never submitted:** recommended leaving `pass` out of the element,
-  rather than `"no"`, so "new" and "failed" can be told apart (D6).
-- **Only the latest result:** one `pass` holds the last Submit's result.
-  The full history stays in the Submit records. Whether D4 needs more
-  (a streak count) is for D4.
-- **Order of writing:** recommended updating `order.json` only after the
-  Submit record has been saved, so the queue never reflects a Submit that
-  has no record.
+  memory-limit kills and runtime and compile errors aren't `Accepted`
+  either. So today `pass` is `"yes"` exactly when `status` is `Accepted`.
+- **One function decides `pass`,** so other failure reasons, still to be
+  decided (perhaps a countdown running out, issue #21), are added in one
+  place.
+- **Only exactly `"yes"` or `"no"`** is accepted when the server reads
+  the file. A string leaves room for more values later, but `"Yes"` or a
+  typo in a hand-edited file is still valid JSON, so it has to be checked.
+- **A pair never submitted has no `pass`,** so "new" and "failed" can be
+  told apart.
+- **`order.json` is updated only after the Submit record is saved,** so
+  the queue never reflects a Submit that has no record.
+- `pass` holds only the latest result; the streak is `passesInARow` (D4),
+  and the full history stays in the Submit records.
 
-The original options:
+### D4. A pair moves 1.3^k places, ± 10%, in `advance.js`
 
-- **(a) Right = `Accepted` (all tests pass), anything else = wrong**
-  (recommended, to start). Simple and objective. `status` is set in
-  `judge/runner.js` (`'Accepted'` only when every test passes).
-- **(b) Also use `elapsedMs`**: a fast Accepted moves further than a slow
-  one. This is the "easier goes further" part of `TODO`, but what's "fast"
-  differs per question, so it needs a baseline (your own earlier times?).
-  A good second step once there's data.
-- **(c) Ask the learner** after an Accepted (Hard / Good / Easy), as Anki
-  does. Would need a new field in the record, and so a `schemaVersion`
-  bump.
+**Starting with a function like MaxRecall's 2-to-the-n-with-randomness,
+but less aggressive: 1.3^k places, plus or minus 10%, stochastically
+rounded, and at least 1. k is "correct in a row", kept in the element as
+`passesInARow`. The function goes in its own file, `advance.js` (the name
+is for now), tested by `advance.test.js` beside it. D4 will become much
+more nuanced over time; this is a starting point.**
 
-### D4. How far does a pair move?
+- **k includes this Submit:** a Submit first updates `passesInARow` (a
+  pass adds 1, a fail sets it to 0), and `advance.js` then uses the new
+  value.
+- **Stochastic rounding:** a value like 1.3 becomes 2 with probability
+  0.3 and 1 otherwise, so the *average* move is exactly
+  1.3^k × (1 ± 10%).
+- **At least 1 place,** so a pair never comes straight back: after a fail,
+  0.9 to 1.1 would otherwise round down to 0 some of the time.
+- **`advance.js` only works out how many places.** Moving the element
+  within `order.json` belongs to the code that reads and writes that
+  file, so changing the rule means editing `advance.js` alone. A move
+  longer than the queue puts the element at the end, as MaxRecall's
+  `advanceFlashcardGuid` does.
+- **The random function is passed in,** e.g.
+  `advance(k, random = Math.random)`, so tests can supply fixed "random"
+  numbers and get repeatable answers.
+- **CommonJS** (`require`/`module.exports`), like `users.js`.
+  `package.json` has no `"type"` field, so Node treats `.js` files as
+  CommonJS ([Node's `"type"` docs](https://nodejs.org/api/packages.html#type)).
+- **Any saved Submit of a pair moves it,** wherever it is in the queue,
+  since the learner can open any question from the list. A Submit that
+  failed for other reasons (judge busy, not saved) moves nothing.
+- **Tests** are run by a new `make test` (`node --test`).
 
-**Decided 2026-11-03 (owner): 1.3^k ± 10%, in `advance.js`**, as a
-starting point to be changed over time. Details, all accepted by the
-owner on 2026-11-03 (stochastic rounding and `passesInARow` being the
-owner's own):
-
-- **What k is** (owner): correct in a row, kept in the element as
-  **`passesInARow`**. As I read it: a Submit first updates the counter
-  (a pass adds 1, a fail sets it to 0), and `advance.js` then uses the
-  new value, so k includes this Submit.
-- **Rounding** (owner): **stochastic rounding**. A value like 1.3 becomes
-  2 with probability 0.3 and 1 otherwise, so the *average* move is
-  exactly 1.3^k × (1 ± 10%). **At least 1** place (owner), so a
-  pair never comes straight back: after a fail, 0.9 to 1.1 would
-  otherwise round down to 0 some of the time.
-- **What `advance.js` does:** only works out *how many places*. Moving
-  the element within `order.json` belongs to the code that reads and
-  writes that file. Then changing the rule means editing `advance.js`
-  alone. A move longer than the queue puts the element at the end, as
-  MaxRecall's `advanceFlashcardGuid` does.
-- **Randomness passed in:** e.g. `advance(k, random = Math.random)`, so
-  tests can supply fixed "random" numbers and get repeatable answers.
-- **Module format:** CommonJS (`require`/`module.exports`), like
-  `users.js`. `package.json` has no `"type"` field, so Node treats `.js`
-  files as CommonJS ([Node's `"type"` docs](https://nodejs.org/api/packages.html#type)).
-- **Which Submit moves the queue** (raised with D3): only a Submit of the
-  element at the front, or any Submit of that pair, wherever it is, and
-  every time? Recommended: any saved Submit moves that pair from wherever
-  it is, since the learner can open any question from the list.
-
-**What 1.3^k ± 10% does** (worked out 2026-11-03 with a throwaway
-simulation; rounding as above, every Submit a pass, 13 questions × 5
-languages = 65 elements, all in the queue from the start):
-
-| k | 1.3^k | Places moved (with ±10%) |
-| --- | --- | --- |
-| 0 (failed) | 1.00 | 1 |
-| 1 | 1.30 | 1 |
-| 2 | 1.69 | 2 |
-| 3 | 2.20 | 2 |
-| 4 | 2.86 | 3 |
-| 5 | 3.71 | 3–4 |
-| 6 | 4.83 | 4–5 |
-| 8 | 8.16 | 7–9 |
-| 10 | 13.79 | 12–15 |
-| 16 | 66.54 | 60–73 (the end) |
-
-- **A fail and a first pass move the same distance** (1 place), as do
-  k = 2 and k = 3 (2 places). So early on the rule can't tell a hard
-  question from an easy one.
-- **The ±10% does nothing until k = 5**: below that, rounding swallows it.
-- **It takes 16 passes in a row** for a pair to reach the end of a
-  65-element queue.
-- In the first 100 Submits, all passes, only **12 different pairs** come
-  up, about 10 times each, and it takes **934 Submits** before every one
-  of the 65 has come up once. With 13 elements (one language) it's 111.
-  In effect a working set of about a dozen forms at the front, which is
-  what D6's backlog would otherwise do.
-
-**With stochastic rounding** (second simulation, 2026-11-03: 100,000
-samples per k; queues run 200 times):
+**What the rule does** (simulated 2026-11-03: 100,000 samples per k;
+queues of 13 questions × 5 languages = 65 pairs, all in the queue from
+the start, every Submit a pass, run 200 times):
 
 | k | 0 (failed) | 1 | 2 | 3 | 4 | 5 | 8 | 16 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Average places | 1.03 | 1.30 | 1.69 | 2.20 | 2.86 | 3.71 | 8.15 | 66.45 |
 | Range | 1–2 | 1–2 | 1–2 | 1–3 | 2–4 | 3–5 | 7–9 | 59–74 |
 
-- A fail and a first pass now differ on average, and the randomness has
-  an effect from the start.
-- The working set is about the same: a median of 12 different pairs in
-  the first 100 Submits, and a median of 921 Submits until all 65 have
-  come up once (106 for 13).
+- A fail and a first pass differ on average (1.03 vs 1.30 places). With
+  plain rounding instead, both moved exactly 1, and the ±10% had no effect
+  below k = 5.
+- It takes about 16 passes in a row for a pair to reach the end of a
+  65-pair queue.
+- A working set forms at the front: a median of 12 different pairs in the
+  first 100 Submits, and a median of 921 Submits until all 65 have come
+  up once (106 for 13).
 
-The 2^k proposal it replaces:
+### D5. The queue is stored; a consistency check reports
 
-Recommended starting numbers for a small bank, with `k` = Accepted in a row
-including this one:
-
-| Result | Moves down | Compare MaxRecall |
-| --- | --- | --- |
-| Not accepted | 2 places | 8 |
-| Accepted, k = 1 | 2 places | 16 |
-| k = 2 | 4 | 32 |
-| k = 3 | 8 | 64 |
-| k | 2^k, or to the end | 4·2^(k+1) |
-
-No randomization at first (see D5 for why). These would be named constants
-in one place, so they're easy to tune.
-
-### D5. Store the queue, or work it out from the records?
-
-**Decided 2026-11-03 (owner): stored**, in `users/<email>/order.json`.
-Ways to recalculate it from the Submit records come later. A deleted
-question must be deleted from `order.json` too. A function will check
-consistency between the sources of truth.
+**The queue is stored in `order.json`; ways to recalculate it from the
+Submit records will be worked out later. A function checks consistency
+between the sources of truth, and only reports. Deleting a question
+removes references to it, and renaming a question updates references to
+it, so its progress is kept.**
 
 **The sources of truth** and what each one owns:
 
@@ -328,13 +244,12 @@ consistency between the sources of truth.
 | `questions/*.json` | Which questions exist, and which languages each has (`starterCode`) |
 | `questions/renames.json` | Which old question names became which new ones |
 | `users/<email>/profile.json` | Which languages this learner has |
-| `users/<email>/submissions/*.json` | What was submitted and how it was judged (the history; never changed) |
+| `users/<email>/submissions/*.json` | What was submitted or skipped, and how it was judged (the history; never changed) |
 | `users/<email>/order.json` | The queue order, and each pair's `pass` and `passesInARow` |
 | `users/<email>/backlog.json` | Pairs not yet in the queue, in the order they'll be introduced (D6) |
 
-**The consistency check** (accepted by the owner 2026-11-03, adjusted for
-the decisions since). Each finding names the user, the file, the element
-and what's wrong. It only reports.
+**The consistency check.** Each finding names the user, the file, the
+element and what's wrong.
 
 1. **The files themselves:** `order.json` and `backlog.json` parse as
    JSON and have a known `schemaVersion`, and every element has the
@@ -357,241 +272,168 @@ and what's wrong. It only reports.
    Reported as information, not an error, since they're kept on purpose
    (D2).
 6. **Records agree:** for each pair in `order.json`, the latest saved
-   Submit's verdict matches `pass` (`Accepted` ↔ `"yes"`), and
-   `passesInARow` equals the number of `Accepted` Submits at the end of
-   its history. Records are matched through `renames.json`, so a renamed
-   question keeps its history. A pair with records but no `pass`, a
-   `pass` with no records, or a backlog pair that has records, is
-   reported. Records of deleted questions are ignored. Check 6 is also
-   the core of the later "recalculate from the records".
+   record matches `pass` (`Accepted` ↔ `"yes"`; anything else, including a
+   Skip, ↔ `"no"`), and `passesInARow` equals the number of `Accepted`
+   Submits at the end of its history. Records are matched through
+   `renames.json`, so a renamed question keeps its history. A pair with
+   records but no `pass`, a `pass` with no records, or a backlog pair
+   that has records, is reported. Records of deleted questions are
+   ignored. Check 6 is also the core of the later "recalculate from the
+   records".
 
-**Decided 2026-11-03 (owner):**
-
-- **The check only reports; it never changes anything.** Reason: a
-  question file can be missing for a harmless reason. Checking out a
-  branch that doesn't have it yet, for instance, would otherwise wipe
-  that question's progress. Until something removes them, the server
-  skips elements whose question is missing when choosing the next
-  question.
+- **Only reporting, never changing anything:** a question file can be
+  missing for a harmless reason. Checking out a branch that doesn't have
+  it yet, for instance, would otherwise wipe that question's progress.
+  Until something removes them, the server skips elements whose question
+  is missing when choosing the next question.
 - **Where it lives and when it runs:** a pure function in its own file
   (e.g. `consistency.js`) that takes the sources and returns a list of
   findings, run by a `make` target, and once at server start, logging
   what it finds without refusing to start.
-- **Deleting a question → remove references to it**, a function that
-  runs when a question is deleted.
-- **Renaming a question → update references to it**, so the pair keeps
-  its place, `pass` and `passesInARow`.
-- **What triggers them:** commands that do the whole job,
-  `make delete-question SLUG=…` and `make rename-question FROM=… TO=…`.
-  Rename does `git mv`, changes the file's `slug` field to match, adds
-  the rename to `renames.json`, and updates the references. Delete does
-  `git rm` and removes the references. Each also works when the file
+- **What runs remove and update references:** commands that do the whole
+  job, `make delete-question SLUG=…` and `make rename-question FROM=…
+  TO=…`. Rename does `git mv`, changes the file's `slug` field to match,
+  adds the rename to `renames.json`, and updates the references. Delete
+  does `git rm` and removes the references. Each also works when the file
   change has *already* happened (the VPS gets it by `git pull`, which
   doesn't touch `/srv/maxrecall/data/users`); then it only updates the
   references.
 - **Every user, and both files:** the functions go through every user's
-  `order.json` **and `backlog.json`** (the second added with D6).
-- **Old Submit records after a rename:** followed through the rename log,
-  `questions/renames.json` (`{"old-name": "new-name"}`), committed with
-  the rename. Records themselves are never changed.
-- **Old Submit records after a delete:** kept as history; the check
+  `order.json` and `backlog.json`.
+- **Old Submit records after a rename** are followed through the rename
+  log, `questions/renames.json` (`{"old-name": "new-name"}`), committed
+  with the rename. Records themselves are never changed.
+- **Old Submit records after a delete** are kept as history; the check
   ignores them.
 - **Smaller effects of a rename:** a bookmarked old address
   (`problem.html?slug=…`) stops working, and the file's SHA-256 changes
   (its `slug` field changed), so old records show the question as edited
   since, which is true.
+- **The cost of storing:** the file is a second copy of what the records
+  say, so it can drift from them (a record copied in from the VPS with
+  `rsync` moves nothing). The check is how drift is found.
 
-The original options:
+### D6. New pairs wait in `backlog.json`, in creation order
 
-- **(a) Work it out from the Submit records each time** (recommended).
-  Replay every Submit for that language in time order through the rules
-  in D4. No new files, nothing to keep in sync, nothing to migrate.
-  `users/` stays hand-managed and can be copied from the VPS with `rsync`
-  and the queue comes out right. Changing the rules re-orders past
-  history too, which helps while tuning. Cost: it reads every record on
-  each request, which is fine for one user and hundreds of records, but
-  would need a cache later. Randomization would have to come from a
-  seeded random number generator so replays agree.
-- **(b) Store it**, like `guidOrder.json`, updated on each Submit. Fast,
-  but it's a second copy of the truth that can drift from the records
-  (a record copied in by hand wouldn't be counted).
+**Pairs not yet in the queue wait in `users/<email>/backlog.json`, added
+in the order their questions were (are) created. Later, which questions
+go in will depend on the courses a learner is doing, and their order on
+dependencies between questions: some assume others are already mastered
+(concepts: a *prerequisite graph*, which is a *directed acyclic graph*,
+put in order by a *topological sort*). For now, creation order only.**
 
-### D6. Where do questions you've never submitted go?
+- **Creation order comes from a `created` field in each question file**
+  (an ISO 8601 date and time), filled in once from the full history on
+  Kubuntu, and written by whoever creates a question from then on. Ties
+  are broken by file name. It moves with the file when it's renamed. It
+  changes the problem file format, so `readme.html` section 5 gets
+  updated with it. Git history can't be relied on instead: this cloud
+  clone is shallow (97 commits), so 9 of the 13 question files show as
+  "added" in its oldest commit, `5ef8b96` (a service rename on
+  2026-10-29), which is just where the clone stops; and two files were
+  added in one commit (`double-each-character`, `swap-case-with-helpers`),
+  so even full history has ties. File modification times are no better,
+  since `git checkout` resets them.
+- **The backlog holds pairs,** like `order.json`, with the same element
+  shape minus `pass` and `passesInARow`, ordered by question (creation
+  order), then by the order of languages in the profile. Hello World in
+  every allowed language comes before the next question.
+- **Introduction rule:** at least 3 pairs are kept in the queue, and one
+  more comes in from the backlog every 5 Submits, in a file of its own
+  beside `advance.js`, `introduce.js`, so it can later be made to depend
+  on how well the learner is doing, as MaxRecall's
+  `countUntilNextNewCard` does (32 Submits apart at 0% correct, 4 apart at
+  100%).
+- **An introduced pair goes to the front,** so it's the next question, as
+  in MaxRecall (`addNextBacklogFlashcardGuid` `unshift`s it).
+- **Missing pairs are appended automatically** to the end of each user's
+  `backlog.json`, in creation order, at server start and when a profile
+  allows a new language. Unlike removing references, adding loses
+  nothing, so it's safe to do automatically. A pair whose question is
+  later missing again is just skipped.
+- **A brand-new user** starts with everything in `backlog.json` and an
+  empty `order.json`.
+- **Counting Submits** for "every 5" uses a top-level
+  `submitsSinceLastIntroduced` in `order.json`, next to `schemaVersion`,
+  so it survives a server restart.
 
-**Decided 2026-11-03 (owner): a backlog, `backlog.json`**, in the user's
-directory. Questions go into it **in the order they were created**. Later
-goals, not for now:
+**Why a rule is needed** (simulated 2026-11-03: 65 pairs, starting from
+an empty queue, 300 Submits, with D4's rule): a queue holding one pair
+always gives back that same pair, so with no rule beyond "when the queue
+is empty", the same pair came back 299 times out of 300. With "at least 3
+in the queue, and one more every N Submits":
 
-- **Courses:** what goes into a learner's backlog will depend on which
-  courses they're doing.
-- **Dependencies:** some questions assume others have already been
-  mastered, so the backlog should follow those relationships (concepts:
-  a *prerequisite graph*, which is a *directed acyclic graph*, put in
-  order by a *topological sort*).
+| N | Pairs added after 100 Submits | After 300 |
+| --- | --- | --- |
+| 3 | 35 | all 65 |
+| 5 | 22 | 62 |
+| 10 | 12 | 32 |
 
-**Details, all accepted by the owner on 2026-11-03:**
+Whether 70% or all of the Submits passed made no difference to these
+counts, since the rule counts Submits, not passes.
 
-- **Where "order of creation" comes from.** Git history can't be relied
-  on: this cloud clone is shallow (97 commits), so 9 of the 13 question
-  files show as "added" in its oldest commit, `5ef8b96` (a service
-  rename on 2026-10-29), which is just where the clone stops. Two files
-  were added in one commit (`double-each-character`,
-  `swap-case-with-helpers`), so even full history has ties. File
-  modification times are no better, since `git checkout` resets them.
-  Recommended: a **`created` field in each question file** (an ISO 8601
-  date and time), filled in once now from the full history on Kubuntu,
-  and written by whoever creates a question from then on. Ties are
-  broken by file name. It moves with the file when it's renamed. (The
-  alternative is one list file of all questions in creation order.)
-  Either way it changes the problem file format, so `readme.html`
-  section 5 gets updated with it.
-- **Pairs, not questions.** The backlog holds (question, language) pairs,
-  like `order.json`, with the same element shape minus `pass` and
-  `passesInARow`. Recommended order: by question (creation order), then
-  by the order of languages in the profile. Hello World in every allowed
-  language comes before the next question. The alternative, every
-  question in one language before the next language, is a per-course
-  matter later.
-- **When a pair moves from the backlog into the queue.** This has to be
-  decided, because a queue holding one pair always gives back that same
-  pair. Simulated 2026-11-03 (65 pairs, starting from an empty queue,
-  300 Submits, with 1.3^k ± 10%): with no rule beyond "when the queue is
-  empty", the same pair came back **299 times out of 300**. Results for a
-  rule of "keep at least 3 pairs in the queue, and add one more every N
-  Submits":
+### D7. Submit turns into Next
 
-  | N | Pairs added after 100 Submits | After 300 |
-  | --- | --- | --- |
-  | 3 | 35 | all 65 |
-  | 5 | 22 | 62 |
-  | 10 | 12 | 32 |
+**After a saved Submit the page stays on the results, so the learner can
+see what went wrong, and the Submit button itself turns into a Next
+button, rather than being grayed out with a second button beside it.**
 
-  (Whether 70% or all of the Submits passed made no difference to these
-  counts, since the rule counts Submits, not passes.) Recommended: **at
-  least 3 in the queue, and one more every 5 Submits**, in a file of
-  its own beside `advance.js`, **`introduce.js`** (owner), so it can later be made to
-  depend on how well the learner is doing, as MaxRecall's
-  `countUntilNextNewCard` does (32 Submits apart at 0% correct, 4 apart
-  at 100%).
-- **Where an introduced pair goes in the queue:** at the front, so it's
-  the next question, as in MaxRecall (`addNextBacklogFlashcardGuid`
-  `unshift`s it).
-- **How the backlog gets filled:** a function that appends every missing
-  pair (check 4) to the end of each user's `backlog.json`, in creation
-  order. Unlike removing references, adding is safe to do automatically:
-  recommended at server start, and when a profile allows a new language
-  (this answers D2's "where do a new language's pairs go"). A pair whose
-  question is later missing again is just skipped, as in `order.json`.
-- **A brand-new user:** everything starts in `backlog.json`, and
-  `order.json` starts empty.
-- **Counting Submits** for "every 5": it needs a counter that survives a
-  server restart. Recommended: a top-level field in `order.json` (e.g.
-  `submitsSinceLastIntroduced`), next to `schemaVersion`.
-
-The original options:
-
-- **(a) A backlog, introduced one at a time** (recommended), MaxRecall
-  style: one new pair every N answers. Order of the backlog: by
-  difficulty, then title, until there's a way to say which questions must
-  come first (the prerequisites question from 2026-10-30 is still open).
-  N: I'd start with a fixed 3 and leave MaxRecall's "faster when you're
-  doing well" scaling for later.
-- **(b) All new ones first**, then the review queue.
-- **(c) All new ones at the end.**
-
-### D7. What happens after a Submit?
-
-`TODO` says Submit should switch to the next problem. But the Results tab
-is how you see what went wrong.
-
-**What D1–D6 already fix:** a saved Submit updates the pair's `pass` and
-`passesInARow`, moves it with `advance.js`, counts towards
-`submitsSinceLastIntroduced`, and may bring a pair in from the backlog.
-"Next" is then whatever is at the front of `order.json`, skipping pairs
-whose question is missing (D5). With one queue (D2), **next may be in
-another language**.
-
-**Decided 2026-11-03 (owner): (a), but the Submit button turns into a
-Next button** once the Submit is saved, rather than being grayed out with
-a second button beside it.
-
-Details, all accepted by the owner on 2026-11-03:
-
-- **Per language, as now:** Submit becomes Next for the language just
+- **What Next opens:** a saved Submit has already updated the pair
+  (D3, D4) and may have brought a pair in from the backlog (D6). "Next"
+  is then the front of `order.json`, skipping pairs whose question is
+  missing (D5). With one queue (D2), next may be in another language.
+- **Per language, as now:** Submit turns into Next for the language just
   submitted. Switched to another language, it's Submit again, since
   that's another pair.
-- **What the button says:** recommended "Next" on the button, with what's
-  next in its tooltip ("Two Sum, in C++"), since a long label would push
-  the toolbar around. Or the full name on the button.
-- **Guarding against a double click:** Submit and Next are the same
-  button in the same place, so a second click on Submit while it's
-  judging could land on Next the moment the result arrives, and the
-  learner would leave before reading it. Recommended: Next does nothing
-  for the first second after it appears (and looks disabled for that
-  second).
-- **A reload** shows Submit again, as the grayed-out Submit is enabled
+- **"Next" on the button, what's next in its tooltip** ("Two Sum, in
+  C++"), since a long label would push the toolbar around.
+- **Next ignores clicks for its first second** (and looks disabled for
+  that second). Submit and Next are the same button in the same place, so
+  a second click on Submit while it's judging could otherwise land on
+  Next the moment the result arrives, and the learner would leave before
+  reading it.
+- **A reload shows Submit again,** as the grayed-out Submit is enabled
   again today: still a nudge, not a rule.
-- **A Submit that wasn't saved** leaves Submit as Submit.
-
-The original options:
-
-- **(a) Stay on the results, and show a "Next →" button** once the Submit
-  is saved, naming what's next, e.g. "Next: Two Sum (C++)"
-  (recommended). You read the results first, and a change of language
-  doesn't come as a surprise. The grayed Submit's tooltip ("Go back to
-  the list for the next question", issue #18) would point to the button
-  instead.
-- **(b) Go straight to the next question**, as `TODO` says. The results
-  are then only in the Submissions tab of the question you left.
-- **(c) Go on by itself after a few seconds**, with a way to stay.
-
-**Details, with recommendations:**
-
-- **The server decides what's next.** A new `GET /api/next` returns the
-  front pair. Bringing a pair in from the backlog happens when the Submit
-  is saved, not when "next" is asked for, so `GET /api/next` changes
-  nothing and asking twice gives the same answer. HTTP calls a GET
-  *safe* for that reason ([RFC 9110 §9.2.1](https://www.rfc-editor.org/rfc/rfc9110#section-9.2.1)).
-- **Which Submits count** (from D4, not yet confirmed): any saved Submit
-  of a pair moves that pair from wherever it is, since the learner can
-  open any question from the list, and Submits failed for other reasons
-  (judge busy, not saved) don't count.
-- **Opening a pair in a given language:** the page has no `?language=`
-  in its address today (it reads only `?slug=` and `?submission=`,
-  `problem-page.js`). "Next" needs one, e.g.
-  `problem.html?slug=two-sum&language=cpp`. It would choose the editor's
+- **A Submit that wasn't saved** (`saved: false`) moves nothing and stays
+  Submit.
+- **The server says what's next:** `GET /api/next` returns the front
+  pair. Bringing a pair in from the backlog happens when the Submit is
+  saved, not when "next" is asked for, so `GET /api/next` changes nothing
+  and asking twice gives the same answer. HTTP calls a GET *safe* for
+  that reason ([RFC 9110 §9.2.1](https://www.rfc-editor.org/rfc/rfc9110#section-9.2.1)).
+- **The page takes `?language=`** in its address, e.g.
+  `problem.html?slug=two-sum&language=cpp`; today it reads only `?slug=`
+  and `?submission=` (`problem-page.js`). It chooses the editor's
   language for that visit without changing the learner's default (as
-  Load from the Submissions tab already does), and be refused (shown as
-  a message) if the profile doesn't allow that language.
-- **Nothing left:** if the queue and backlog are both empty, the button
-  says so instead of going anywhere.
-- **The problem list:** shows the queue in order with each pair's
+  Load from the Submissions tab already does), and is refused (shown as a
+  message) if the profile doesn't allow that language.
+- **Nothing left:** if the queue and backlog are both empty, Next says so
+  instead of going anywhere.
+- **The problem list** shows the queue in order with each pair's
   language, then the backlog, marked "new". Opening any of them is still
   allowed.
-- **A Submit that wasn't saved** (`saved: false`) moves nothing and shows
-  no "Next →", because nothing changed.
+- This replaces issue #18's grayed-out Submit (`updateSubmitButton` in
+  `problem-page.js`), so `readme.html`'s Front end section changes when
+  it's built.
 
-### D8. What does Skip do?
+### D8. Skip counts as a fail, and is recorded
 
-**Decided 2026-11-03 (owner): Skip marks the current pair `pass` =
-`"no"`, then loads the next pair, as Next would. Skips are treated as the
-learner failing, and each Skip is saved as a submission record with a
-field `skipped` = `"yes"`; normally `skipped` is empty.**
+**Skip marks the current pair `"pass": "no"`, then loads the next pair,
+as Next would. Skips are treated as the learner failing, and each Skip is
+saved as a submission record with `"skipped": "yes"`; ordinary Submits
+leave the field out.**
 
 This **changes the 2026-10-29 decision** that Skips aren't recorded. A
 Skip record goes in the same folder as Submit records,
 `users/<email>/submissions/`. Check 6 (records agree) and the later
-recalculation read a Skip record as a fail, so the two sources of truth
-agree again.
-
-**Details, all accepted by the owner on 2026-11-03:**
+recalculation read a Skip record as a fail, so `order.json` and the
+records agree.
 
 - **Exactly like a failed Submit:** `passesInARow` goes to 0, the pair
   moves `advance(0)` places (about 1), and it counts towards
   `submitsSinceLastIntroduced`, so Skipping still brings in new pairs.
-- **After a saved Submit,** when the button already says Next, Skip is
-  hidden (or disabled), so a Skip can't overwrite the `"yes"` just
-  earned.
+- **Skip is hidden once the button says Next,** so a Skip can't overwrite
+  the `"yes"` just earned.
 - **A confirmation** ("Skipping resets your 9 passes in a row") only when
   `passesInARow` is more than 0.
 - **A pair still in the backlog,** opened from the problem list and then
@@ -600,25 +442,21 @@ agree again.
 - **The server does it:** `POST /api/questions/:slug/skip` with the
   language, which saves the record, updates `order.json` and answers with
   what's next.
-
-**Record details, accepted by the owner on 2026-11-03:**
-
-- **Ordinary Submits leave `skipped` out** (owner), so only a Skip record
-  has it, and records from before it are read the same way.
-- **`schemaVersion` 3** for records written once this is built. It's
-  separate from the record changes the owner is thinking through in
-  issues #19 and #24, as `elapsedMs` (version 2) was.
-- **What else a Skip record holds:** the same fields as a Submit, for one
-  shape of record: `submittedAt` (when it was skipped), `question`,
+- **Records go to `schemaVersion` 3** once this is built. It's separate
+  from the record changes the owner is thinking through in issues #19 and
+  #24, as `elapsedMs` (version 2) was. Records without `skipped` (all
+  ordinary Submits, and every record from before) aren't Skips.
+- **A Skip record has the same fields as a Submit,** for one shape of
+  record: `submittedAt` (when it was skipped), `question`,
   `questionSha256`, `language`, `judgeMode`, the editor's `code` at that
   moment, and `elapsedMs` from the timer. The code isn't judged, so
   `status`, `passed`, `total` and `runtimeMs` are `null`, `results` is
   `[]`, and `stdout` and `stderr` are `null`.
-- **The Submissions tab** lists Skips too, with "Skipped" as the verdict,
-  and Load still puts their code in the editor. `GET /api/submissions`
+- **The Submissions tab lists Skips** with "Skipped" as the verdict, and
+  Load still puts their code in the editor. `GET /api/submissions`
   summaries gain `skipped`.
-- **Which tab opens (Learning or Applying):** a Skip doesn't count as
-  having answered, so a pair with only Skips still opens on Learning.
+- **A Skip doesn't count as having answered,** so a pair with only Skips
+  still opens on the Learning tab, not Applying.
 - **Anything that reads `submissions/`** (the "your time" column, future
   statistics) has to check `skipped`, or it will count Skips as Submits.
 
