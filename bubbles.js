@@ -44,7 +44,9 @@ async function loadLabels() {
  * applied, and only through element.style, so a bad value in labels.json is
  * ignored rather than breaking the page.
  *
- * @param {unknown} value - The value to test.
+ * @param {string | undefined} value - A colour from labels.json, if it has
+ *   one. (Checked all the same: labels.json is edited by hand, so it could
+ *   hold anything.)
  * @returns {value is string} True for a string the browser accepts as a
  *   colour. (A type predicate: after a true result, the checker treats
  *   value as a string.)

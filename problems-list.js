@@ -7,7 +7,8 @@ const rowsEl = /** @type {HTMLElement} */ (document.getElementById('problem-rows
 /**
  * The CSS class for a difficulty badge.
  *
- * @param {unknown} difficulty - "Easy", "Medium" or "Hard", from the question.
+ * @param {string} difficulty - "Easy", "Medium" or "Hard", from the
+ *   question. (A missing one gives "difficulty-".)
  * @returns {string} e.g. "difficulty-easy" (style.css colours these).
  */
 function difficultyClass(difficulty) {

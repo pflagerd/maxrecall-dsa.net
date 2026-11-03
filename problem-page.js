@@ -977,7 +977,8 @@ async function handleLanguageChange(selectEl) {
 /**
  * A value from a test case, as shown in the console.
  *
- * @param {unknown} v - An input, expected or actual value.
+ * @param {unknown} v - An input, expected or actual value: any JSON value
+ *   (a number, an array, a string…), so it really can be anything.
  * @returns {string | undefined} Its JSON (undefined for undefined, which
  *   JSON.stringify gives back as undefined).
  */
@@ -989,7 +990,8 @@ function formatValue(v) {
 // compiler stderr) — unlike other fields here, that's text the submission's
 // author controls, so it's escaped before going into innerHTML.
 /**
- * @param {unknown} str - Text (converted with String()).
+ * @param {string} str - Text: an error message. (Passed through String()
+ *   all the same.)
  * @returns {string} The text with &, < and > escaped for HTML.
  */
 function escapeHtml(str) {
