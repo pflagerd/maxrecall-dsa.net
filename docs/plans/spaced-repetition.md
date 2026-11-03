@@ -20,6 +20,7 @@ each answer and what it changed.
 | 2026-11-03 | **D6 details (owner):** accepted all seven: a `created` field in each question file (ties broken by file name); the backlog holds (question, language) pairs, by question then by the profile's language order; at least 3 pairs kept in the queue, plus one more from the backlog every 5 Submits, in a function of its own beside `advance.js`; an introduced pair goes to the front; missing pairs are appended to backlogs automatically (server start, a newly allowed language); a new user starts with everything in the backlog; a `submitsSinceLastIntroduced` counter at the top of `order.json`. | D6 is fully decided. Settles D2's "pairs" detail and its "where a new language's pairs go". Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
 | 2026-11-03 | **D7 (owner):** (a), stay on the results after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. The D7 details below are still recommendations. |
 | 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. | Skip now changes `order.json`, though on 2026-10-29 Skips were decided not to be recorded. Unless Skips get a record of their own, check 6 (records agree) will report every Skip, and recalculating from the records will lose them. See D8. |
+| 2026-11-03 | **D2, D3 and D4 details (owner):** all accepted. D2: allowed and preferred fields kept apart in `profile.json`; Run and Submit refuse a language the profile doesn't allow (`403`); no `profile.json` means all five languages, switching allowed; a removed language's pairs are skipped, not deleted; the two `localStorage` language settings go. D3: `pass` decided in one function; only exactly `"yes"`/`"no"` accepted; no `pass` on a pair never submitted; `order.json` updated only after the Submit record is saved. D4: at least 1 place; `advance.js` only works out how many places (a move past the end goes last); the random function is passed in; CommonJS; any saved Submit of a pair moves it, wherever it is. | D1–D6 are fully decided. Still open: the D7 and D8 details, chiefly whether Skips get a record of their own. Steps rewritten. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -147,8 +148,8 @@ The original options:
 
 **Decided 2026-11-03 (owner): one queue for everything**, with a per-user
 profile, `users/<email>/profile.json`, deciding which languages a learner has
-and whether they may switch languages or set a default. Details still
-open:
+and whether they may switch languages or set a default. Details, all
+accepted by the owner on 2026-11-03:
 
 - **What an element is:** recommended a **(question, language) pair**,
   e.g. `{"question": "two-sum", "language": "python"}`, keeping the
@@ -190,7 +191,8 @@ The original options:
 
 **Decided 2026-11-03 (owner): right = `Accepted`, recorded as
 `"pass": "yes"` or `"pass": "no"` in the element's entry in
-`order.json`. No "how easy".** Notes and details still open:
+`order.json`. No "how easy".** Notes and details, all accepted by the
+owner on 2026-11-03:
 
 - **Timeouts already fail.** The judge returns `Time Limit Exceeded` with
   `passed: 0` (`judge/runner.js`, the `outcome.timedOut` branch), and
@@ -229,8 +231,9 @@ The original options:
 ### D4. How far does a pair move?
 
 **Decided 2026-11-03 (owner): 1.3^k ± 10%, in `advance.js`**, as a
-starting point to be changed over time. Details still open, with
-recommendations:
+starting point to be changed over time. Details, all accepted by the
+owner on 2026-11-03 (stochastic rounding and `passesInARow` being the
+owner's own):
 
 - **What k is** (owner): correct in a row, kept in the element as
   **`passesInARow`**. As I read it: a Submit first updates the counter
@@ -238,7 +241,7 @@ recommendations:
   new value, so k includes this Submit.
 - **Rounding** (owner): **stochastic rounding**. A value like 1.3 becomes
   2 with probability 0.3 and 1 otherwise, so the *average* move is
-  exactly 1.3^k × (1 ± 10%). Recommended still **at least 1** place, so a
+  exactly 1.3^k × (1 ± 10%). **At least 1** place (owner), so a
   pair never comes straight back: after a fail, 0.9 to 1.1 would
   otherwise round down to 0 some of the time.
 - **What `advance.js` does:** only works out *how many places*. Moving
@@ -612,21 +615,42 @@ The original options:
 - **The server does it:** a `POST /api/questions/:slug/skip` with the
   language, which updates `order.json` and answers with what's next.
 
-## Steps (once decided)
+## Steps
 
-Each step is small and checkable on its own. **To be rewritten** once
-D1–D8 are through: D1 and D2 have already changed them (a stored `order`
-file instead of a replay, and a `profile.json` that has to come first,
-since it decides which languages are in the queue).
+Rewritten 2026-11-03, after D1–D8. Each step is small, checkable on its
+own, and merged before the next starts. Tests use Node's built-in test
+runner ([`node:test`](https://nodejs.org/docs/latest-v22.x/api/test.html)),
+each checked to fail against a deliberately wrong version first.
 
-1. **`scheduler.js`**: a pure function, roughly
-   `buildQueue(questions, submissions, language)` returning the ordered
-   pairs with each one's streak and whether it's new. No server or page
-   changes. Tested with Node's built-in test runner
-   ([`node:test`](https://nodejs.org/docs/latest-v22.x/api/test.html)),
-   including a test that fails against a deliberately wrong rule.
-2. **`GET /api/queue?language=`** in `server.js`, built from the user's
-   records.
-3. **Problem list** in queue order for the current language.
-4. **"Next question" and Skip** on the problem page (D7, D8).
-5. Later: `elapsedMs` (D3 b), time away (D1 c), prerequisites.
+1. **`advance.js`**: `advance(k, random = Math.random)` returns how many
+   places, 1.3^k ± 10%, stochastically rounded, at least 1. Nothing uses
+   it yet. Tests with fixed "random" numbers, and a statistical one that
+   the average over many runs is close to 1.3^k. Needs only D4, so it can
+   start now.
+2. **The introduction rule**, a file of its own beside `advance.js`
+   (name to choose, e.g. `introduce.js`): given the queue's length and
+   `submitsSinceLastIntroduced`, whether to bring in a backlog pair
+   (fewer than 3 in the queue, or 5 Submits since the last). Tests.
+3. **`created` in every question file**, filled in by the owner on
+   Kubuntu from the full git history (the `git log --diff-filter=A`
+   command in D6); `readme.html` section 5 updated.
+4. **`profile.json`**: read it (no file means all five languages,
+   switching allowed); Run and Submit refuse a language it doesn't allow
+   (`403`); the page's language menu and default language come from it,
+   replacing the two `localStorage` settings.
+5. **`order.json` and `backlog.json`**: reading with validation, safe
+   writing, and filling each user's backlog with missing pairs at server
+   start. Nothing changes them on Submit yet.
+6. **Submit updates the queue**, after the record is saved: `pass`,
+   `passesInARow`, the move from `advance.js`, the introduction rule, and
+   a backlog pair moving into the queue when it's submitted.
+7. **Next**: `GET /api/next`, `?language=` in the page address, and
+   Submit turning into Next (with the one-second guard).
+8. **Skip**: `POST /api/questions/:slug/skip`, and a Skip record if D8 (a)
+   is chosen.
+9. **The problem list** in queue order, then the backlog, marked "new".
+10. **`consistency.js`**, its `make` target and the log at server start.
+11. **`make delete-question` and `make rename-question`**, with
+    `questions/renames.json`.
+12. Later: recalculating from the records, courses, dependencies, and an
+    introduction rule that depends on how well the learner is doing.
