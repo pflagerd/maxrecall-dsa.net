@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -58,6 +58,12 @@ dev: build
 TEST_FILES := $(wildcard *.test.js)
 test: toolchain-deps
 	node --test $(TEST_FILES)
+
+# Checks the JSDoc types in the files tsconfig.json lists, with TypeScript
+# (a development dependency, so it needs npm install, hence node_modules).
+# Compiles nothing. Fails (make prints an Error line) if a type doesn't match.
+typecheck: node_modules
+	./node_modules/.bin/tsc -p tsconfig.json
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine
