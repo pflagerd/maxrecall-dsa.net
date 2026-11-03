@@ -30,6 +30,7 @@ const path = require('path');
 const { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS } = require('./runner');
 const { sandboxStatus, describeSandbox, RUN_LIMITS } = require('./sandbox');
 const cgroupsModule = require('./cgroups');
+const queue = require('./queue');
 const { cgroupStatus, MEMORY_LIMIT_MB } = cgroupsModule;
 
 // For G12's report: the last submission cgroup's memory figures (peak,
@@ -539,6 +540,58 @@ function compilerPids() {
   return pids;
 }
 
+// How many processes this one has as direct children right now. Each
+// judging has exactly one at a time (its compiler or its run: bwrap, or the
+// cgroup wrapper or setpriv in front of it, which exec into it).
+function countChildren() {
+  let count = 0;
+  for (const entry of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      // /proc/<pid>/stat: "pid (comm) state ppid ...". comm may contain
+      // spaces, so read after its closing parenthesis.
+      const stat = fs.readFileSync(`/proc/${entry}/stat`, 'utf8');
+      if (Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]) === process.pid) count += 1;
+    } catch {
+      // Gone already.
+    }
+  }
+  return count;
+}
+
+// G9: many judgings at once. 20 start together, each sleeping 0.5 s: at
+// most MAX_RUNNING may run at the same moment, MAX_WAITING more wait, and
+// the rest must be refused with "busy" straight away (judge/queue.js). How
+// many really run together is measured from outside the queue, by sampling
+// this process's children every 50 ms, so a bypassed queue shows as
+// ESCAPED rather than relying on the queue's own count.
+async function runConcurrencyProbe() {
+  const total = 20;
+  queue.resetPeak();
+  const started = Date.now();
+  let observedPeak = 0;
+  const sampler = setInterval(() => { observedPeak = Math.max(observedPeak, countChildren()); }, 50);
+  const outcomes = await Promise.allSettled(Array.from({ length: total }, () => runSubmission({
+    language: 'python',
+    code: 'import time\ndef probe():\n    time.sleep(0.5)\n    return "ok"\n',
+    functionName: 'probe',
+    testCases: [{ args: [], expected: 'ok', hidden: false }],
+    judgeMode: 'function',
+  })));
+  clearInterval(sampler);
+  const { maxRunning, maxWaiting, peakRunning } = queue.queueStats();
+  const busy = outcomes.filter((o) => o.status === 'rejected' && o.reason && o.reason.code === 'JUDGE_BUSY').length;
+  const accepted = outcomes.filter((o) => o.status === 'fulfilled' && o.value.status === 'Accepted').length;
+  const other = total - busy - accepted;
+  const expectedBusy = Math.max(0, total - maxRunning - maxWaiting);
+  const detail = `${total} at once: at most ${observedPeak} ran together (limit ${maxRunning}; the queue counted ${peakRunning}), ${accepted} judged, ${busy} refused as busy (expected ${expectedBusy})${other ? `, ${other} other` : ''}`;
+  const runtimeMs = Date.now() - started;
+  if (observedPeak > maxRunning) return { verdict: 'ESCAPED', detail, runtimeMs };
+  if (observedPeak === 0) return { verdict: 'inconclusive', detail: `${detail}; no judgings were seen running`, runtimeMs };
+  if (busy !== expectedBusy || other) return { verdict: 'inconclusive', detail, runtimeMs };
+  return { verdict: 'contained', detail, runtimeMs };
+}
+
 async function runSlowCompileProbe() {
   const before = new Set(compilerPids());
   const newCompilers = () => compilerPids().filter((pid) => !before.has(pid));
@@ -621,6 +674,10 @@ async function main() {
     const compileOutcome = await runCompileProbe(canaryHeader);
     process.stdout.write(`${compileOutcome.verdict}\n`);
     outcomes.push({ id: 'G7', what: 'read a host file at compile time (C++ #include)', ...compileOutcome });
+    process.stdout.write('G9 ... ');
+    const concurrencyOutcome = await runConcurrencyProbe();
+    process.stdout.write(`${concurrencyOutcome.verdict}\n`);
+    outcomes.push({ id: 'G9', what: 'have many submissions judged at once (judge queue)', ...concurrencyOutcome });
     process.stdout.write('G10 ... ');
     const slowCompileOutcome = await runSlowCompileProbe();
     process.stdout.write(`${slowCompileOutcome.verdict}\n`);
@@ -639,7 +696,6 @@ async function main() {
   }
   const counts = outcomes.reduce((acc, o) => ({ ...acc, [o.verdict]: (acc[o.verdict] || 0) + 1 }), {});
   console.log(`\n${outcomes.length} probes: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ')}.`);
-  console.log('G9 (concurrent Runs) is not probed here; see docs/plans/sandboxing.md step 8.');
   process.exitCode = outcomes.every((o) => o.verdict === 'contained' || o.verdict === 'skipped') ? 0 : 1;
 }
 

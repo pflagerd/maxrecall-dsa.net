@@ -1,10 +1,11 @@
 # Plan: sandbox submitted code
 
-Status: **D1–D6 decided 2026-11-02 (owner: all as recommended). Steps 0–7
-done (step 7 on 2026-11-03), plus a CPU-time limit and a total time budget
-for program mode. The sandbox works in the cloud, on Kubuntu 26.04, and in
-the VPS's systemd service, with seccomp everywhere and cgroup limits in the
-service. Next: step 8.** The VPS part of step 5 (AppArmor) moved
+Status: **All eight steps done (0–6 on 2026-11-02, 7–8 on 2026-11-03), plus
+a CPU-time limit and a total time budget for program mode. D1–D6 decided by
+the owner, all as recommended. The sandbox works in the cloud, on Kubuntu
+26.04, and in the VPS's systemd service, with seccomp everywhere, cgroup
+limits in the service, and a judge queue. What's left is in §8 (residual
+risk) and readme.html's Known gaps.** The VPS part of step 5 (AppArmor) moved
 into step 2; see “Step 2 notes”.
 Linked from `readme.html` → Decisions & plans.
 
@@ -262,7 +263,7 @@ Notes:
 | 5 | **Done 2026-11-02.** Kubuntu: `make sandbox-test` 13/13. VPS: AppArmor profile loaded by `sandbox-deps`, toolchains by `toolchain-deps`; the escape test in root's checkout gave 12 contained, 1 skipped (G6d, 2 cores); the service, set up by `make deploy-server`, runs with `Sandbox: … works` once the unit dropped `ProtectKernelTunables=yes`. | See the “Step 5” notes below. |
 | 6 | **Done 2026-11-02.** Seccomp denylist (D4), built with libseccomp at startup, applied with `bwrap --seccomp`. | G11 contained (mode 2, all four calls refused); escape test 14/14 in the cloud (as root and as `nobody`) and on Kubuntu 26.04; the VPS service reports `works` with the filter checked. All languages Accepted, starter verdicts unchanged. See “Step 6 notes”. |
 | 7 | **Done 2026-11-03.** cgroup v2 per submission in the VPS service (D5): 768 MB, no swap, 128 tasks, 1 CPU. | VPS escape test in a service-like unit: 14 contained, 1 skipped, G12 OOM-killed at 768 MB. The service itself, after `make deploy-server` at `f51edc5`: `Sandbox: … cgroup limits per submission: 768 MB, no swap, 128 tasks, 1 CPU`. See “Step 7 notes”. |
-| 8 | A concurrency limit in `handleExecution` (a queue of N judgings) (G9). | 20 parallel Runs don't starve the server. |
+| 8 | **Done 2026-11-03.** A queue in the server (`judge/queue.js`): min(cores, 4) at once, 10 waiting, then 503 + `Retry-After` (G9). | G9: 20 at once, at most 4 together (here; 2 on the VPS), 14 judged, 6 busy; ESCAPED with the queue bypassed. Real server: 14 × 200, 6 × 503. See “Step 8 notes”. |
 
 Each step updates `readme.html` (Judging, Known gaps, Environments,
 Decisions) in the same commit.
@@ -939,6 +940,35 @@ io_uring_setup, kcmp, keyctl, ptrace`.
   swap, 128 tasks, 1 CPU`. That line needs the startup self-test to have
   run inside a test cgroup and been counted there. Ports are still
   127.0.0.1 only. **Step 7 is complete.**
+
+### Step 8 notes (2026-11-03, branch `judge-queue`)
+
+- **Owner's numbers:** at most min(core count, 4) judgings at once (2 on
+  the VPS, 4 here); up to 10 waiting, first come first served; beyond that
+  HTTP 503 with `Retry-After: 5` (RFC 9110 §10.2.3) and “The judge is busy
+  (… running, … waiting); try again in a few seconds.”
+- **How:** `judge/queue.js` is a semaphore. The server is one Node process
+  running one piece of JavaScript at a time, so a counter and a waiting
+  list are enough. A finishing judging hands its slot straight to the
+  oldest waiter. `runSubmission` checks the sandbox first (still 503 if
+  it's unavailable), then waits for a slot. A judging's clock starts inside
+  its slot, so waiting doesn't count against its limits. The server logs
+  `Judge queue: at most N judgings at once, 10 more waiting; …` at
+  startup.
+- **Probe G9:** 20 judgings at once, each sleeping 0.5 s. It measures how
+  many really run together **from outside the queue**, by sampling this
+  process's direct children in `/proc` every 50 ms; each running judging has
+  exactly one at a time. My first version used the queue's own counter,
+  which a bypassed queue would never move. A bypassed queue would then have
+  read as *inconclusive*, not ESCAPED. Results:
+  - here, with the queue: at most 4 together (the limit), 14 judged, 6
+    refused as busy, exactly as expected;
+  - queue bypassed for a moment: **at most 20 together**, so ESCAPED, as
+    it should be;
+  - through the real server: 20 simultaneous Runs on the trusted port gave
+    14 × 200 and 6 × 503, with `Retry-After: 5`.
+- Escape test here: 16 probes, 15 contained, 1 skipped (G12, no cgroups
+  here).
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 

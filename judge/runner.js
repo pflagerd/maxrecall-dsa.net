@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const cgroups = require('./cgroups');
+const { withJudgeSlot } = require('./queue');
 const { SUBMISSION_ENV, RUN_LIMITS, CPU_LIMIT_EXIT_CODE, HELPER_DIR, HELPER_SANDBOX_PATH, findOnPath, sandboxStatus, sandboxedRun, spawnSandboxed, prepareWorkDir, assertJudgingAllowed } = require('./sandbox');
 
 // Shown when a run is stopped by the CPU-time limit rather than the clock.
@@ -880,11 +881,14 @@ async function runProgramSubmission({ language, code, testCases }) {
 // no judgeMode field at all) keep behaving exactly as before.
 // Throws SandboxUnavailableError (err.code 'SANDBOX_UNAVAILABLE') first if
 // the sandbox isn't working and MAXRECALL_UNSANDBOXED=1 isn't set.
+// Then it waits for a slot in the judge's queue (judge/queue.js), and
+// rejects with JudgeBusyError (err.code 'JUDGE_BUSY') if the queue is full.
+// The judging's own clock starts once it has a slot.
 function runSubmission({ language, code, functionName, testCases, signature, judgeMode }) {
   assertJudgingAllowed();
-  return judgeMode === 'program'
+  return withJudgeSlot(() => (judgeMode === 'program'
     ? runProgramSubmission({ language, code, testCases })
-    : runFunctionSubmission({ language, code, functionName, testCases, signature });
+    : runFunctionSubmission({ language, code, functionName, testCases, signature })));
 }
 
 module.exports = { runSubmission, TIMEOUT_MS, CPP_COMPILE_TIMEOUT_MS, D_COMPILER };

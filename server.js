@@ -15,6 +15,7 @@ try {
 
 const { runSubmission } = require('./judge/runner');
 const { describeSandbox } = require('./judge/sandbox');
+const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
@@ -260,8 +261,11 @@ async function handleExecution(req, res, { onlyVisible }) {
     res.json(result);
   } catch (err) {
     // 503 Service Unavailable: the server is fine, but judging is turned
-    // off until its sandbox works (judge/sandbox.js).
-    const httpStatus = err.code === 'SANDBOX_UNAVAILABLE' ? 503 : 500;
+    // off until its sandbox works (judge/sandbox.js), or the judge's queue
+    // is full for now (judge/queue.js), in which case Retry-After says
+    // when to try again (RFC 9110, section 10.2.3).
+    const httpStatus = err.code === 'SANDBOX_UNAVAILABLE' || err.code === 'JUDGE_BUSY' ? 503 : 500;
+    if (err.code === 'JUDGE_BUSY') res.set('Retry-After', String(err.retryAfterSeconds));
     res.status(httpStatus).json({ error: err.message || 'Execution failed' });
   }
 }
@@ -337,6 +341,7 @@ app.listen(PORT, HOST, () => {
   console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
   console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
   console.log(`Sandbox: ${describeSandbox()}`);
+  console.log(`Judge queue: at most ${MAX_RUNNING} judgings at once, ${MAX_WAITING} more waiting; beyond that Run and Submit get 503`);
 });
 
 if (TRUSTED_PORT !== null) {
