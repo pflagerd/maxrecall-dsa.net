@@ -14,6 +14,7 @@ each answer and what it changed.
 | 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**. k is **"correct in a row"**, kept in a counter called **`passesInARow`**, tracked as part of the queue element in `order.json`. The function goes in its own file, **`advance.js`** (the name is for now). D4 will become much more nuanced over time; this is a starting point. | Replaces the 2^k table proposed in D4. An element now has at least `question`, `pass` and `passesInARow`, so it's an object, settling D1's "element shape" detail. With stochastic rounding a fail and a first pass differ on average (1.03 vs 1.30 places). D4's open details below, including what this rule does on a 65-element queue. |
 | 2026-11-03 | **D1 details (owner):** accepted all four: `order.json`, elements are objects, a top-level `schemaVersion`, and safe writes (temporary file, then `rename()`; no `await` between reading and writing). | D1 is fully decided. `profile` vs `profile.json` (D2) is still open. |
 | 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. When a question is deleted, it **must be deleted from `order.json` too**. There will be a **function that checks consistency between the sources of truth**. | D5 is decided. New piece of work: a consistency check over `questions/`, `order.json`, the Submit records and the profile (details in D5). How a deleted question leaves `order.json` is still open. |
+| 2026-11-03 | **D5 details (owner):** (1) the consistency check **only reports**. (2) Not a "repair" command but a function that **removes references to a question** from `order.json`, run **when a question is deleted**. (3) The check is a pure function in its own file, run by a `make` target and logged at server start. (4) **Renaming a question updates references to it** in `order.json`, so its progress isn't lost. **D2 detail (owner):** the profile is **`profile.json`**. | Two functions to build alongside the check: remove references, and update references. Still open: what triggers them (a question is a file in `questions/`, so deleting or renaming one is a file operation that nothing in the server sees), and how old Submit records, which keep the old name, are linked to the new one. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -140,7 +141,7 @@ The original options:
 ### D2. One queue per language, or one for everything?
 
 **Decided 2026-11-03 (owner): one queue for everything**, with a per-user
-profile, `users/<email>/profile`, deciding which languages a learner has
+profile, `users/<email>/profile.json`, deciding which languages a learner has
 and whether they may switch languages or set a default. Details still
 open:
 
@@ -149,8 +150,7 @@ open:
   2026-10-30 design that progress is per (question, language). The
   alternative, one element per question with the language picked from
   the profile when it comes up, would lose per-language progress.
-- **File name:** `profile` or `profile.json` (same question as D1's
-  `order`).
+- **File name:** `profile.json` (owner, 2026-11-03).
 - **Who may change what:** recommended keeping two kinds of field apart in
   the profile: what the learner is *allowed* (languages, may they switch,
   may they set a default), set by the owner or a teacher; and what the
@@ -162,7 +162,7 @@ open:
   from anyone. Recommended: Run and Submit refuse a language the profile
   doesn't allow (a `403`), so "no access" is real and not only a hidden
   menu item.
-- **No profile file:** what a user with no `profile` gets. Recommended:
+- **No profile file:** what a user with no `profile.json` gets. Recommended:
   all five languages, may switch, so the owner's current setup keeps
   working until a profile is written.
 - **When the profile changes:** a language added means its pairs have to
@@ -322,7 +322,7 @@ consistency between the sources of truth.
 | Source | Owns |
 | --- | --- |
 | `questions/*.json` | Which questions exist, and which languages each has (`starterCode`) |
-| `users/<email>/profile` | Which languages this learner has |
+| `users/<email>/profile.json` | Which languages this learner has |
 | `users/<email>/submissions/*.json` | What was submitted and how it was judged (the history; never changed) |
 | `users/<email>/order.json` | The queue order, and each pair's `pass` and `passesInARow` |
 
@@ -349,23 +349,53 @@ wrong):
    records but no `pass`, or a `pass` with no records, is reported.
    Check 6 is also the core of the later "recalculate from the records".
 
-**Recommendations, waiting for the owner:**
+**Decided 2026-11-03 (owner):**
 
-- **The check only reports; it never changes anything.** Fixing is a
-  separate, deliberate step. Reason: a question file can be missing for
-  a harmless reason. Checking out a branch that doesn't have it yet, for
-  instance, would otherwise wipe that question's progress from
-  `order.json`.
-- **So a deleted question leaves `order.json` through an explicit
-  repair command** that removes the elements check 3 reported (and shows
-  what it removed), not automatically. Until then, the server skips such
-  elements when choosing the next question.
+- **The check only reports; it never changes anything.** Reason: a
+  question file can be missing for a harmless reason. Checking out a
+  branch that doesn't have it yet, for instance, would otherwise wipe
+  that question's progress from `order.json`. Until something removes
+  them, the server skips elements whose question is missing when
+  choosing the next question.
 - **Where it lives and when it runs:** a pure function in its own file
   (e.g. `consistency.js`) that takes the four sources and returns a list
-  of findings. It's run by a `make` target for the owner, and once at
-  server start, logging what it finds without refusing to start.
-- **Renaming a question file** looks like a deletion plus a new question,
-  so its progress would be lost. Worth knowing before renaming one.
+  of findings, run by a `make` target, and once at server start, logging
+  what it finds without refusing to start.
+- **Deleting a question → remove references to it** from `order.json`,
+  a function that runs when a question is deleted.
+- **Renaming a question → update references to it** in `order.json`,
+  so the pair keeps its place, `pass` and `passesInARow`.
+
+**Open, with recommendations:**
+
+- **What triggers the two functions.** A question is a file, and
+  deleting or renaming it (`git rm`, `git mv`, or by hand) is invisible
+  to the server. Recommended: **commands that do the whole job**, e.g.
+  `make delete-question SLUG=…` and `make rename-question FROM=… TO=…`.
+  Rename would `git mv` the file, change its `slug` field to match, and
+  update every user's `order.json`. Delete would `git rm` it and remove
+  the references from every user's. Each also works when the file
+  change has *already* happened. That case matters: the VPS gets the
+  change by `git pull`, which renames or deletes the file but not the
+  references in its own `/srv/maxrecall/data/users`. There, the same
+  commands would update only the references.
+- **Every user, not one:** both functions go through every
+  `users/*/order.json`, since a question belongs to everyone.
+- **Old Submit records after a rename.** Records are never changed, so
+  they keep the old name in `question`. Then check 6 and the later
+  "recalculate from the records" would no longer find that history.
+  Recommended: a **rename log**, e.g. `questions/renames.json` holding
+  `{"old-name": "new-name"}` entries, which the check and the
+  recalculation follow. It's committed with the rename, so it reaches
+  the VPS by `git pull`, and the check there can report "uses the old
+  name, renamed to …".
+- **Old Submit records after a delete:** kept as history. The check
+  ignores records whose question no longer exists rather than reporting
+  them every time.
+- **Smaller effects of a rename:** a bookmarked old address
+  (`problem.html?slug=…`) stops working, and the file's SHA-256 changes
+  (its `slug` field changed), so old records show the question as edited
+  since, which is true.
 
 - **(a) Work it out from the Submit records each time** (recommended).
   Replay every Submit for that language in time order through the rules
@@ -419,7 +449,7 @@ so with D5 (a) a Skip can't change the order.
 
 Each step is small and checkable on its own. **To be rewritten** once
 D1–D8 are through: D1 and D2 have already changed them (a stored `order`
-file instead of a replay, and a `profile` file that has to come first,
+file instead of a replay, and a `profile.json` that has to come first,
 since it decides which languages are in the queue).
 
 1. **`scheduler.js`**: a pure function, roughly
