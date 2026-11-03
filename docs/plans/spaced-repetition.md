@@ -1,7 +1,14 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **in planning, 2026-11-03.** Nothing is built yet. Decisions D1–D8
-below are waiting for the owner.
+Status: **in planning, 2026-11-03.** Nothing is built yet. The owner is
+going through D1–D8 one at a time; the decision log just below records
+each answer and what it changed.
+
+## Decision log
+
+| Date | Decision | Effect on the rest of the plan |
+| --- | --- | --- |
+| 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order` holds one queue per language or one with a language in each element. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -87,6 +94,33 @@ Each has a recommendation; none is built until you choose.
 
 ### D1. Queue positions or due dates?
 
+**Decided 2026-11-03 (owner): (a), queue positions, stored in a file
+`order` in the user's directory, as described in the decision log.**
+Details still open:
+
+- **File name:** `order` or `order.json`? Recommended `order.json`, the
+  same as every other JSON file in the project, so editors and tools
+  recognise it.
+- **Element shape:** recommended an object, e.g. `{"question": "two-sum"}`,
+  not a bare string as in MaxRecall's `guidOrder.json`. Then the fields
+  still to be decided can be added later without changing what an
+  element *is*.
+- **Version:** recommended a top-level `schemaVersion`, as Submit records
+  have, so a later change of format can be recognised.
+- **Name equals slug:** on 2026-11-03 all 13 question files had `slug`
+  equal to the file name, and `loadProblem` in `server.js` finds a
+  question by file name. Submit records' `question` field is the same
+  value, so the queue and the records refer to questions the same way.
+- **Writing it safely:** write a temporary file and `rename()` it over
+  `order.json`, so a crash never leaves half a file. Here replacing the
+  file is the point, so `rename()` is right (unlike Submit records, which
+  use `link()` so they *can't* be replaced). Reading, changing and writing
+  it should happen with no `await` in between, so two Submits from two
+  tabs can't each read the old queue and one overwrite the other's change
+  (a lost update).
+
+The original options:
+
 - **(a) Queue positions, like MaxRecall** (recommended). It's what `TODO`
   describes ("moved down the list by some number of problems"), you
   already know how it behaves, and it works with a small bank: there's
@@ -139,6 +173,12 @@ No randomization at first (see D5 for why). These would be named constants
 in one place, so they're easy to tune.
 
 ### D5. Store the queue, or work it out from the records?
+
+**Mostly settled by D1 (2026-11-03): stored**, in `users/<email>/order`.
+Still to discuss: what happens when the file and the records disagree
+(e.g. Submit records copied in from the VPS with `rsync`, or a question
+added to or removed from `questions/`), and whether there should be a way
+to rebuild `order` from the records.
 
 - **(a) Work it out from the Submit records each time** (recommended).
   Replay every Submit for that language in time order through the rules
