@@ -151,7 +151,7 @@ never a shared server). <code>make run</code> and <code>make dev</code> install 
   <tr><td><code>style.css</code></td><td>Shared styles.</td></tr>
   <tr><td><code>TODO</code>, <code>THOUGHTS</code></td><td>Owner's notes: planned work and design philosophy.</td></tr>
   <tr><td><code>docs/plans/</code></td><td>Plans for larger changes, linked from Decisions &amp; plans.</td></tr>
-  <tr><td><code>docs/&lt;YYYYMMDDTHHMMSS-TZ&gt;.session-handoff.md</code></td><td>Dated snapshots for starting a new Claude Code session: the state at that time, what to leave alone, and how we work. Not kept up to date; where one disagrees with this page, this page wins.</td></tr>
+  <tr><td><code>docs/session-handoff.&lt;YYYYMMDDTHHMMSS±HHMM&gt;.md</code></td><td>Dated snapshots for starting a new Claude Code session: the state at that time, what to leave alone, and how we work. <code>CLAUDE.md</code> says to read the newest at the start of a session. Not kept up to date; where one disagrees with this page, this page wins.</td></tr>
   <tr><td><code>scripts/deploy-server.sh</code></td><td>Sets up or updates the systemd service (<code>make deploy-server</code>).</td></tr>
   <tr><td><code>scripts/toolchain-deps.sh</code></td><td>Installs the toolchains from <code>docs/deploy-vps.md</code> §1–§2 if missing (<code>make toolchain-deps</code>).</td></tr>
   <tr><td><code>scripts/sandbox-deps.sh</code></td><td>Installs and checks the judge's sandbox dependencies (<code>make sandbox-deps</code>). Used by <code>make</code> and by the cloud SessionStart hook.</td></tr>

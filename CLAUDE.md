@@ -39,6 +39,11 @@ Teaching them what you're doing comes first. Speed comes second.
   known gaps and decisions. Read it at the start of a session.
 - Keep it true: update it in the same commit as any change that makes it out
   of date, following its "Maintaining this file" section.
+- Also at the start of a session, read the newest
+  `docs/session-handoff.*.md`. Its name ends in a `YYYYMMDDTHHMMSS±HHMM`
+  timestamp (local time, then its offset from UTC), so the last one by name
+  is the newest. It's a dated snapshot: where it disagrees with
+  `readme.html`, `readme.html` wins.
 
 ### Continuity between machines
 - Work happens in both Claude Code cloud sessions and a local
