@@ -10,7 +10,7 @@ const path = require('path');
 try {
   process.loadEnvFile(path.join(__dirname, '.env'));
 } catch (err) {
-  if (err.code !== 'ENOENT') throw err;
+  if (/** @type {NodeJS.ErrnoException} */ (err).code !== 'ENOENT') throw err;
 }
 
 const { runSubmission } = require('./judge/runner');
@@ -19,6 +19,81 @@ const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission } = require('./users');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
+
+/**
+ * Express's request, plus what this server adds to it: who the request is
+ * from (set by the first middleware below), and whether it came in on the
+ * trusted listener.
+ *
+ * @typedef {import('express').Request & { userEmail?: string | null, viaTrustedPort?: boolean }} AppRequest
+ */
+
+/** @typedef {import('express').Response} Response */
+/** @typedef {import('./users').SavedSubmission} SavedSubmission */
+/** @typedef {import('./auth').AuthResult} AuthResult */
+
+/**
+ * One test case in a question file. Function mode has args, program mode
+ * has input (readme.html, "Problem file format").
+ *
+ * @typedef {object} TestCase
+ * @property {unknown[]} [args] - Function mode: the arguments to call with.
+ * @property {string} [input] - Program mode: the program's standard input.
+ * @property {unknown} expected - The expected return value (function mode)
+ *   or standard output (program mode).
+ * @property {boolean} [hidden] - True if it's only used by Submit, and never
+ *   sent to the browser.
+ */
+
+/**
+ * A question file, questions/<slug>.json, as far as the server uses it.
+ * Fields shown only by the page (description, learning, examples,
+ * constraints) aren't listed; they're passed through unchanged.
+ *
+ * @typedef {object} Problem
+ * @property {string} slug - Its id; should match the file name.
+ * @property {string} title
+ * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string[]} topics
+ * @property {string[]} sources
+ * @property {string} [judgeMode] - "function" (the default) or "program".
+ * @property {Record<string, string>} starterCode - By language; a language
+ *   missing here can't be submitted for this question.
+ * @property {Record<string, string>} [functionName] - Function mode: the
+ *   function to call, by language.
+ * @property {Record<string, { params: string[], returns: string }>} [signature] -
+ *   Function mode, cpp/java/d only: the types the harness needs.
+ * @property {TestCase[]} testCases
+ */
+
+/**
+ * One line of the problem list (GET /api/questions).
+ *
+ * @typedef {Pick<Problem, 'slug' | 'title' | 'difficulty' | 'topics' | 'sources'>} ProblemSummary
+ */
+
+/**
+ * One line of the Submissions tab (GET /api/submissions): a saved Submit
+ * without its code, stdout and stderr.
+ *
+ * @typedef {object} SubmissionSummary
+ * @property {string} id
+ * @property {string} submittedAt
+ * @property {string} question
+ * @property {string} language
+ * @property {string} status
+ * @property {number} passed
+ * @property {number} total
+ * @property {number} runtimeMs
+ * @property {number | null} elapsedMs - null if the record doesn't have it.
+ */
+
+/**
+ * What the judge can throw (judge/sandbox.js, judge/queue.js): an Error
+ * whose code says when the server should answer 503 rather than 500.
+ *
+ * @typedef {Error & { code?: string, retryAfterSeconds?: number }} JudgeError
+ */
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +125,15 @@ app.use(express.json());
 
 const SESSION_COOKIE = 'maxrecall_session';
 
+/**
+ * One cookie's value from the request's Cookie header. Written here rather
+ * than taken from a library, as only the session cookie is needed.
+ *
+ * @param {import('express').Request} req - The request.
+ * @param {string} name - The cookie's name.
+ * @returns {string | null} Its value, URL-decoded, or null if it isn't there
+ *   or can't be decoded.
+ */
 function readCookie(req, name) {
   for (const part of (req.headers.cookie || '').split(';')) {
     const eq = part.indexOf('=');
@@ -63,14 +147,21 @@ function readCookie(req, name) {
   return null;
 }
 
-// HttpOnly: page scripts can't read it. SameSite=Lax: sent when following a
-// link to the app from elsewhere, but not with cross-site POSTs. Secure
-// whenever the request came over HTTPS.
+/**
+ * Sets the session cookie. HttpOnly: page scripts can't read it.
+ * SameSite=Lax: sent when following a link to the app from elsewhere, but
+ * not with cross-site POSTs. Secure whenever the request came over HTTPS.
+ *
+ * @param {import('express').Request} req - The request (for req.secure).
+ * @param {Response} res - The response to set it on.
+ * @param {string} token - The session token.
+ * @returns {void}
+ */
 function setSessionCookie(req, res, token) {
   res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_LIFETIME_MS, secure: req.secure });
 }
 
-app.use(async (req, res, next) => {
+app.use(async (/** @type {AppRequest} */ req, res, next) => {
   if (req.viaTrustedPort) {
     req.userEmail = OWNER_EMAIL;
     return next();
@@ -93,6 +184,18 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+/**
+ * Answers a register or login attempt: the refusal (429 with Retry-After
+ * when throttled), or the session cookie and the email.
+ *
+ * @param {import('express').Request} req - The request.
+ * @param {Response} res - The response.
+ * @param {AuthResult} result - What register() or login() returned.
+ * @param {number} refusedStatus - The status for a refusal: 400 for
+ *   register, 401 for login.
+ * @returns {Response | void} Nothing that's used: the `return res...` lines
+ *   only stop early.
+ */
 function sendAuthResult(req, res, result, refusedStatus) {
   if (!result.ok) {
     if (result.retryAfterMs) {
@@ -105,8 +208,21 @@ function sendAuthResult(req, res, result, refusedStatus) {
   res.json({ email: result.email });
 }
 
-// Register and log in both start a new session, ending any the browser
-// already had (a fresh token after every sign-in).
+/**
+ * Handles POST /api/auth/register and /api/auth/login. Both start a new
+ * session, ending any the browser already had (a fresh token after every
+ * sign-in).
+ *
+ * @param {import('express').Request} req - The request; its body should be
+ *   { email, password }.
+ * @param {Response} res - The response.
+ * @param {(email: string, password: string) => Promise<AuthResult>} attempt -
+ *   register or login (auth.js).
+ * @param {number} refusedStatus - The status for a refusal: 400 for
+ *   register, 401 for login.
+ * @returns {Promise<Response | void>} Nothing that's used: the
+ *   `return res...` line only stops early.
+ */
 async function signIn(req, res, attempt, refusedStatus) {
   const { email, password } = req.body || {};
   if (typeof email !== 'string' || typeof password !== 'string') {
@@ -117,7 +233,7 @@ async function signIn(req, res, attempt, refusedStatus) {
     if (result.ok) await endSession(readCookie(req, SESSION_COOKIE));
     sendAuthResult(req, res, result, refusedStatus);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Sign-in failed' });
+    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Sign-in failed' });
   }
 }
 
@@ -128,13 +244,13 @@ app.post('/api/auth/logout', async (req, res) => {
   try {
     await endSession(readCookie(req, SESSION_COOKIE));
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Logout failed' });
+    return res.status(500).json({ error: /** @type {Error} */ (err).message || 'Logout failed' });
   }
   res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/' });
   res.json({ ok: true });
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', (/** @type {AppRequest} */ req, res) => {
   if (!req.userEmail) return res.status(401).json({ error: 'Not signed in' });
   res.json({ email: req.userEmail, trusted: Boolean(req.viaTrustedPort) });
 });
@@ -142,7 +258,7 @@ app.get('/api/auth/me', (req, res) => {
 // The gate. Not signed in: pages redirect to the login page (which comes
 // back here afterwards via ?next=), API calls get 401.
 const PUBLIC_PATHS = new Set(['/login.html', '/login-page.js', '/style.css']);
-app.use((req, res, next) => {
+app.use((/** @type {AppRequest} */ req, res, next) => {
   if (req.userEmail || PUBLIC_PATHS.has(req.path)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not signed in' });
   if (req.method === 'GET' || req.method === 'HEAD') {
@@ -153,9 +269,17 @@ app.use((req, res, next) => {
 
 // --- Problem data -----------------------------------------------------
 
-// Returns { problem, sha256 }: the parsed problem, and the SHA-256 of the
-// file's exact bytes so a saved submission can tell later whether the
-// question has been edited since. Both come from one read, so they match.
+/**
+ * Reads a question file. Returns the parsed problem, and the SHA-256 of the
+ * file's exact bytes so a saved submission can tell later whether the
+ * question has been edited since. Both come from one read, so they match.
+ *
+ * @param {string} slug - The question's id, from the request; kept inside
+ *   questions/ by resolveInside().
+ * @returns {{ problem: Problem, sha256: string } | null} The problem and the
+ *   file's SHA-256 (hex), or null if there's no such question.
+ * @throws {SyntaxError} If the file isn't valid JSON.
+ */
 function loadProblem(slug) {
   const file = resolveInside(QUESTIONS_DIR, `${slug}.json`);
   if (!file || !fs.existsSync(file)) return null;
@@ -166,6 +290,12 @@ function loadProblem(slug) {
   };
 }
 
+/**
+ * Every question in questions/, for the problem list.
+ *
+ * @returns {ProblemSummary[]} One per .json file, sorted by title.
+ * @throws {Error} If questions/ can't be read, or a file isn't valid JSON.
+ */
 function listProblems() {
   return fs
     .readdirSync(QUESTIONS_DIR)
@@ -179,10 +309,17 @@ function listProblems() {
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
-// Strip expected answers/inputs for hidden test cases before sending to the
-// client. Test case shape depends on judgeMode (args/expected for
-// "function", input/expected for "program"), so this strips just `hidden`
-// rather than picking specific fields.
+/**
+ * Strips expected answers/inputs for hidden test cases before sending to the
+ * client. Test case shape depends on judgeMode (args/expected for
+ * "function", input/expected for "program"), so this strips just `hidden`
+ * rather than picking specific fields.
+ *
+ * @param {Problem} problem - The question as read from its file.
+ * @returns {Omit<Problem, 'testCases'> & { visibleTestCases: Omit<TestCase, 'hidden'>[], hiddenCount: number }}
+ *   Everything else unchanged, the visible test cases without their
+ *   `hidden` field, and how many are hidden.
+ */
 function toPublicProblem(problem) {
   const { testCases, ...rest } = problem;
   return {
@@ -206,6 +343,19 @@ app.get('/api/questions/:slug', (req, res) => {
   res.json(toPublicProblem(loaded.problem));
 });
 
+/**
+ * Handles Run (visible test cases only) and Submit (all of them, then saves
+ * a record). Answers 400 for a bad request, 404 for an unknown question,
+ * 503 when the judge is unavailable or busy, otherwise the judge's result,
+ * with saved/submissionId (or saveError) for a Submit.
+ *
+ * @param {AppRequest} req - The request; its body should be
+ *   { language, code, elapsedMs? }.
+ * @param {Response} res - The response.
+ * @param {{ onlyVisible: boolean }} options - true for Run, false for Submit.
+ * @returns {Promise<Response | void>} Nothing that's used: the
+ *   `return res...` lines only stop early.
+ */
 async function handleExecution(req, res, { onlyVisible }) {
   const loaded = loadProblem(req.params.slug);
   if (!loaded) return res.status(404).json({ error: 'Question not found' });
@@ -231,7 +381,9 @@ async function handleExecution(req, res, { onlyVisible }) {
   }
 
   const judgeMode = problem.judgeMode || 'function';
-  const functionName = judgeMode === 'function' ? problem.functionName[language] : undefined;
+  // A function-mode question always has functionName (the problem file
+  // format); one without would throw here, as before.
+  const functionName = judgeMode === 'function' ? /** @type {Record<string, string>} */ (problem.functionName)[language] : undefined;
   const testCases = onlyVisible ? problem.testCases.filter((tc) => !tc.hidden) : problem.testCases;
   const signature = problem.signature && problem.signature[language];
 
@@ -242,7 +394,9 @@ async function handleExecution(req, res, { onlyVisible }) {
     // learner their result, so it's reported alongside it instead.
     if (!onlyVisible) {
       try {
-        result.submissionId = await saveSubmission(req.userEmail, {
+        // The gate above lets only signed-in requests this far, so there is
+        // a user (and saveSubmission checks it again).
+        result.submissionId = await saveSubmission(/** @type {string} */ (req.userEmail), {
           // 2 added elapsedMs (2026-11-03); version 1 records don't have it.
           schemaVersion: 2,
           submittedAt,
@@ -256,7 +410,7 @@ async function handleExecution(req, res, { onlyVisible }) {
           total: result.total,
           runtimeMs: result.runtimeMs,
           elapsedMs: elapsedMs ?? null,
-          results: result.results.map((r) => r.passed),
+          results: result.results.map((/** @type {{ passed: boolean }} */ r) => r.passed),
           stdout: result.stdout,
           stderr: result.stderr,
         });
@@ -264,7 +418,7 @@ async function handleExecution(req, res, { onlyVisible }) {
       } catch (err) {
         console.error(`Failed to save submission for ${problem.slug}:`, err);
         result.saved = false;
-        result.saveError = err.message;
+        result.saveError = /** @type {Error} */ (err).message;
       }
     }
     res.json(result);
@@ -273,9 +427,10 @@ async function handleExecution(req, res, { onlyVisible }) {
     // off until its sandbox works (judge/sandbox.js), or the judge's queue
     // is full for now (judge/queue.js), in which case Retry-After says
     // when to try again (RFC 9110, section 10.2.3).
-    const httpStatus = err.code === 'SANDBOX_UNAVAILABLE' || err.code === 'JUDGE_BUSY' ? 503 : 500;
-    if (err.code === 'JUDGE_BUSY') res.set('Retry-After', String(err.retryAfterSeconds));
-    res.status(httpStatus).json({ error: err.message || 'Execution failed' });
+    const judgeError = /** @type {JudgeError} */ (err);
+    const httpStatus = judgeError.code === 'SANDBOX_UNAVAILABLE' || judgeError.code === 'JUDGE_BUSY' ? 503 : 500;
+    if (judgeError.code === 'JUDGE_BUSY') res.set('Retry-After', String(judgeError.retryAfterSeconds));
+    res.status(httpStatus).json({ error: judgeError.message || 'Execution failed' });
   }
 }
 
@@ -285,9 +440,14 @@ app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, 
 // --- Saved submissions (the signed-in user's own) --------------------------------
 // Express 4 doesn't catch errors from async handlers, hence the try/catch.
 
-// Summaries for a list: everything except code, stdout and stderr.
-// elapsedMs is null for records without it (schemaVersion 1, or a page
-// that didn't send it).
+/**
+ * A summary for a list: everything except code, stdout and stderr.
+ * elapsedMs is null for records without it (schemaVersion 1, or a page
+ * that didn't send it).
+ *
+ * @param {SavedSubmission} record - A saved Submit.
+ * @returns {SubmissionSummary} Its summary.
+ */
 function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs }) {
   return { id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null };
 }
@@ -295,7 +455,7 @@ function toSubmissionSummary({ id, submittedAt, question, language, status, pass
 // Newest first. Optional ?question=<slug> and ?language=<language> narrow
 // it down. Progress is per (question, language), so the problem page asks
 // for exactly one pair.
-app.get('/api/submissions', async (req, res) => {
+app.get('/api/submissions', async (/** @type {AppRequest} */ req, res) => {
   const { question, language } = req.query;
   if (question !== undefined && typeof question !== 'string') {
     return res.status(400).json({ error: 'question must be given at most once' });
@@ -304,25 +464,25 @@ app.get('/api/submissions', async (req, res) => {
     return res.status(400).json({ error: `language must be given at most once, as one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
   }
   try {
-    const records = await listSubmissions(req.userEmail);
+    const records = await listSubmissions(/** @type {string} */ (req.userEmail)); // signed in: the gate
     res.json(
       records
         .filter((r) => (!question || r.question === question) && (!language || r.language === language))
         .map(toSubmissionSummary)
     );
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not read submissions' });
+    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submissions' });
   }
 });
 
 // One submission in full, including code, stdout and stderr.
-app.get('/api/submissions/:id', async (req, res) => {
+app.get('/api/submissions/:id', async (/** @type {AppRequest} */ req, res) => {
   try {
-    const record = await loadSubmission(req.userEmail, req.params.id);
+    const record = await loadSubmission(/** @type {string} */ (req.userEmail), req.params.id); // signed in: the gate
     if (!record) return res.status(404).json({ error: 'Submission not found' });
     res.json(record);
   } catch (err) {
-    res.status(500).json({ error: err.message || 'Could not read submission' });
+    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submission' });
   }
 });
 
@@ -347,7 +507,10 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, HOST, () => {
+// PORT may be a string from the environment, and HOST undefined (every
+// interface). Node's listen() accepts both, but Express's types allow only a
+// number and a string, hence the casts.
+app.listen(/** @type {number} */ (/** @type {unknown} */ (PORT)), /** @type {string} */ (HOST), () => {
   const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
   console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
   console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
@@ -358,7 +521,7 @@ app.listen(PORT, HOST, () => {
 if (TRUSTED_PORT !== null) {
   // Marks the request before handing it to the same app, so the code above
   // knows which listener it arrived on.
-  const trustedServer = http.createServer((req, res) => {
+  const trustedServer = http.createServer((/** @type {import('http').IncomingMessage & { viaTrustedPort?: boolean }} */ req, res) => {
     req.viaTrustedPort = true;
     app(req, res);
   });

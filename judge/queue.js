@@ -1,3 +1,5 @@
+// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
+// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // A limit on how many submissions are judged at once: sandboxing step 8
 // (docs/plans/sandboxing.md, gap G9).
 //

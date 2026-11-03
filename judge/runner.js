@@ -1,3 +1,5 @@
+// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
+// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
