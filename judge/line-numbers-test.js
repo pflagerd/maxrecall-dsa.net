@@ -41,6 +41,9 @@ const FUNCTION_MISTAKES = [
   ['cpp', 'source excerpt', 'vector<int> twoSum(vector<int> nums, int target) {\n    int x = 1;\n    return undefined_name;\n}\n', /^\s*3 \|\s+return undefined_name;/m],
   ['java', 'compile error', 'class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        return undefinedName;\n    }\n}\n', /Solution\.java:3: error/],
   ['d', 'compile error', 'int[] twoSum(int[] nums, int target) {\n    int x = 1;\n    return undefinedName;\n}\n', /solution\.d\(3\)/],
+  // D's solution.d starts with the judge's prelude import on line 1, which
+  // mustn't move that line either.
+  ['d', 'compile error on line 1', 'int[] twoSum(int[] nums, int target) { return undefinedName; }\n', /solution\.d\(1\)/],
 ];
 
 // Program judging: the code is the whole file, so its own name and lines.
@@ -84,7 +87,7 @@ async function main() {
 
   for (const [language, kind, code, expect] of FUNCTION_MISTAKES) {
     const text = reportText(await submit(twoSum, language, code));
-    check(`function judging, ${language} ${kind} on line 3`, expect.test(text), text);
+    check(`function judging, ${language} ${kind}${/line \d/.test(kind) ? "" : " on line 3"}`, expect.test(text), text);
   }
   for (const [language, kind, code, expect] of PROGRAM_MISTAKES) {
     const text = reportText(await submit(helloWorld, language, code, 'program'));
@@ -94,6 +97,19 @@ async function main() {
     const result = await submit(twoSum, language, code);
     check(`two-sum in ${language} is Accepted`, result.status === 'Accepted', `${result.status}\n${reportText(result)}`);
     if (language === 'python') check('python: sys without import, helpers, and the __main__ block still work', /main block ran/.test(result.stdout), result.stdout);
+  }
+  // D: a function named like a standard one (std.algorithm's reverse) is
+  // still the one called.
+  {
+    const result = await runSubmission({
+      language: 'd',
+      code: 'int[] reverse(int[] nums) {\n    return nums.retro.array;\n}\n',
+      functionName: 'reverse',
+      testCases: [{ args: [[1, 2, 3]], expected: [3, 2, 1], hidden: false }],
+      signature: { params: ['int[]'], returns: 'int[]' },
+      judgeMode: 'function',
+    });
+    check('d: a function named reverse (like std.algorithm\'s) is Accepted', result.status === 'Accepted', `${result.status}\n${reportText(result)}`);
   }
   for (const language of Object.keys(linkedList.starterCode)) {
     const result = await submit(linkedList, language, linkedListAnswer(language));

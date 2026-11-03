@@ -2,8 +2,10 @@
 
 Status: **step 1 done** (2026-11-03, branch `error-line-numbers`); step 2
 next. Decided by the owner: the learner's code as a file of its own (the
-revised recommendation below), D by option 1b (mixin with `#line`), L2 (a)
-runtime lines as step 2, L3 `runpy`, L4 the `solution.*` names.
+revised recommendation below), D by option 2 (a separate module with a
+prelude import on line 1; 1b, chosen first, failed on a newer LDC, see
+below), L2 (a) runtime lines as step 2, L3 `runpy`, L4 the `solution.*`
+names.
 
 ## The cause
 
@@ -64,13 +66,14 @@ compilers in the cloud session:
 | Java | `Solution.java`, compiled with `javac Main.java Solution.java` | `Solution.java:4` for a compile error, and `at Solution.twoSum(Solution.java:4)` in a stack trace. The learner's own `import`s go in their file. |
 | Python | `solution.py`, run with `runpy.run_path("solution.py", init_globals={"sys": sys, "json": json}, run_name="__main__")` (<https://docs.python.org/3/library/runpy.html#runpy.run_path>) | `File "solution.py", line 3` for runtime and syntax errors. It returns the module's globals, from which the harness takes the function. This is the standard library's tool for running a file as a module. It replaces L3 (a)'s `exec`, keeping `sys`, `json` and `__name__ == '__main__'` as today. |
 | D | `solution.d` as a separate module (`import solution;`) | Fails for code that works today: `writeln is not defined, perhaps import std.stdio; is needed?`. Every D file is a module (<https://dlang.org/spec/module.html>), and a module doesn't see another's imports. |
-| D | **1b (chosen):** `solution.d` mixed into `main.d`: `mixin("#line 1 \"solution.d\"\n" ~ import("solution.d"))`, compiled with `-J/work` | `solution.d(3)` for a compile error, and an exception's `file`/`line` say `solution.d:3`. Without the `#line` it says `main.d-mixin-3(5)`. The code sees the harness's imports. The compiler refuses absolute and `..` paths in `import("…")`, so it reads only the work folder. |
-| D | 2: a separate module, with `import judge_prelude;` (which `public import`s the standard modules) put on the same line as the learner's first line | `solution.d(3)`, and `writeln` works. Not chosen: it injects text into line 1. |
+| D | 1b (chosen first, **dropped**): `solution.d` mixed into `main.d`: `mixin("#line 1 \"solution.d\"\n" ~ import("solution.d"))`, compiled with `-J/work` | `solution.d(3)` for a compile error, and an exception's `file`/`line` say `solution.d:3`. Without the `#line` it says `main.d-mixin-3(5)`. The code sees the harness's imports. The compiler refuses absolute and `..` paths in `import("…")`, so it reads only the work folder. **But on the owner's Kubuntu, LDC 1.41.0 (DMD 2.111.0 frontend) reported `solution.d(25)` for line 3**; LDC 1.36 (DMD 2.106) here reported line 3. I didn't find the exact cause. Possibly related: <https://github.com/dlang/dmd/issues/20982> (wrong line numbers after a source-location change in the 2.111 era) and <https://github.com/dlang/dmd/issues/20929> (`#line` and `-verrors=context`). |
+| D | **2 (chosen, 2026-11-03):** a separate module, with `import judge_prelude;` (which `public import`s the standard modules) put on the same line as the learner's first line | `solution.d(3)`, and `writeln` works. It relies only on how a compiler counts lines in an ordinary file, no `#line` or mixin. Only the columns of line 1 move. The harness calls `solution.<name>`: unqualified, a name `std.algorithm` also has is refused (tested: "`reverse` matches conflicting symbols"). |
 | JavaScript | (not needed) | Already right. |
 
 So L1 becomes: C++ `#include "solution.cpp"` (simpler than counting
 lines for `#line`), Java `Solution.java`, Python `runpy` with
-`solution.py`, D 1b (mixin with `#line`), JavaScript unchanged. L4's names
+`solution.py`, D option 2 (a separate module with a prelude import on line 1),
+JavaScript unchanged. L4's names
 become `solution.cpp`, `Solution.java`, `solution.py` and `solution.d`,
 with the harness's own lines named `main.cpp`, `Main.java` and `main.py`.
 

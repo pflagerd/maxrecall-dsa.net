@@ -327,14 +327,19 @@ ${signature.customSerializer || ''}
 // type, so signature.returns isn't functionally needed here — it's kept in
 // each problem's signature.d purely for schema consistency with the other
 // compiled languages.
-// The learner's code is solution.d, mixed in here at compile time: a string
-// import (import("solution.d"), which needs the compiler's -J flag) read
-// into mixin(), so it's in this module and sees its imports, as when it was
-// pasted in. Every D file is a module of its own, and a module doesn't see
-// another's imports, so a separately compiled solution.d would lose them
-// (https://dlang.org/spec/module.html). The #line in front makes the
-// compiler, and exceptions' file and line, say solution.d and count from
-// its first line (https://dlang.org/spec/lex.html#special-token-sequence).
+// The learner's code is solution.d, a module of its own, compiled with
+// this one, which imports it. Every D file is a module, and a module
+// doesn't see another's imports (https://dlang.org/spec/module.html), so
+// solution.d starts with `import judge_prelude; ` on its first line:
+// judge_prelude.d public-imports D_STANDARD_IMPORTS, which the code could use
+// without importing when it was pasted into this file. Being on line 1, it
+// moves no line numbers (only the columns of line 1).
+// Not a mixin of the code with #line in front, tried first: LDC 1.36 (DMD
+// 2.106 frontend) then reported the right lines, but LDC 1.41 (DMD 2.111)
+// reported line 25 for line 3 (owner's Kubuntu, 2026-11-03).
+// The function is called as solution.<name>: it's in another module than
+// std.algorithm and the rest, so a name they also have (reverse, find, ...)
+// would otherwise be ambiguous.
 function buildDSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
@@ -345,18 +350,8 @@ function buildDSource(functionName, signature) {
     })
     .join(', ');
 
-  return `import std.json;
-import std.stdio;
-import std.algorithm;
-import std.array;
-import std.container;
-import std.conv;
-import std.math;
-import std.range;
-import std.string;
-import std.typecons;
-
-mixin("#line 1 \\"${SOLUTION_FILE_NAMES.d}\\"\\n" ~ import("${SOLUTION_FILE_NAMES.d}"));
+  return `${D_STANDARD_IMPORTS.map((m) => `import ${m};`).join('\n')}
+import solution;
 
 JSONValue __judge_toJson(int v) { return JSONValue(v); }
 JSONValue __judge_toJson(bool v) { return JSONValue(v); }
@@ -385,7 +380,7 @@ void main() {
         JSONValue __judge_args = __judge_case["args"];
         JSONValue __judge_entry;
         try {
-            auto __judge_result = ${functionName}(${argExprs});
+            auto __judge_result = solution.${functionName}(${argExprs});
             __judge_entry = JSONValue(["actual": __judge_toJson(__judge_result)]);
         } catch (Throwable __judge_err) {
             __judge_entry = JSONValue(["error": __judge_toJson(__judge_err.msg)]);
@@ -438,6 +433,20 @@ const SOURCE_FILE_NAMES = { javascript: 'main.js', python: 'main.py', cpp: 'main
 // harness (see the build*Source functions). JavaScript has none: its
 // harness follows the learner's code in main.js.
 const SOLUTION_FILE_NAMES = { python: 'solution.py', cpp: 'solution.cpp', java: 'Solution.java', d: 'solution.d' };
+// What D's harness imports, and judge_prelude.d passes on to solution.d.
+const D_STANDARD_IMPORTS = ['std.json', 'std.stdio', 'std.algorithm', 'std.array', 'std.container', 'std.conv', 'std.math', 'std.range', 'std.string', 'std.typecons'];
+const D_PRELUDE_FILE_NAME = 'judge_prelude.d';
+
+// The files function judging writes for the learner's code: { name: text }.
+function solutionFiles(language, code) {
+  if (language === 'd') {
+    return {
+      [SOLUTION_FILE_NAMES.d]: `import judge_prelude; ${code}`,
+      [D_PRELUDE_FILE_NAME]: `module judge_prelude;\n${D_STANDARD_IMPORTS.map((m) => `public import ${m};`).join('\n')}\n`,
+    };
+  }
+  return SOLUTION_FILE_NAMES[language] ? { [SOLUTION_FILE_NAMES[language]]: code } : {};
+}
 const BINARY_FILE_NAME = 'main';
 
 function makeWorkDir() {
@@ -474,8 +483,8 @@ const JAVAC_HEAP_MB = 256;
 
 // How to compile a submission: { argv, timeoutMs, addressSpaceBytes }, in
 // the paths the compiler sees, or null for interpreted languages. Function
-// judging also compiles the learner's own file (Java), or lets the harness
-// read it (D's -J); program judging has just the one file.
+// judging also compiles the learner's own files (Java, D); program judging
+// has just the one file.
 function compileCommand(language, paths, judgeMode = 'function') {
   const file = (name) => path.posix.join(paths.work, name);
   const functionJudging = judgeMode === 'function';
@@ -496,11 +505,11 @@ function compileCommand(language, paths, judgeMode = 'function') {
         timeoutMs: JAVA_COMPILE_TIMEOUT_MS,
       };
     case 'd':
-      // -of names the binary; -od puts the object file the compiler leaves
-      // behind in the work folder too; -J lets import("solution.d") read
-      // from the work folder. ldc2 and dmd take the same flags.
+      // -of names the binary; -od puts the object files the compiler leaves
+      // behind in the work folder too. ldc2 and dmd take the same flags.
       return {
-        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, ...(functionJudging ? [`-J${paths.work}`] : []), file(SOURCE_FILE_NAMES.d)],
+        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d),
+          ...(functionJudging ? [file(SOLUTION_FILE_NAMES.d), file(D_PRELUDE_FILE_NAME)] : [])],
         timeoutMs: D_COMPILE_TIMEOUT_MS,
         addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
       };
@@ -669,7 +678,7 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 
   const workDir = makeWorkDir();
   fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), source);
-  if (SOLUTION_FILE_NAMES[language]) fs.writeFileSync(path.join(workDir, SOLUTION_FILE_NAMES[language]), code);
+  for (const [name, text] of Object.entries(solutionFiles(language, code))) fs.writeFileSync(path.join(workDir, name), text);
   // One cgroup for the compile and every run (null without cgroup limits).
   const cg = cgroups.forSubmission();
 
