@@ -45,6 +45,31 @@ Two related problems turned up:
    parameter is `vector<int>&` instead of `vector<int>` fails at the
    harness's call to it (`main.cpp:106`), a line the learner can't see.
 
+## Revised recommendation: the learner's code in a file of its own
+
+The owner asked (2026-11-03) whether treating the learner's code as a
+linked file or a called module gives the real line numbers. Yes, mostly.
+The catch is that the learner's code today relies on the harness's
+imports: `sys` and `json` in Python, 13 `#include`s and `using namespace
+std;` in C++ (the starter code has no includes), and 10 imports in D. A
+truly separate module doesn't see those. Tried that day, with the
+compilers in the cloud session:
+
+| Language | Learner's code as its own file | Result |
+|---|---|---|
+| C++ | `solution.cpp`, pulled in with `#include "solution.cpp"` after the harness's includes | `solution.cpp:3:12` with its `3 \|` excerpt, under "In file included from main.cpp:4:". Harness lines are named `main.cpp`, with a note pointing back at `solution.cpp:1:33`. The code still sees the includes. |
+| C++ | `solution.cpp` as a separate translation unit, linked | Fails: `'vector' does not name a type`, because the includes aren't visible. It would also need a declaration in the harness that matches the learner's exact signature, or the link fails. **Not recommended.** |
+| Java | `Solution.java`, compiled with `javac Main.java Solution.java` | `Solution.java:4` for a compile error, and `at Solution.twoSum(Solution.java:4)` in a stack trace. The learner's own `import`s go in their file. |
+| Python | `solution.py`, run with `runpy.run_path("solution.py", init_globals={"sys": sys, "json": json}, run_name="__main__")` (<https://docs.python.org/3/library/runpy.html#runpy.run_path>) | `File "solution.py", line 3` for runtime and syntax errors. It returns the module's globals, from which the harness takes the function. This is the standard library's tool for running a file as a module. It replaces L3 (a)'s `exec`, keeping `sys`, `json` and `__name__ == '__main__'` as today. |
+| D | `solution.d` as a separate module (`import solution;`) | Fails for code that works today: `writeln is not defined, perhaps import std.stdio; is needed?`. D has no textual `#include`, so **D keeps the `#line` approach** of L1 (a). |
+| JavaScript | (not needed) | Already right. |
+
+So L1 becomes: C++ `#include "solution.cpp"` (simpler than counting
+lines for `#line`), Java `Solution.java`, Python `runpy` with
+`solution.py`, D `#line 1 "solution.d"`, JavaScript unchanged. L4's names
+become `solution.cpp`, `Solution.java`, `solution.py` and `solution.d`,
+with the harness's own lines named `main.cpp`, `Main.java` and `main.py`.
+
 ## Decisions
 
 ### L1. How to make compile and syntax errors report the editor's lines
