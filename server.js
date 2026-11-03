@@ -163,30 +163,54 @@ function setSessionCookie(req, res, token) {
   res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: SESSION_LIFETIME_MS, secure: req.secure });
 }
 
-app.use(async (/** @type {AppRequest} */ req, res, next) => {
-  if (req.viaTrustedPort) {
-    req.userEmail = OWNER_EMAIL;
-    return next();
-  }
-  try {
-    req.userEmail = await sessionEmail(readCookie(req, SESSION_COOKIE));
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
+app.use(
+  /**
+   * Works out who each request is from, for everything after it:
+   * req.userEmail is the owner on the trusted listener, otherwise the session
+   * cookie's email, or null if there's no valid session.
+   *
+   * @param {AppRequest} req - The request; userEmail is set on it.
+   * @param {Response} res - The response (not used here).
+   * @param {import('express').NextFunction} next - Called once userEmail is
+   *   set, or with the error if the session can't be read.
+   * @returns {Promise<void>}
+   */
+  async (req, res, next) => {
+    if (req.viaTrustedPort) {
+      req.userEmail = OWNER_EMAIL;
+      return next();
+    }
+    try {
+      req.userEmail = await sessionEmail(readCookie(req, SESSION_COOKIE));
+      next();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // Every POST (and PATCH) to the API must be JSON. A form on another site
 // can't send JSON here without a CORS preflight, which this server never
 // approves, so this (with SameSite=Lax) stops cross-site request forgery,
 // logout included. A form can't send PATCH at all, and a cross-site fetch
 // with it needs a preflight too; the same rule covers it for simplicity.
-app.use('/api', (req, res, next) => {
-  if ((req.method === 'POST' || req.method === 'PATCH') && !req.is('application/json')) {
-    return res.status(415).json({ error: 'Send JSON (Content-Type: application/json)' });
-  }
-  next();
-});
+app.use(
+  '/api',
+  /**
+   * Refuses a POST or PATCH that isn't JSON (415).
+   *
+   * @param {import('express').Request} req - Any /api/ request.
+   * @param {Response} res - Answered with 415 if refused.
+   * @param {import('express').NextFunction} next - Called if it's allowed through.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res, next) => {
+    if ((req.method === 'POST' || req.method === 'PATCH') && !req.is('application/json')) {
+      return res.status(415).json({ error: 'Send JSON (Content-Type: application/json)' });
+    }
+    next();
+  },
+);
 
 /**
  * Answers a register or login attempt: the refusal (429 with Retry-After
@@ -241,35 +265,86 @@ async function signIn(req, res, attempt, refusedStatus) {
   }
 }
 
-app.post('/api/auth/register', (req, res) => signIn(req, res, register, 400));
-app.post('/api/auth/login', (req, res) => signIn(req, res, login, 401));
+app.post(
+  '/api/auth/register',
+  /**
+   * POST /api/auth/register: signIn() with register (400 for a refusal).
+   *
+   * @param {import('express').Request} req - Body { email, password }.
+   * @param {Response} res - Answered by signIn().
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  (req, res) => signIn(req, res, register, 400),
+);
+app.post(
+  '/api/auth/login',
+  /**
+   * POST /api/auth/login: signIn() with login (401 for a refusal).
+   *
+   * @param {import('express').Request} req - Body { email, password }.
+   * @param {Response} res - Answered by signIn().
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  (req, res) => signIn(req, res, login, 401),
+);
 
-app.post('/api/auth/logout', async (req, res) => {
-  try {
-    await endSession(readCookie(req, SESSION_COOKIE));
-  } catch (err) {
-    return res.status(500).json({ error: /** @type {Error} */ (err).message || 'Logout failed' });
-  }
-  res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/' });
-  res.json({ ok: true });
-});
+app.post(
+  '/api/auth/logout',
+  /**
+   * POST /api/auth/logout: ends the session and clears its cookie.
+   *
+   * @param {import('express').Request} req - Its session cookie, if any.
+   * @param {Response} res - { ok: true }, or 500 if the session can't be ended.
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  async (req, res) => {
+    try {
+      await endSession(readCookie(req, SESSION_COOKIE));
+    } catch (err) {
+      return res.status(500).json({ error: /** @type {Error} */ (err).message || 'Logout failed' });
+    }
+    res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/' });
+    res.json({ ok: true });
+  },
+);
 
-app.get('/api/auth/me', (/** @type {AppRequest} */ req, res) => {
-  if (!req.userEmail) return res.status(401).json({ error: 'Not signed in' });
-  res.json({ email: req.userEmail, trusted: Boolean(req.viaTrustedPort) });
-});
+app.get(
+  '/api/auth/me',
+  /**
+   * GET /api/auth/me: who's signed in.
+   *
+   * @param {AppRequest} req - The request.
+   * @param {Response} res - { email, trusted }, or 401 if not signed in.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res) => {
+    if (!req.userEmail) return res.status(401).json({ error: 'Not signed in' });
+    res.json({ email: req.userEmail, trusted: Boolean(req.viaTrustedPort) });
+  },
+);
 
 // The gate. Not signed in: pages redirect to the login page (which comes
 // back here afterwards via ?next=), API calls get 401.
 const PUBLIC_PATHS = new Set(['/login.html', '/login-page.js', '/style.css']);
-app.use((/** @type {AppRequest} */ req, res, next) => {
-  if (req.userEmail || PUBLIC_PATHS.has(req.path)) return next();
-  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not signed in' });
-  if (req.method === 'GET' || req.method === 'HEAD') {
-    return res.redirect(302, `/login.html?next=${encodeURIComponent(req.originalUrl)}`);
-  }
-  res.status(401).end();
-});
+app.use(
+  /**
+   * The gate: lets through signed-in requests and PUBLIC_PATHS; otherwise
+   * pages redirect to the login page and everything else gets 401.
+   *
+   * @param {AppRequest} req - The request, with userEmail set.
+   * @param {Response} res - The redirect or the 401, if refused.
+   * @param {import('express').NextFunction} next - Called if it's let through.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res, next) => {
+    if (req.userEmail || PUBLIC_PATHS.has(req.path)) return next();
+    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not signed in' });
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      return res.redirect(302, `/login.html?next=${encodeURIComponent(req.originalUrl)}`);
+    }
+    res.status(401).end();
+  },
+);
 
 // --- Problem data -----------------------------------------------------
 
@@ -337,15 +412,35 @@ function toPublicProblem(problem) {
 
 // --- API ----------------------------------------------------------------
 
-app.get('/api/questions', (req, res) => {
-  res.json(listProblems());
-});
+app.get(
+  '/api/questions',
+  /**
+   * GET /api/questions: the problem list.
+   *
+   * @param {import('express').Request} req - The request.
+   * @param {Response} res - ProblemSummary[], sorted by title.
+   * @returns {void}
+   */
+  (req, res) => {
+    res.json(listProblems());
+  },
+);
 
-app.get('/api/questions/:slug', (req, res) => {
-  const loaded = loadProblem(req.params.slug);
-  if (!loaded) return res.status(404).json({ error: 'Question not found' });
-  res.json(toPublicProblem(loaded.problem));
-});
+app.get(
+  '/api/questions/:slug',
+  /**
+   * GET /api/questions/:slug: one question, without its hidden test cases.
+   *
+   * @param {import('express').Request} req - req.params.slug names the question.
+   * @param {Response} res - toPublicProblem()'s result, or 404.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res) => {
+    const loaded = loadProblem(req.params.slug);
+    if (!loaded) return res.status(404).json({ error: 'Question not found' });
+    res.json(toPublicProblem(loaded.problem));
+  },
+);
 
 /**
  * Handles Run (visible test cases only) and Submit (all of them, then saves
@@ -453,8 +548,29 @@ async function handleExecution(req, res, { onlyVisible }) {
   }
 }
 
-app.post('/api/questions/:slug/run', (req, res) => handleExecution(req, res, { onlyVisible: true }));
-app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, { onlyVisible: false }));
+app.post(
+  '/api/questions/:slug/run',
+  /**
+   * POST /api/questions/:slug/run: handleExecution() on the visible test cases.
+   *
+   * @param {AppRequest} req - Body { language, code }.
+   * @param {Response} res - Answered by handleExecution().
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  (req, res) => handleExecution(req, res, { onlyVisible: true }),
+);
+app.post(
+  '/api/questions/:slug/submit',
+  /**
+   * POST /api/questions/:slug/submit: handleExecution() on every test case,
+   * then saved.
+   *
+   * @param {AppRequest} req - Body { language, code, elapsedMs? }.
+   * @param {Response} res - Answered by handleExecution().
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  (req, res) => handleExecution(req, res, { onlyVisible: false }),
+);
 
 // --- Saved submissions (the signed-in user's own) --------------------------------
 // Express 4 doesn't catch errors from async handlers, hence the try/catch.
@@ -474,36 +590,57 @@ function toSubmissionSummary({ id, submittedAt, question, language, status, pass
 // Newest first. Optional ?question=<slug> and ?language=<language> narrow
 // it down. Progress is per (question, language), so the problem page asks
 // for exactly one pair.
-app.get('/api/submissions', async (/** @type {AppRequest} */ req, res) => {
-  const { question, language } = req.query;
-  if (question !== undefined && typeof question !== 'string') {
-    return res.status(400).json({ error: 'question must be given at most once' });
-  }
-  if (language !== undefined && !(typeof language === 'string' && SUPPORTED_LANGUAGES.includes(language))) {
-    return res.status(400).json({ error: `language must be given at most once, as one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
-  }
-  try {
-    const records = await listSubmissions(/** @type {string} */ (req.userEmail)); // signed in: the gate
-    res.json(
-      records
-        .filter((r) => (!question || r.question === question) && (!language || r.language === language))
-        .map(toSubmissionSummary)
-    );
-  } catch (err) {
-    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submissions' });
-  }
-});
+app.get(
+  '/api/submissions',
+  /**
+   * GET /api/submissions: the user's saved Submits, as summaries.
+   *
+   * @param {AppRequest} req - ?question= and ?language=, each optional.
+   * @param {Response} res - SubmissionSummary[], newest first; 400 for a bad
+   *   query; 500 if they can't be read.
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  async (req, res) => {
+    const { question, language } = req.query;
+    if (question !== undefined && typeof question !== 'string') {
+      return res.status(400).json({ error: 'question must be given at most once' });
+    }
+    if (language !== undefined && !(typeof language === 'string' && SUPPORTED_LANGUAGES.includes(language))) {
+      return res.status(400).json({ error: `language must be given at most once, as one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
+    }
+    try {
+      const records = await listSubmissions(/** @type {string} */ (req.userEmail)); // signed in: the gate
+      res.json(
+        records
+          .filter((r) => (!question || r.question === question) && (!language || r.language === language))
+          .map(toSubmissionSummary)
+      );
+    } catch (err) {
+      res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submissions' });
+    }
+  },
+);
 
 // One submission in full, including code, stdout and stderr.
-app.get('/api/submissions/:id', async (/** @type {AppRequest} */ req, res) => {
-  try {
-    const record = await loadSubmission(/** @type {string} */ (req.userEmail), req.params.id); // signed in: the gate
-    if (!record) return res.status(404).json({ error: 'Submission not found' });
-    res.json(record);
-  } catch (err) {
-    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submission' });
-  }
-});
+app.get(
+  '/api/submissions/:id',
+  /**
+   * GET /api/submissions/:id: one saved Submit in full.
+   *
+   * @param {AppRequest} req - req.params.id is its id.
+   * @param {Response} res - The record, or 404; 500 if it can't be read.
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  async (req, res) => {
+    try {
+      const record = await loadSubmission(/** @type {string} */ (req.userEmail), req.params.id); // signed in: the gate
+      if (!record) return res.status(404).json({ error: 'Submission not found' });
+      res.json(record);
+    } catch (err) {
+      res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submission' });
+    }
+  },
+);
 
 // --- The learner's profile (spaced-repetition plan, D2) -------------------------
 
@@ -536,52 +673,83 @@ function sendProfileError(res, err) {
 
 // The effective profile: allowedLanguages, languages (turned on, in order),
 // defaultLanguage and the three can... permissions.
-app.get('/api/profile', (/** @type {AppRequest} */ req, res) => {
-  try {
-    res.json(loadProfile(/** @type {string} */ (req.userEmail))); // signed in: the gate
-  } catch (err) {
-    sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
-  }
-});
+app.get(
+  '/api/profile',
+  /**
+   * GET /api/profile: the user's effective profile.
+   *
+   * @param {AppRequest} req - The request.
+   * @param {Response} res - The EffectiveProfile, or 500 if profile.json is invalid.
+   * @returns {void}
+   */
+  (req, res) => {
+    try {
+      res.json(loadProfile(/** @type {string} */ (req.userEmail))); // signed in: the gate
+    } catch (err) {
+      sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+    }
+  },
+);
 
 // The learner changes their own choices: body { languages?, defaultLanguage? }.
 // Only preferred changes (profile.js, applyPreferredChange): 403 when an
 // allowed flag forbids it, 400 when it doesn't fit allowed. Read, changed
 // and written with no await in between (synchronous file calls), so two at
 // once can't overwrite each other's change. Answers the new effective profile.
-app.patch('/api/profile/preferred', (/** @type {AppRequest} */ req, res) => {
-  const email = /** @type {string} */ (req.userEmail); // signed in: the gate
-  let contents;
-  try {
-    const text = readProfileFile(email);
-    let raw;
+app.patch(
+  '/api/profile/preferred',
+  /**
+   * PATCH /api/profile/preferred: the learner changes their own choices.
+   *
+   * @param {AppRequest} req - Body { languages?, defaultLanguage? }.
+   * @param {Response} res - The new EffectiveProfile; 403 if not permitted,
+   *   400 if it doesn't fit, 500 if profile.json is invalid.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res) => {
+    const email = /** @type {string} */ (req.userEmail); // signed in: the gate
+    let contents;
     try {
-      raw = text === undefined ? undefined : JSON.parse(text);
-    } catch {
-      // Not JSON: parseProfile says so, as an invalid profile.
-      parseProfile(/** @type {string} */ (text));
+      const text = readProfileFile(email);
+      let raw;
+      try {
+        raw = text === undefined ? undefined : JSON.parse(text);
+      } catch {
+        // Not JSON: parseProfile says so, as an invalid profile.
+        parseProfile(/** @type {string} */ (text));
+      }
+      contents = applyPreferredChange(raw, req.body || {});
+    } catch (err) {
+      const { code, message } = /** @type {Error & { code?: string }} */ (err);
+      if (code === 'NOT_PERMITTED') return res.status(403).json({ error: message });
+      if (code === 'INVALID_CHANGE') return res.status(400).json({ error: message });
+      return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
     }
-    contents = applyPreferredChange(raw, req.body || {});
-  } catch (err) {
-    const { code, message } = /** @type {Error & { code?: string }} */ (err);
-    if (code === 'NOT_PERMITTED') return res.status(403).json({ error: message });
-    if (code === 'INVALID_CHANGE') return res.status(400).json({ error: message });
-    return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
-  }
-  try {
-    writeProfileFile(email, contents);
-    res.json(parseProfile(readProfileFile(email)));
-  } catch (err) {
-    sendProfileError(res, /** @type {Error} */ (err));
-  }
-});
+    try {
+      writeProfileFile(email, contents);
+      res.json(parseProfile(readProfileFile(email)));
+    } catch (err) {
+      sendProfileError(res, /** @type {Error} */ (err));
+    }
+  },
+);
 
 // Any other /api/ URL is an error, not a page: without this, GET requests
 // would fall through to the index.html fallback below and get a 200 with
 // HTML (e.g. the old /api/problems URLs, renamed to /api/questions).
-app.all('/api/*', (req, res) => {
-  res.status(404).json({ error: `No such API endpoint: ${req.method} ${req.path}` });
-});
+app.all(
+  '/api/*',
+  /**
+   * Any other /api/ URL: 404 with JSON.
+   *
+   * @param {import('express').Request} req - The request.
+   * @param {Response} res - 404 { error }.
+   * @returns {void}
+   */
+  (req, res) => {
+    res.status(404).json({ error: `No such API endpoint: ${req.method} ${req.path}` });
+  },
+);
 
 // --- Static front end -----------------------------------------------------
 
@@ -589,33 +757,81 @@ app.all('/api/*', (req, res) => {
 // source and config, so we avoid a blanket express.static(__dirname)).
 const STATIC_FILES = ['index.html', 'style.css', 'problem.html', 'problems-list.js', 'problem-page.js', 'labels.json', 'bubbles.js', 'timer.js', 'login.html', 'login-page.js', 'account.js'];
 for (const file of STATIC_FILES) {
-  app.get(`/${file}`, (req, res) => res.sendFile(path.join(__dirname, file)));
+  app.get(
+    `/${file}`,
+    /**
+     * One of STATIC_FILES.
+     *
+     * @param {import('express').Request} req - The request.
+     * @param {Response} res - The file.
+     * @returns {void}
+     */
+    (req, res) => res.sendFile(path.join(__dirname, file)),
+  );
 }
 
 // Fallback to index.html for any unmatched route (simple SPA-style fallback)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+app.get(
+  '*',
+  /**
+   * Anything else: index.html (the problem list).
+   *
+   * @param {import('express').Request} req - The request.
+   * @param {Response} res - index.html.
+   * @returns {void}
+   */
+  (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  },
+);
 
 // PORT may be a string from the environment, and HOST undefined (every
 // interface). Node's listen() accepts both, but Express's types allow only a
 // number and a string, hence the casts.
-app.listen(/** @type {number} */ (/** @type {unknown} */ (PORT)), /** @type {string} */ (HOST), () => {
-  const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
-  console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
-  console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
-  console.log(`Sandbox: ${describeSandbox()}`);
-  console.log(`Judge queue: at most ${MAX_RUNNING} judgings at once, ${MAX_WAITING} more waiting; beyond that Run and Submit get 503`);
-});
+app.listen(
+  /** @type {number} */ (/** @type {unknown} */ (PORT)),
+  /** @type {string} */ (HOST),
+  /**
+   * Logs where the server is listening, and its setup, once it is.
+   *
+   * @returns {void}
+   */
+  () => {
+    const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
+    console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
+    console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
+    console.log(`Sandbox: ${describeSandbox()}`);
+    console.log(`Judge queue: at most ${MAX_RUNNING} judgings at once, ${MAX_WAITING} more waiting; beyond that Run and Submit get 503`);
+  },
+);
 
 if (TRUSTED_PORT !== null) {
   // Marks the request before handing it to the same app, so the code above
   // knows which listener it arrived on.
-  const trustedServer = http.createServer((/** @type {import('http').IncomingMessage & { viaTrustedPort?: boolean }} */ req, res) => {
-    req.viaTrustedPort = true;
-    app(req, res);
-  });
-  trustedServer.listen(TRUSTED_PORT, '127.0.0.1', () => {
-    console.log(`Trusted listener on 127.0.0.1:${TRUSTED_PORT} only: every request there is ${OWNER_EMAIL}, no sign-in`);
-  });
+  const trustedServer = http.createServer(
+    /**
+     * Every request on the trusted listener: marked, then handled by app.
+     *
+     * @param {import('http').IncomingMessage & { viaTrustedPort?: boolean }} req -
+     *   The request; viaTrustedPort is set on it.
+     * @param {import('http').ServerResponse} res - The response, for app.
+     * @returns {void}
+     */
+    (req, res) => {
+      req.viaTrustedPort = true;
+      app(req, res);
+    },
+  );
+  trustedServer.listen(
+    TRUSTED_PORT,
+    '127.0.0.1',
+    /**
+     * Logs that the trusted listener is up.
+     *
+     * @returns {void}
+     */
+    () => {
+      console.log(`Trusted listener on 127.0.0.1:${TRUSTED_PORT} only: every request there is ${OWNER_EMAIL}, no sign-in`);
+    },
+  );
 }
