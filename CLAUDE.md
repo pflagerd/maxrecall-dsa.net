@@ -47,11 +47,19 @@ Teaching them what you're doing comes first. Speed comes second.
   snapshot: where it disagrees with `readme.html`, `readme.html` wins.
 
 ### Documenting code
-- Every JavaScript function gets a JSDoc comment documenting each argument
-  and the return value, with their types (`@param {type} name - ...`,
-  `@returns {type} ...`, and `@throws {Type} ...` where it throws). Write
-  a function type as `{() => number}`: TypeScript 7 rejects
-  `{function(): number}`. JavaScript only (owner, 2026-11-03).
+- Every JavaScript function gets a JSDoc comment block documenting its
+  signature: each argument's type and meaning, and the return value's
+  (`@param {type} name - ...`, `@returns {type} ...`, and
+  `@throws {Type} ...` where it throws). Write a function type as
+  `{() => number}`: TypeScript 7 rejects `{function(): number}`.
+  JavaScript only (owner, 2026-11-03).
+- This applies to new and existing code alike. Document a new function's
+  signature as you write it. When you change, or come across, an existing
+  function with no comment block, or one that doesn't document its
+  signature, document it in the same change.
+- Words (owner): a function's *signature* is its parameters' and return
+  value's types; a `@typedef` for a record or object is a *type*, not a
+  "shape".
 - Give a parameter the type its callers pass, even where the function
   checks its argument itself; say in the description what the check does
   with anything else. `{unknown}` only for a value that really can be
