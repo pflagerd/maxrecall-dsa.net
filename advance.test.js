@@ -3,23 +3,41 @@
 // Tests for advance.js (docs/plans/spaced-repetition.md, D4). Run with
 // `make test`. Uses Node's built-in test runner, node:test.
 
-const test = require('node:test');
+// The named form: the same function as require('node:test') itself, but
+// typed as callable for editors that read JSDoc.
+const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { advance, stochasticRound } = require('./advance');
 
-// A stand-in for Math.random that returns the given numbers in order, and
-// fails the test if advance() asks for more than it was given.
+/**
+ * A stand-in for Math.random that returns the given numbers in order.
+ *
+ * @param {...number} values - The numbers to return, each from 0 up to, but
+ *   not including, 1.
+ * @returns {function(): number} A function that returns the next of the
+ *   values each time it's called, and throws an Error once they've run out,
+ *   which fails the test if advance() calls random() more often than
+ *   expected.
+ */
 function sequence(...values) {
   return () => {
-    if (values.length === 0) throw new Error('random() called more times than expected');
-    return values.shift();
+    const value = values.shift();
+    if (value === undefined) throw new Error('random() called more times than expected');
+    return value;
   };
 }
 
-// A small seeded random number generator (mulberry32), so the statistical
-// tests give the same numbers on every run and every machine. Source:
-// https://gist.github.com/tommyettinger/46a874533244883189143505d203312c
+/**
+ * A small seeded random number generator (mulberry32), so the statistical
+ * tests give the same numbers on every run and every machine. Source:
+ * https://gist.github.com/tommyettinger/46a874533244883189143505d203312c
+ *
+ * @param {number} seed - The starting state: a whole number (only its low
+ *   32 bits are used). The same seed always gives the same numbers.
+ * @returns {function(): number} A function that returns the next number each
+ *   time it's called, from 0 up to, but not including, 1, like Math.random.
+ */
 function seededRandom(seed) {
   return () => {
     seed = (seed + 0x6d2b79f5) | 0;
@@ -90,7 +108,8 @@ test('with Math.random, every result is a whole number in range', () => {
 });
 
 test('a k that is not a whole number, 0 or more, is refused', () => {
-  for (const k of [-1, 1.5, '2', undefined, null, NaN, Infinity]) {
+  // Deliberately not all numbers, so typed `any` for editors that check types.
+  for (const k of /** @type {any[]} */ ([-1, 1.5, '2', undefined, null, NaN, Infinity])) {
     assert.throws(() => advance(k), RangeError, `k = ${String(k)}`);
   }
 });
