@@ -422,6 +422,20 @@ button.primary:hover {
   background: #7dd3fc;
 }
 
+/* Disabled buttons look it: Submit after a saved Submit (issue #18), Run
+   while it runs, Log in and Log out while they wait. Hovering one keeps its
+   normal background instead of lighting up as if it could be clicked. */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:disabled:hover {
+  background: var(--accent-dark);
+}
+button.primary:disabled:hover {
+  background: var(--accent);
+}
+
 #editor-host {
   flex: 1;
   min-height: 180px;

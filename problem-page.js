@@ -252,6 +252,24 @@ const consoleStateByLanguage = {};
 // use from now on", not just a one-off for the current problem.
 const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java', d: 'D' };
+
+// Languages this question has been Submitted in, and saved, since the page
+// opened (issue #18). Submit is then grayed out for that language, nudging
+// the learner on to the next question. Per language because progress is per
+// (question, language). Run stays available, and a reload starts afresh:
+// it's a nudge, not a rule the server enforces (owner's decisions).
+const submittedLanguages = new Set();
+const SUBMIT_TITLE = submitBtn.title;
+
+// Grays out Submit for a language already submitted, with a tooltip that
+// says why; otherwise enables it.
+function updateSubmitButton() {
+  const done = submittedLanguages.has(currentLanguage);
+  submitBtn.disabled = done;
+  submitBtn.title = done
+    ? `Already submitted in ${LANGUAGE_LABELS[currentLanguage]}. Go back to the list for the next question.`
+    : SUBMIT_TITLE;
+}
 const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
 
 function getStoredDefaultLanguage() {
@@ -575,6 +593,7 @@ function loadLanguage(language) {
   languageSelect.title = `Current language: ${LANGUAGE_LABELS[language]}`;
   renderLanguageContent(language);
   restoreConsoleState(language);
+  updateSubmitButton();
 }
 
 // Switches the active editor language, saving whatever's in the editor for
@@ -691,6 +710,8 @@ function renderClientError(message) {
 }
 
 async function execute(endpoint, button) {
+  // The language submitted, in case the learner switches during the request.
+  const language = currentLanguage;
   button.disabled = true;
   consoleStatusEl.textContent = 'Running...';
   consoleStatusEl.className = '';
@@ -711,6 +732,7 @@ async function execute(endpoint, button) {
     // A saved Submit becomes the submission named in the page address, so a
     // reload reopens what was just submitted rather than an older one.
     if (endpoint === 'submit' && data.saved) {
+      submittedLanguages.add(language);
       setSubmissionInAddress(data.submissionId);
       submissionsNotice = null;
       refreshSubmissions();
@@ -719,7 +741,10 @@ async function execute(endpoint, button) {
     renderClientError(err.message);
     consoleStateByLanguage[currentLanguage] = { kind: 'error', message: err.message };
   } finally {
-    button.disabled = false;
+    // Submit stays grayed out after a saved Submit; a failed one (network
+    // error, judge busy, not saved) can be tried again.
+    if (button === submitBtn) updateSubmitButton();
+    else button.disabled = false;
   }
 }
 
