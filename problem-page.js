@@ -428,7 +428,55 @@ languageFilterNames.forEach((nameEl) => {
 // action. Note: some shortcuts (Ctrl/Cmd+W, +T, +N, +Shift+T, ...) are
 // intentionally unblockable by browsers for security/UX reasons regardless.
 const BLOCKED_KEYS = ['S', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'O', 'P', 'U', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-const EXTRA_KEYS = Object.fromEntries(BLOCKED_KEYS.map((k) => [`Mod-${k}`, () => {}]));
+
+// Indentation is always spaces, INDENT_WIDTH per level (issue #16; owner's
+// choice, following PEP 8: "Use 4 spaces per indentation level" and
+// "Spaces are the preferred indentation method"). Mixing tabs and spaces is
+// what made Python refuse code ("TabError: inconsistent use of tabs and
+// spaces in indentation"): CodeMirror's automatic indentation used spaces
+// (indentWithTabs defaults to false) while its Tab key inserted a tab
+// character (its default "defaultTab" command), and the two look the same.
+const INDENT_WIDTH = 4;
+
+// Turns tabs in the indentation at the start of each line into spaces, each
+// tab reaching the next multiple of INDENT_WIDTH. Only leading whitespace:
+// a tab later in a line (in a string, say) is left alone.
+function normalizeIndentation(text) {
+  return text.replace(/^[ \t]+/gm, (lead) => {
+    if (!lead.includes('\t')) return lead;
+    let column = 0;
+    for (const ch of lead) column = ch === '\t' ? (Math.floor(column / INDENT_WIDTH) + 1) * INDENT_WIDTH : column + 1;
+    return ' '.repeat(column);
+  });
+}
+
+// After any edit that isn't our own (typing, paste, drag-and-drop, undo),
+// the lines it touched get the same treatment, so a tab can't get in by
+// another route. Code put in with setValue is normalized beforehand.
+function normalizeChangedLines(cm, change) {
+  if (change.origin === 'setValue' || change.origin === 'normalize-indentation') return;
+  const last = change.from.line + change.text.length - 1;
+  cm.operation(() => {
+    for (let line = change.from.line; line <= last && line < cm.lineCount(); line++) {
+      const text = cm.getLine(line);
+      const lead = text.match(/^[ \t]*/)[0];
+      if (!lead.includes('\t')) continue;
+      cm.replaceRange(normalizeIndentation(lead), { line, ch: 0 }, { line, ch: lead.length }, 'normalize-indentation');
+    }
+  });
+}
+
+const EXTRA_KEYS = {
+  ...Object.fromEntries(BLOCKED_KEYS.map((k) => [`Mod-${k}`, () => {}])),
+  // Tab: with a selection, indent the selected lines one level; otherwise
+  // insert spaces up to the next indentation stop (CodeMirror's
+  // "insertSoftTab"), never a tab character.
+  Tab: (cm) => cm.execCommand(cm.somethingSelected() ? 'indentMore' : 'insertSoftTab'),
+  // Shift-Tab: out-dent the current line, or the selected lines, one level
+  // (issue #15). CodeMirror's default, "indentAuto", re-indents by the
+  // language mode, and this editor has none, so it did nothing useful.
+  'Shift-Tab': 'indentLess',
+};
 
 // Renders $...$ math (powers, inequalities, etc.) within an element's
 // existing content in place; throwOnError: false means a typo in the
@@ -511,14 +559,16 @@ function loadLanguage(language) {
 
   if (!editor) {
     editor = CodeMirror(document.getElementById('editor-host'), {
-      value: code,
+      value: normalizeIndentation(code),
       lineNumbers: true,
-      indentUnit: 4,
-      tabSize: 4,
+      indentUnit: INDENT_WIDTH,
+      tabSize: INDENT_WIDTH,
+      indentWithTabs: false,
       extraKeys: EXTRA_KEYS,
     });
+    editor.on('change', normalizeChangedLines);
   } else {
-    editor.setValue(code);
+    editor.setValue(normalizeIndentation(code));
   }
   currentLanguage = language;
   languageSelect.value = language;
@@ -817,7 +867,7 @@ function whyNotLoadable(record) {
 // puts its code in the editor, and records it in the page address.
 async function applySubmission(record) {
   await switchLanguage(record.language, { chosenByUser: false });
-  editor.setValue(record.code);
+  editor.setValue(normalizeIndentation(record.code));
   setSubmissionInAddress(record.id);
   if (submissionsNotice) {
     submissionsNotice = null;
