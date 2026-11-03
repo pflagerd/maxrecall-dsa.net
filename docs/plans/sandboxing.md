@@ -910,8 +910,29 @@ io_uring_setup, kcmp, keyctl, ptrace`.
   - **Still unexplained:** about 100 MB/s on the VPS against over 1 GB/s
     here. Either `cpu.max` (one CPU for four processes) or slow first-touch
     memory on the VPS. To be measured there, not guessed.
-- **Still to test on the VPS:** that measurement, a third run of the
-  escape test, then the service itself after the merge.
+- **Measured on the VPS** (owner, 2026-11-03), timing `bytearray(200 MB)`
+  with every page written:
+  - A, one process, no limits: **5.97 s**;
+  - B, four at once under `CPUQuota=100%` (one CPU): 0.53, 0.39, 0.77,
+    4.91 s;
+  - C, four at once, no limits: 3.86–3.95 s each.
+
+  So it isn't the one-CPU limit (B, with it, was fastest). **The VPS is
+  slow and erratic at handing out fresh memory**: 6 s for 200 MB where
+  the cloud takes 0.18 s. The reason is a guess: the host overcommitting
+  memory, so a guest page is backed only when first touched. A legitimate
+  submission allocating a few hundred MB could therefore occasionally time
+  out there. Recorded as a caveat, not changed.
+- **Third VPS run, with the faster G12: 14 contained, 1 skipped (G6d).**
+  G12: `Memory limit exceeded …`, `[cgroup: peak 768 MB, limit reached
+  543 time(s), 1 OOM kill(s)]`, 1841 ms. The kernel held the submission to
+  exactly 768 MB and killed a process when the four went over. **The cgroup
+  limits work on the VPS** (in a `systemd-run` unit set up like the
+  service: `Delegate=yes`, `DelegateSubgroup=server`,
+  `MAXRECALL_REQUIRE_CGROUPS=1`).
+- **Still to do:** merge, then `make deploy-server` on the VPS, which
+  installs the unit with delegation; its `Sandbox:` line should then show
+  the cgroup limits.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
