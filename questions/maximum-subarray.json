@@ -1,5 +1,6 @@
 {
   "slug": "maximum-subarray",
+  "created": "2026-10-24T06:04:49Z",
   "title": "Maximum Subarray",
   "difficulty": "Medium",
   "topics": ["Array", "Dynamic Programming"],

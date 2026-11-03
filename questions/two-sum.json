@@ -1,5 +1,6 @@
 {
   "slug": "two-sum",
+  "created": "2026-10-24T05:31:05Z",
   "title": "Two Sum",
   "difficulty": "Easy",
   "topics": ["Array", "Hash Table"],

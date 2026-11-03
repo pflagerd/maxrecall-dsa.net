@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`) and 2 (`introduce.js`) are done; nothing uses them yet. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`) and 3 (`created` in every question file) are done; nothing uses them yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -492,9 +492,16 @@ each checked to fail against a deliberately wrong version first.
    Submits); each of 5 deliberately broken versions (sum instead of the
    larger, `>` instead of `>=`, no cap at the backlog, a minimum of 2, no
    argument check) fails the test named for it.
-3. **`created` in every question file**, filled in by the owner on
-   Kubuntu from the full git history (the `git log --diff-filter=A`
-   command in D6); `readme.html` section 5 updated.
+3. **Done 2026-11-03.** **`created` in every question file**, from the
+   owner's run of the `git log --diff-filter=A` command on Kubuntu (full
+   history, not shallow). Git gave local times (`-07:00`, the owner's
+   commits) and UTC (`Z`, the cloud's); all are stored in **UTC**, so text
+   order is time order, as with Submit records' `submittedAt`. There are
+   three groups of ties, more than expected (two files, four files, two
+   files), which file name breaks. `questions.test.js` checks every
+   question has a real UTC `created`, and a `slug` equal to its file name.
+   Changing the files changes their SHA-256, so earlier Submit records
+   show the question as edited since, which is true.
 4. **`profile.json`**: read it (no file means all five languages,
    switching allowed); Run and Submit refuse a language it doesn't allow
    (`403`); the page's language menu and default language come from it,

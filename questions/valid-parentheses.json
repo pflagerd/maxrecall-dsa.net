@@ -1,5 +1,6 @@
 {
   "slug": "valid-parentheses",
+  "created": "2026-10-24T05:31:05Z",
   "title": "Valid Parentheses",
   "difficulty": "Easy",
   "topics": ["String", "Stack"],

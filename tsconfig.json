@@ -16,6 +16,7 @@
     "advance.test.js",
     "introduce.js",
     "introduce.test.js",
+    "questions.test.js",
     "paths.js",
     "users.js",
     "auth.js",
