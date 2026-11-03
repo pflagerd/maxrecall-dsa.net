@@ -15,6 +15,8 @@ each answer and what it changed.
 | 2026-11-03 | **D1 details (owner):** accepted all four: `order.json`, elements are objects, a top-level `schemaVersion`, and safe writes (temporary file, then `rename()`; no `await` between reading and writing). | D1 is fully decided. `profile` vs `profile.json` (D2) is still open. |
 | 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. When a question is deleted, it **must be deleted from `order.json` too**. There will be a **function that checks consistency between the sources of truth**. | D5 is decided. New piece of work: a consistency check over `questions/`, `order.json`, the Submit records and the profile (details in D5). How a deleted question leaves `order.json` is still open. |
 | 2026-11-03 | **D5 details (owner):** (1) the consistency check **only reports**. (2) Not a "repair" command but a function that **removes references to a question** from `order.json`, run **when a question is deleted**. (3) The check is a pure function in its own file, run by a `make` target and logged at server start. (4) **Renaming a question updates references to it** in `order.json`, so its progress isn't lost. **D2 detail (owner):** the profile is **`profile.json`**. | Two functions to build alongside the check: remove references, and update references. Still open: what triggers them (a question is a file in `questions/`, so deleting or renaming one is a file operation that nothing in the server sees), and how old Submit records, which keep the old name, are linked to the new one. |
+| 2026-11-03 | **D5 (owner):** accepted the consistency check as proposed, with the adjustments the later decisions imply, and the four recommendations: `make delete-question` / `make rename-question` commands (also usable after a `git pull`), every user, a rename log `questions/renames.json` for old Submit records, and records of deleted questions ignored. | D5 is fully decided. The check now also covers `backlog.json` and `renames.json` (D5 section). |
+| 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. | A sixth source of truth. Remove/update references cover `backlog.json` too. Still open: where creation order comes from (git can't tell in a shallow clone), pairs vs questions, and when a pair moves from the backlog into the queue. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -322,80 +324,82 @@ consistency between the sources of truth.
 | Source | Owns |
 | --- | --- |
 | `questions/*.json` | Which questions exist, and which languages each has (`starterCode`) |
+| `questions/renames.json` | Which old question names became which new ones |
 | `users/<email>/profile.json` | Which languages this learner has |
 | `users/<email>/submissions/*.json` | What was submitted and how it was judged (the history; never changed) |
 | `users/<email>/order.json` | The queue order, and each pair's `pass` and `passesInARow` |
+| `users/<email>/backlog.json` | Pairs not yet in the queue, in the order they'll be introduced (D6) |
 
-**Proposed checks** (each finding names the user, the element and what's
-wrong):
+**The consistency check** (accepted by the owner 2026-11-03, adjusted for
+the decisions since). Each finding names the user, the file, the element
+and what's wrong. It only reports.
 
-1. **File itself:** `order.json` parses as JSON, has a known
-   `schemaVersion`, and every element has the fields it must, with valid
-   values (`question` a string, `language` one of the five, `pass` absent
-   or exactly `"yes"`/`"no"`, `passesInARow` a whole number, 0 or more,
-   and 0 whenever `pass` is `"no"`).
-2. **No duplicates:** each (question, language) pair at most once.
-3. **Deleted questions:** every element's `question` has a file in
-   `questions/`, and that question has the element's language.
+1. **The files themselves:** `order.json` and `backlog.json` parse as
+   JSON and have a known `schemaVersion`, and every element has the
+   fields it must, with valid values: `question` a string, `language` one
+   of the five, `pass` absent or exactly `"yes"`/`"no"`, `passesInARow` a
+   whole number, 0 or more, and 0 whenever `pass` is `"no"`. Backlog
+   elements have no `pass` or `passesInARow`.
+2. **No duplicates:** each (question, language) pair at most once, across
+   `order.json` and `backlog.json` together (a pair is in one or the
+   other, never both).
+3. **Deleted or renamed questions:** every element's `question` has a
+   file in `questions/`, and that question has the element's language.
+   If the name is in `renames.json`, the finding says what it was
+   renamed to, and that the update-references command will fix it.
 4. **Missing pairs:** every pair the learner could do (the question has
-   the language, and the profile allows it) is in the queue. A missing
-   one is usually a new question or a newly allowed language (D6).
+   the language, and the profile allows it) is in `order.json` or
+   `backlog.json`. A missing one is a new question or a newly allowed
+   language that hasn't been added to the backlog yet.
 5. **Profile:** elements whose language the profile no longer allows.
    Reported as information, not an error, since they're kept on purpose
    (D2).
-6. **Records agree:** for each pair, the latest saved Submit's verdict
-   matches `pass` (`Accepted` ↔ `"yes"`), and `passesInARow` equals the
-   number of `Accepted` Submits at the end of its history. A pair with
-   records but no `pass`, or a `pass` with no records, is reported.
-   Check 6 is also the core of the later "recalculate from the records".
+6. **Records agree:** for each pair in `order.json`, the latest saved
+   Submit's verdict matches `pass` (`Accepted` ↔ `"yes"`), and
+   `passesInARow` equals the number of `Accepted` Submits at the end of
+   its history. Records are matched through `renames.json`, so a renamed
+   question keeps its history. A pair with records but no `pass`, a
+   `pass` with no records, or a backlog pair that has records, is
+   reported. Records of deleted questions are ignored. Check 6 is also
+   the core of the later "recalculate from the records".
 
 **Decided 2026-11-03 (owner):**
 
 - **The check only reports; it never changes anything.** Reason: a
   question file can be missing for a harmless reason. Checking out a
   branch that doesn't have it yet, for instance, would otherwise wipe
-  that question's progress from `order.json`. Until something removes
-  them, the server skips elements whose question is missing when
-  choosing the next question.
+  that question's progress. Until something removes them, the server
+  skips elements whose question is missing when choosing the next
+  question.
 - **Where it lives and when it runs:** a pure function in its own file
-  (e.g. `consistency.js`) that takes the four sources and returns a list
-  of findings, run by a `make` target, and once at server start, logging
+  (e.g. `consistency.js`) that takes the sources and returns a list of
+  findings, run by a `make` target, and once at server start, logging
   what it finds without refusing to start.
-- **Deleting a question → remove references to it** from `order.json`,
-  a function that runs when a question is deleted.
-- **Renaming a question → update references to it** in `order.json`,
-  so the pair keeps its place, `pass` and `passesInARow`.
-
-**Open, with recommendations:**
-
-- **What triggers the two functions.** A question is a file, and
-  deleting or renaming it (`git rm`, `git mv`, or by hand) is invisible
-  to the server. Recommended: **commands that do the whole job**, e.g.
+- **Deleting a question → remove references to it**, a function that
+  runs when a question is deleted.
+- **Renaming a question → update references to it**, so the pair keeps
+  its place, `pass` and `passesInARow`.
+- **What triggers them:** commands that do the whole job,
   `make delete-question SLUG=…` and `make rename-question FROM=… TO=…`.
-  Rename would `git mv` the file, change its `slug` field to match, and
-  update every user's `order.json`. Delete would `git rm` it and remove
-  the references from every user's. Each also works when the file
-  change has *already* happened. That case matters: the VPS gets the
-  change by `git pull`, which renames or deletes the file but not the
-  references in its own `/srv/maxrecall/data/users`. There, the same
-  commands would update only the references.
-- **Every user, not one:** both functions go through every
-  `users/*/order.json`, since a question belongs to everyone.
-- **Old Submit records after a rename.** Records are never changed, so
-  they keep the old name in `question`. Then check 6 and the later
-  "recalculate from the records" would no longer find that history.
-  Recommended: a **rename log**, e.g. `questions/renames.json` holding
-  `{"old-name": "new-name"}` entries, which the check and the
-  recalculation follow. It's committed with the rename, so it reaches
-  the VPS by `git pull`, and the check there can report "uses the old
-  name, renamed to …".
-- **Old Submit records after a delete:** kept as history. The check
-  ignores records whose question no longer exists rather than reporting
-  them every time.
+  Rename does `git mv`, changes the file's `slug` field to match, adds
+  the rename to `renames.json`, and updates the references. Delete does
+  `git rm` and removes the references. Each also works when the file
+  change has *already* happened (the VPS gets it by `git pull`, which
+  doesn't touch `/srv/maxrecall/data/users`); then it only updates the
+  references.
+- **Every user, and both files:** the functions go through every user's
+  `order.json` **and `backlog.json`** (the second added with D6).
+- **Old Submit records after a rename:** followed through the rename log,
+  `questions/renames.json` (`{"old-name": "new-name"}`), committed with
+  the rename. Records themselves are never changed.
+- **Old Submit records after a delete:** kept as history; the check
+  ignores them.
 - **Smaller effects of a rename:** a bookmarked old address
   (`problem.html?slug=…`) stops working, and the file's SHA-256 changes
   (its `slug` field changed), so old records show the question as edited
   since, which is true.
+
+The original options:
 
 - **(a) Work it out from the Submit records each time** (recommended).
   Replay every Submit for that language in time order through the rules
@@ -411,6 +415,78 @@ wrong):
   (a record copied in by hand wouldn't be counted).
 
 ### D6. Where do questions you've never submitted go?
+
+**Decided 2026-11-03 (owner): a backlog, `backlog.json`**, in the user's
+directory. Questions go into it **in the order they were created**. Later
+goals, not for now:
+
+- **Courses:** what goes into a learner's backlog will depend on which
+  courses they're doing.
+- **Dependencies:** some questions assume others have already been
+  mastered, so the backlog should follow those relationships (concepts:
+  a *prerequisite graph*, which is a *directed acyclic graph*, put in
+  order by a *topological sort*).
+
+**Open, with recommendations:**
+
+- **Where "order of creation" comes from.** Git history can't be relied
+  on: this cloud clone is shallow (97 commits), so 9 of the 13 question
+  files show as "added" in its oldest commit, `5ef8b96` (a service
+  rename on 2026-10-29), which is just where the clone stops. Two files
+  were added in one commit (`double-each-character`,
+  `swap-case-with-helpers`), so even full history has ties. File
+  modification times are no better, since `git checkout` resets them.
+  Recommended: a **`created` field in each question file** (an ISO 8601
+  date and time), filled in once now from the full history on Kubuntu,
+  and written by whoever creates a question from then on. Ties are
+  broken by file name. It moves with the file when it's renamed. (The
+  alternative is one list file of all questions in creation order.)
+  Either way it changes the problem file format, so `readme.html`
+  section 5 gets updated with it.
+- **Pairs, not questions.** The backlog holds (question, language) pairs,
+  like `order.json`, with the same element shape minus `pass` and
+  `passesInARow`. Recommended order: by question (creation order), then
+  by the order of languages in the profile. Hello World in every allowed
+  language comes before the next question. The alternative, every
+  question in one language before the next language, is a per-course
+  matter later.
+- **When a pair moves from the backlog into the queue.** This has to be
+  decided, because a queue holding one pair always gives back that same
+  pair. Simulated 2026-11-03 (65 pairs, starting from an empty queue,
+  300 Submits, with 1.3^k ± 10%): with no rule beyond "when the queue is
+  empty", the same pair came back **299 times out of 300**. Results for a
+  rule of "keep at least 3 pairs in the queue, and add one more every N
+  Submits":
+
+  | N | Pairs added after 100 Submits | After 300 |
+  | --- | --- | --- |
+  | 3 | 35 | all 65 |
+  | 5 | 22 | 62 |
+  | 10 | 12 | 32 |
+
+  (Whether 70% or all of the Submits passed made no difference to these
+  counts, since the rule counts Submits, not passes.) Recommended: **at
+  least 3 in the queue, and one more every 5 Submits**, in a small
+  function of its own beside `advance.js`, so it can later be made to
+  depend on how well the learner is doing, as MaxRecall's
+  `countUntilNextNewCard` does (32 Submits apart at 0% correct, 4 apart
+  at 100%).
+- **Where an introduced pair goes in the queue:** at the front, so it's
+  the next question, as in MaxRecall (`addNextBacklogFlashcardGuid`
+  `unshift`s it).
+- **How the backlog gets filled:** a function that appends every missing
+  pair (check 4) to the end of each user's `backlog.json`, in creation
+  order. Unlike removing references, adding is safe to do automatically:
+  recommended at server start, and when a profile allows a new language
+  (this answers D2's "where do a new language's pairs go"). A pair whose
+  question is later missing again is just skipped, as in `order.json`.
+- **A brand-new user:** everything starts in `backlog.json`, and
+  `order.json` starts empty.
+- **Counting Submits** for "every 5": it needs a counter that survives a
+  server restart. Recommended: a top-level field in `order.json` (e.g.
+  `submitsSinceLastIntroduced`), next to `schemaVersion`.
+
+The original options:
 
 - **(a) A backlog, introduced one at a time** (recommended), MaxRecall
   style: one new pair every N answers. Order of the backlog: by
