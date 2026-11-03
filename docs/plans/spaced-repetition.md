@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`) and 3 (`created` in every question file) are done; nothing uses them yet. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file) and 4a (`profile.js`) are done; nothing uses them yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -10,7 +10,7 @@ reasoning behind it.
 | Date | Decision | Effect on the rest of the plan |
 | --- | --- | --- |
 | 2026-11-03 | **D1 (owner):** order by **queue position**, with flexibility in how a question advances. The queue is a JSON file, **`order.json`**, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and more fields as decided below. Details, all accepted: elements are **objects**; the file has a top-level **`schemaVersion`**; it's **written safely** (a temporary file, then `rename()`; no `await` between reading and writing it). | Settles most of D5: the queue is **stored**, not worked out from the records. D4's rule becomes one possible advance rule, not the only one. |
-| 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, **`profile.json`** in their user directory. Details, all accepted: queue elements are **(question, language) pairs**; **allowed** fields (set by the owner or a teacher) are kept apart from **preferred** ones (set by the learner); Run and Submit **refuse a language the profile doesn't allow** (`403`); **no `profile.json`** means all five languages, switching allowed; a **removed language's pairs are skipped**, not deleted; the two `localStorage` language settings (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) **go**. A newly allowed language's pairs go into the backlog (D6). | **New file** `users/<email>/profile.json`, which decides which pairs exist, so it's built before the queue. |
+| 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, **`profile.json`** in their user directory. Details, all accepted: queue elements are **(question, language) pairs**; **allowed** fields (set by the owner or a teacher) are kept apart from **preferred** ones (set by the learner); Run and Submit **refuse a language the profile doesn't allow** (`403`); **no `profile.json`** means all five languages, switching allowed; a **removed language's pairs are skipped**, not deleted; the two `localStorage` language settings (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) **go**. A newly allowed language's pairs go into the backlog (D6).  **Layout and details, decided later the same day (owner):** `{ schemaVersion, allowed: { languages, canChooseLanguages, canSwitchLanguage, canSetDefaultLanguage }, preferred: { languages, defaultLanguage } }`, every field optional; the queue follows `preferred` languages (1), in their order (2); `canSwitchLanguage: false` disables the dropdown but Next still goes where the queue says (3); an invalid file fails closed (4); the learner changes `preferred` through `PATCH /api/profile/preferred` (5). | **New file** `users/<email>/profile.json`, which decides which pairs exist, so it's built before the queue. Step 4 split into 4a (`profile.js`), 4b (server) and 4c (page). |
 | 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's **`Accepted`**, all tests passing. There is **no "how easy"**. Tests may also fail for timeouts (they already do: `Time Limit Exceeded`), or for other reasons still to be decided. The result is recorded in `order.json` as an attribute **`pass`**, the string **`"yes"` or `"no"`**. Details, all accepted: `pass` is decided in **one function**; the server accepts **only exactly `"yes"`/`"no"`** when reading; a pair never submitted has **no `pass`**; `order.json` is updated **only after the Submit record is saved**. | Each queue element has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. |
 | 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**, and **at least 1 place**. k is **"correct in a row"**, kept in a counter **`passesInARow`** in the queue element (a pass adds 1, a fail sets it to 0, then the move uses the new value). The function goes in its own file, **`advance.js`** (the name is for now), tested by **`advance.test.js`** beside it. D4 will become much more nuanced over time; this is a starting point. Details, all accepted: `advance.js` only works out **how many places** (a move past the end goes last); the **random function is passed in**; **CommonJS**; **any saved Submit of a pair moves it**, wherever it is in the queue. | Replaces the 2^k table first proposed. An element has at least `question`, `language`, `pass` and `passesInARow`. On average a fail moves 1.03 places and a first pass 1.30. Tests are run by a new `make test` (`node --test`). |
 | 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. There is a **consistency check** between the sources of truth (`questions/`, `questions/renames.json`, `profile.json`, the submission records, `order.json`, `backlog.json`), accepted as proposed in the D5 section. Details, all accepted: the check **only reports**; it's a **pure function in its own file**, run by a `make` target and logged at server start. **Deleting a question removes references to it**, and **renaming one updates references to it** (so its progress is kept), in every user's `order.json` and `backlog.json`, through **`make delete-question`** and **`make rename-question`**, which also work after a `git pull` has already changed the file. A **rename log, `questions/renames.json`**, links old Submit records to the new name; records of deleted questions are kept and ignored. | Three functions to build: the check, remove references, update references. |
@@ -154,6 +154,57 @@ switch languages or set a default at all, come from their profile,
   the default language and the language menu come from the profile, so
   there's one source.
 - **"Next" may be in another language** (see D7).
+
+**The layout** (owner, later on 2026-11-03), `users/<email>/profile.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "allowed": {
+    "languages": ["python", "cpp", "java"],
+    "canChooseLanguages": true,
+    "canSwitchLanguage": true,
+    "canSetDefaultLanguage": true
+  },
+  "preferred": {
+    "languages": ["python", "cpp"],
+    "defaultLanguage": "python"
+  }
+}
+```
+
+- **`allowed`** is set by the owner or a teacher, never by the learner:
+  `languages` (missing: all five), and whether they may turn languages on
+  and off (`canChooseLanguages`), change a question's language themselves
+  (`canSwitchLanguage`), and set their default (`canSetDefaultLanguage`),
+  each `true` if missing.
+- **`preferred`** is the learner's, within `allowed`: the languages
+  they've turned on (`languages`, today's `maxrecall-dsa:available-languages`;
+  missing: all allowed) and `defaultLanguage` (today's
+  `maxrecall-dsa:default-language`; missing or turned off: the first on).
+- **Every field is optional;** `schemaVersion` is required once a file
+  exists. No file: everything allowed.
+- **The rest of the code sees only the effective profile** (`profile.js`).
+- **Decisions on the details:**
+  1. **The queue follows `preferred.languages`**: a language turned off
+     has its pairs skipped (kept) until it's turned on again.
+  2. **New pairs come in the order of `preferred.languages`**, falling
+     back to `allowed.languages`.
+  3. **`canSwitchLanguage: false`** disables the learner's own language
+     change (the dropdown); Next still goes to whichever pair the queue
+     chooses, in any allowed language.
+  4. **An invalid file fails closed**: Run and Submit are refused with a
+     message naming the problem, it's logged, and the consistency check
+     reports it. This includes unknown field names, so a typo such as
+     `"allowd"` can't quietly allow everything. A `preferred` language
+     that `allowed` no longer has is skipped, not an error (D2); a name
+     that isn't one of the five is.
+  5. **`PATCH /api/profile/preferred`** changes only `preferred`,
+     checked against `allowed` (`403` for a `can…` that's `false`, `400`
+     for a change that doesn't fit), written safely. Two writers (the
+     owner by hand, the server) can overwrite each other's change if they
+     write at the same moment: harmless with one user, and a reason for
+     the database D1 mentions.
 
 ### D3. A pass is `Accepted`, recorded as `"pass": "yes"` or `"no"`
 
@@ -502,10 +553,24 @@ each checked to fail against a deliberately wrong version first.
    question has a real UTC `created`, and a `slug` equal to its file name.
    Changing the files changes their SHA-256, so earlier Submit records
    show the question as edited since, which is true.
-4. **`profile.json`**: read it (no file means all five languages,
-   switching allowed); Run and Submit refuse a language it doesn't allow
-   (`403`); the page's language menu and default language come from it,
-   replacing the two `localStorage` settings.
+4. **`profile.json`**, in three pull requests:
+   - **4a, done 2026-11-03: `profile.js`**: `effectiveProfile(raw)`,
+     `parseProfile(text)` and `applyPreferredChange(raw, change)`, pure
+     functions, and `LANGUAGES`, the judge's five. Tested by
+     `profile.test.js` (39 tests: what valid files mean, 14 ways a file is
+     invalid and refused naming the field, and the change rule); each of 6
+     deliberately broken versions fails a test, including a bug found
+     while writing it (a new default checked against a stale preferred
+     list rather than the effective languages).
+   - **4b, the server:** read the profile for each request; `GET
+     /api/profile`; Run and Submit refuse a language it doesn't allow
+     (`403`) and refuse everything when it's invalid; `PATCH
+     /api/profile/preferred`, written safely; the server's language list
+     from `profile.js`.
+   - **4c, the page:** the language menu, dropdown and default language
+     come from `GET /api/profile` and are saved with `PATCH`, replacing
+     the two `localStorage` settings; controls are disabled where a
+     `can…` is false.
 5. **`order.json` and `backlog.json`**: reading with validation, safe
    writing, and filling each user's backlog with missing pairs at server
    start. Nothing changes them on Submit yet.
