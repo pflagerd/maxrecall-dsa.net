@@ -1,5 +1,3 @@
-// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
-// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // Per-submission cgroup limits: sandboxing step 7 (docs/plans/sandboxing.md).
 //
 // The limits in judge/sandbox.js (prlimit) are per process. A cgroup (Linux
@@ -51,16 +49,21 @@ const MEMORY_LIMIT_MESSAGE = `Memory limit exceeded (${MEMORY_LIMIT_MB} MB for t
 // limit was reached.
 const MEMORY_LIMIT_SLOWED_MESSAGE = `Memory limit reached (${MEMORY_LIMIT_MB} MB for the whole submission, compiling and running together), which slowed it down until it ran out of time.`;
 
-// The cgroup systemd delegated to the unit: the parent of the server's own
-// cgroup, which must be named "server" (DelegateSubgroup=server). Read from
-// /proc/self/cgroup, whose cgroup-v2 line is "0::/path". Returns
-// { dir } or { error }.
+/**
+ * The cgroup systemd delegated to the unit: the parent of the server's own
+ * cgroup, which must be named "server" (DelegateSubgroup=server). Read from
+ * /proc/self/cgroup, whose cgroup-v2 line is "0::/path".
+ *
+ * @returns {{ dir: string, error?: undefined } | { error: string, dir?: undefined }}
+ *   The delegated cgroup's folder under /sys/fs/cgroup, or why there isn't
+ *   one.
+ */
 function findDelegatedCgroup() {
   let self;
   try {
     self = fs.readFileSync('/proc/self/cgroup', 'utf8').split('\n').find((line) => line.startsWith('0::'));
   } catch (err) {
-    return { error: `can't read /proc/self/cgroup: ${err.message}` };
+    return { error: `can't read /proc/self/cgroup: ${/** @type {Error} */ (err).message}` };
   }
   if (!self) return { error: 'no cgroup v2 entry in /proc/self/cgroup' };
   const own = self.slice(3);
@@ -72,7 +75,11 @@ function findDelegatedCgroup() {
 
 // Prepares a delegated cgroup folder for submission cgroups: it must have
 // the controllers, and they're switched on for its children
-// (cgroup.subtree_control). Returns null if it worked, else why not.
+// (cgroup.subtree_control).
+/**
+ * @param {string} dir - The delegated cgroup's folder.
+ * @returns {string | null} null if it worked, else why not.
+ */
 function prepareParent(dir) {
   try {
     const available = fs.readFileSync(path.join(dir, 'cgroup.controllers'), 'utf8').split(/\s+/);
@@ -81,15 +88,34 @@ function prepareParent(dir) {
     fs.writeFileSync(path.join(dir, 'cgroup.subtree_control'), CONTROLLERS.map((c) => `+${c}`).join(' '));
     return null;
   } catch (err) {
-    return `can't set up ${dir}: ${err.message}`;
+    return `can't set up ${dir}: ${/** @type {Error} */ (err).message}`;
   }
 }
 
-// Makes one submission's cgroup under parentDir and applies CGROUP_LIMITS.
-// Returns an object with:
-// - procs: its cgroup.procs, which wrap() writes the first process into;
-// - oomKills(): how many processes the kernel's OOM killer has ended in it;
-// - destroy(): kills anything left (cgroup.kill) and removes it.
+/**
+ * One submission's cgroup, as createSubmissionCgroup() returns it.
+ *
+ * @typedef {object} SubmissionCgroup
+ * @property {string} dir - Its folder under /sys/fs/cgroup.
+ * @property {string} procs - Its cgroup.procs, which wrap() writes the first
+ *   process into.
+ * @property {() => { limitHits: number, oomKills: number, peakMb: number }} memory -
+ *   memory.events' counters and memory.peak, 0 where unreadable.
+ * @property {() => number} oomKills - How many processes the kernel's OOM
+ *   killer has ended in it.
+ * @property {() => void} destroy - Kills anything left (cgroup.kill) and
+ *   removes it.
+ */
+
+/**
+ * Makes one submission's cgroup under parentDir and applies CGROUP_LIMITS.
+ *
+ * @param {string} parentDir - The delegated cgroup's folder, prepared by
+ *   prepareParent().
+ * @returns {SubmissionCgroup} The new cgroup.
+ * @throws {Error} If the folder can't be made or a limit can't be written
+ *   (the folder is removed again in the second case).
+ */
 function createSubmissionCgroup(parentDir) {
   const dir = path.join(parentDir, `judge-${crypto.randomBytes(6).toString('hex')}`);
   fs.mkdirSync(dir);
@@ -105,14 +131,16 @@ function createSubmissionCgroup(parentDir) {
     // Counters from memory.events: limitHits ("max": times usage was about
     // to go over memory.max) and oomKills ("oom_kill": processes the OOM
     // killer ended); peakMb from memory.peak (Linux 5.19+). 0 if unreadable.
+    /** @returns {{ limitHits: number, oomKills: number, peakMb: number }} */
     memory() {
-      const read = (file) => {
+      const read = (/** @type {string} */ file) => {
         try {
           return fs.readFileSync(path.join(dir, file), 'utf8');
         } catch {
           return '';
         }
       };
+      /** memory.events' counters, by name. @type {Record<string, number>} */
       const events = Object.fromEntries(read('memory.events').split('\n').filter(Boolean).map((line) => {
         const [name, value] = line.split(' ');
         return [name, Number(value)];
@@ -123,9 +151,11 @@ function createSubmissionCgroup(parentDir) {
         peakMb: Math.round(Number(read('memory.peak')) / (1024 * 1024)) || 0,
       };
     },
+    /** @returns {number} Processes the OOM killer has ended in it. */
     oomKills() {
       return this.memory().oomKills;
     },
+    /** @returns {void} */
     destroy() {
       try {
         fs.writeFileSync(path.join(dir, 'cgroup.kill'), '1');
@@ -139,7 +169,7 @@ function createSubmissionCgroup(parentDir) {
           fs.rmdirSync(dir);
           return;
         } catch (err) {
-          if (err.code === 'ENOENT') return;
+          if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return;
           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
         }
       }
@@ -158,6 +188,19 @@ function createSubmissionCgroup(parentDir) {
 // starting environment, readable from /proc/1/environ; the sandbox
 // self-test checks). Found 2026-11-02 when the self-test failed with the
 // wrapper in place.
+/**
+ * @template {{ command: string, args: string[] }} C
+ * @param {C} spec - The command, and anything else the caller keeps with it
+ *   (passed through unchanged). (C is a type parameter: the result keeps
+ *   spec's other fields and their types.)
+ * @param {SubmissionCgroup} cg - The cgroup to start it in.
+ * @param {Readonly<Record<string, string | undefined>>} env - The whole
+ *   environment to start the command with (SUBMISSION_ENV, whose PATH is
+ *   undefined if the server's is).
+ * @returns {Omit<C, 'command' | 'args'> & { command: string, args: string[] }}
+ *   The same, but starting /bin/sh, which joins the cgroup and then execs
+ *   the command.
+ */
 function wrap({ command, args, ...rest }, cg, env) {
   const assignments = Object.entries(env).map(([name, value]) => `${name}=${value}`);
   return {
@@ -167,21 +210,42 @@ function wrap({ command, args, ...rest }, cg, env) {
   };
 }
 
-// Set up once at startup when required. status: { required, ok, parent,
-// reason }. Not required: { required: false, ok: false }.
+/**
+ * Whether cgroups are in use, as found at startup.
+ *
+ * @typedef {object} CgroupStatus
+ * @property {boolean} required - MAXRECALL_REQUIRE_CGROUPS=1.
+ * @property {boolean} ok - Required and ready.
+ * @property {string} [parent] - When ok: the delegated cgroup's folder.
+ * @property {string} [reason] - When required but not ok: why not.
+ */
+
+/**
+ * Set up once at startup when required.
+ *
+ * @returns {CgroupStatus} Not required: { required: false, ok: false }.
+ */
 function setUp() {
   if (!REQUIRED) return { required: false, ok: false };
   const found = findDelegatedCgroup();
   if (found.error) return { required: true, ok: false, reason: found.error };
-  const problem = prepareParent(found.dir);
+  // No error means dir is set. (The truthiness test above can't narrow
+  // the union for the checker: error could in principle be "".)
+  const problem = prepareParent(/** @type {string} */ (found.dir));
   if (problem) return { required: true, ok: false, reason: problem };
   return { required: true, ok: true, parent: found.dir };
 }
 const status = Object.freeze(setUp());
 
-// A cgroup for one submission, or null when cgroups aren't in use.
+/**
+ * A cgroup for one submission, or null when cgroups aren't in use.
+ *
+ * @returns {SubmissionCgroup | null} The new cgroup, or null.
+ * @throws {Error} If cgroups are in use but it can't be made.
+ */
 function forSubmission() {
-  return status.ok ? createSubmissionCgroup(status.parent) : null;
+  // ok means setUp() found a parent.
+  return status.ok ? createSubmissionCgroup(/** @type {string} */ (status.parent)) : null;
 }
 
 module.exports = { CGROUP_LIMITS, MEMORY_LIMIT_MB, MEMORY_LIMIT_MESSAGE, MEMORY_LIMIT_SLOWED_MESSAGE, cgroupStatus: status, prepareParent, createSubmissionCgroup, forSubmission, wrap };

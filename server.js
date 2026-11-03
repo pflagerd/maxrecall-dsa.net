@@ -61,7 +61,7 @@ const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessio
  *   missing here can't be submitted for this question.
  * @property {Record<string, string>} [functionName] - Function mode: the
  *   function to call, by language.
- * @property {Record<string, { params: string[], returns: string }>} [signature] -
+ * @property {Record<string, import('./judge/runner').FunctionSignature>} [signature] -
  *   Function mode, cpp/java/d only: the types the harness needs.
  * @property {TestCase[]} testCases
  */
@@ -389,7 +389,10 @@ async function handleExecution(req, res, { onlyVisible }) {
 
   try {
     const submittedAt = new Date().toISOString();
-    const result = await runSubmission({ language, code, functionName, testCases, signature, judgeMode });
+    // Submit adds what happened to its record: saved, then submissionId or saveError.
+    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string }} */ (
+      await runSubmission({ language, code, functionName, testCases, signature, judgeMode })
+    );
     // Only Submit is recorded (Run isn't). A failed save mustn't cost the
     // learner their result, so it's reported alongside it instead.
     if (!onlyVisible) {

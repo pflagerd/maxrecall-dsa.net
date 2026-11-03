@@ -1,5 +1,5 @@
 {
-  "//": "make typecheck: TypeScript checks the JSDoc types in these JavaScript files. Nothing is compiled (noEmit). A file is listed here once its functions are documented; see readme.html.",
+  "//": "make typecheck: TypeScript checks the JSDoc types in these JavaScript files. Nothing is compiled (noEmit). Every JavaScript file that runs under Node is listed: all are documented (readme.html, docs/plans/documentation-standard.md).",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -17,6 +17,12 @@
     "paths.js",
     "users.js",
     "auth.js",
-    "server.js"
+    "server.js",
+    "judge/queue.js",
+    "judge/cgroups.js",
+    "judge/sandbox.js",
+    "judge/runner.js",
+    "judge/line-numbers-test.js",
+    "judge/sandbox-selftest.js"
   ]
 }
