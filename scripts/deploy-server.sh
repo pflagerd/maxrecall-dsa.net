@@ -122,7 +122,7 @@ systemctl is-active -q "$UNIT" || {
 curl -s -o /dev/null --max-time 2 "http://127.0.0.1:${PORTS[1]}/" || fail "$UNIT is running but doesn't answer on 127.0.0.1:${PORTS[1]}."
 
 log=$(journalctl -u "$UNIT" --since "$started" --no-pager -o cat)
-echo "$log" | grep -E '^(Server listening|Sign-in data|Sandbox:|Trusted listener)' || true
+echo "$log" | grep -E '^(Server listening|Sign-in data|Sandbox:|Judge queue:|Trusted listener)' || true
 sandbox=$(echo "$log" | grep -m1 '^Sandbox:' || true)
 [ -n "$sandbox" ] || fail "no 'Sandbox:' line in the service's log since $started."
 case "$sandbox" in *UNAVAILABLE*) fail "the service's sandbox doesn't work, so it refuses Run and Submit. The reason is in the line above (docs/deploy-vps.md §1a)." ;; esac

@@ -969,6 +969,16 @@ io_uring_setup, kcmp, keyctl, ptrace`.
     14 × 200 and 6 × 503, with `Retry-After: 5`.
 - Escape test here: 16 probes, 15 contained, 1 skipped (G12, no cgroups
   here).
+- **On the VPS** (owner, 2026-11-03, after the merge to `master` at
+  `52748ee`, without a pull request):
+  - `make deploy-server` restarted the service with the cgroup limits;
+  - the escape test, in a `systemd-run` unit set up like the service, gave
+    **16 probes: 15 contained, 1 skipped (G6d, 2 cores)**;
+  - G9: at most **2** ran together (limit 2), 12 judged, 8 refused as busy,
+    exactly as expected;
+  - G12: OOM-killed at 768 MB again.
+  - The deploy output didn't show the `Judge queue:` startup line, because
+    `deploy-server.sh` only echoed the lines it knew by name. It does now.
 
 ## 7. Decisions (made 2026-11-02, owner: all as recommended)
 
