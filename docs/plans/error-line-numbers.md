@@ -24,8 +24,16 @@ Measured on 2026-11-03 by submitting code with a mistake on **line 3**
 | D | compile error | `/work/main.d(14)` | +11 | 10 `import`s and a blank line |
 | JavaScript | (none) | | 0 | nothing: the learner's code comes first |
 
-Program judging (`judgeMode: "program"`) has no harness, so its numbers
-are already right.
+Program judging (`judgeMode: "program"`) has no harness: the code is
+written to the source file exactly as typed (`runProgramSubmission`), so
+its numbers are already right. Measured the same day with
+`questions/hello-world.json` and a mistake on line 3: every language
+reported line 3, for compile and syntax errors and for runtime errors
+alike. That includes runtime errors, because nothing catches the exception,
+so the language's own report (traceback, stack trace) reaches stderr.
+The exception is a C++ exception, which reports no line ("terminate called
+after throwing an instance of 'std::runtime_error'"). None of the changes
+below touch program judging, and step 1's test checks it stays right.
 
 Two related problems turned up:
 
