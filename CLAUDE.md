@@ -52,8 +52,12 @@ Teaching them what you're doing comes first. Speed comes second.
   `@returns {type} ...`, and `@throws {Type} ...` where it throws). Write
   a function type as `{() => number}`: TypeScript 7 rejects
   `{function(): number}`. JavaScript only (owner, 2026-11-03).
-- A documented file is listed in `tsconfig.json`, and `make typecheck`
-  must pass. Where comments alone can't satisfy the checker, use a JSDoc
+- Give a parameter the type its callers pass, even where the function
+  checks its argument itself; say in the description what the check does
+  with anything else. `{unknown}` only for a value that really can be
+  anything (owner, 2026-11-03).
+- A documented file is listed in `tsconfig.json` (Node) or
+  `tsconfig.browser.json` (browser), and `make typecheck` must pass. Where comments alone can't satisfy the checker, use a JSDoc
   cast (`/** @type {T} */ (expr)`) with a comment saying why, rather than
   changing behaviour. See `docs/plans/documentation-standard.md`.
 

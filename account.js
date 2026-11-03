@@ -1,5 +1,11 @@
-// Shows who's signed in, with a Log out button, in the page header's
-// #account element. Used by the problem list and the problem page.
+/**
+ * Shows who's signed in, with a Log out button, in the page header's
+ * #account element. Used by the problem list and the problem page. Runs
+ * once, as soon as the script loads.
+ *
+ * @returns {Promise<void>} Settles when it's done or has given up (not
+ *   signed in, or the request failed); never rejects.
+ */
 (async function showAccount() {
   const el = document.getElementById('account');
   if (!el) return;

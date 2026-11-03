@@ -1,7 +1,8 @@
 # Plan: bringing existing code up to the documentation standard
 
-Status: **in progress, 2026-11-03.** Pull request 1 of 3 (`jsdoc-server`)
-done on its branch; `jsdoc-judge` and `jsdoc-frontend` to come.
+Status: **in progress, 2026-11-03.** Pull requests 1 (`jsdoc-server`,
+#29) and 3 (`jsdoc-frontend`, built on #29) done on their branches;
+`jsdoc-judge` to come.
 
 ## The standard
 
@@ -91,12 +92,59 @@ under `strict` beforehand.
   submissions API, the sign-in gate, static files) exactly as `master`
   did, and logged the same lines. `make test`: 9 of 9.
 
+## Pull request 3: `jsdoc-frontend` (2026-11-03)
+
+`problem-page.js`, `login-page.js`, `problems-list.js`, `bubbles.js`,
+`timer.js`, `account.js`: 70 functions, 314 errors under `strict`
+beforehand (260 in `problem-page.js`). Built on `jsdoc-server` (merged
+into it), so #29 goes first.
+
+- **`tsconfig.browser.json`**: the browser files, with the DOM's types
+  (`lib: dom`) and CodeMirror's (`@types/codemirror` 5.60.18, pinned,
+  decision 3), not Node's. `make typecheck` runs it after `tsconfig.json`.
+  All six files are checked together, though no page loads all of them;
+  no two of them declare the same global, so that works.
+- **`browser-globals.d.ts`**: declarations only, for three globals
+  TypeScript can't see: `createStopwatch` and `formatElapsed` (TypeScript
+  treats `timer.js` as a module because of its `module.exports` line, so
+  their types are taken from it with `typeof import('./timer')`), and
+  KaTeX's `renderMathInElement` (from cdnjs). It's a TypeScript file, but
+  only declarations: nothing in it runs.
+- **Element lookups** (decision 2): each `getElementById`/`querySelector`
+  is cast to the element the page has there, e.g. `HTMLSelectElement` for
+  `#language-select`, checked against `problem.html`, `index.html` and
+  `login.html`. The login forms' named controls are typed too
+  (`LoginForm`, `RegisterForm`), so `loginForm.email` is an input, not
+  `any`.
+- **Page state honestly nullable**: `problem`, `editor` and
+  `currentLanguage` are `… | null`, as they are until the question loads;
+  code that only runs after that casts at the use, with a comment.
+  `problem-page.js` has 14 casts of `problem` as a result. A local
+  variable would read better, but would be a code change.
+- **Types** (`@typedef`): `PublicProblem`, `Example`, `JudgeResult`,
+  `TestResult`, `ConsoleState`, `SubmissionSummary`, `SubmissionRecord`,
+  `PaneBounds` (`problem-page.js`); `Labels`, `LabelStyle` (`bubbles.js`);
+  `Stopwatch` (`timer.js`); `LoginForm`, `RegisterForm` (`login-page.js`).
+- **Two documentation-only techniques:** `isColor` is a *type predicate*
+  (`@returns {value is string}`), so a colour it accepts is known to be a
+  string; `makeEl` is *generic* (`@template`), so `makeEl('table')` is an
+  `HTMLTableElement`, as with `document.createElement`.
+- **An existing comment moved:** the description of `loadLanguage` sat
+  above `clearConsoleOutput`; it's now in `loadLanguage`'s JSDoc.
+- **Checked:** `make typecheck` passes, and a wrong type put in on purpose
+  fails it for each file (for `timer.js`, in `problem-page.js`, where its
+  functions are used). With comments removed, the code differs from
+  `master`'s only by cast parentheses (`timer.js`, `bubbles.js`,
+  `account.js`: not at all). In headless Chromium against the real server
+  (CodeMirror and KaTeX served from npm, since cdnjs is blocked in the
+  cloud), 37 observations matched `master`'s exactly: the login page's
+  redirect, register and mismatch message, the problem list, the problem
+  page's header, language switching, tabs becoming spaces when typed, Run,
+  Submit (5/5, the tooltip, the address, the frozen timer), the
+  Submissions tab and Load, the timer and language menu, KaTeX, a missing
+  submission's notice, logging out, and the console errors.
+
 ## Still to do
 
 - **`jsdoc-judge`:** `judge/*.js` (82 functions, 166 errors), and remove
   the four `@ts-nocheck` lines.
-- **`jsdoc-frontend`:** `problem-page.js`, `login-page.js`,
-  `problems-list.js`, `bubbles.js`, `timer.js`, `account.js` (70
-  functions, 314 errors, 260 in `problem-page.js`), with decisions 2 and 3.
-  These run in the browser, so they need the DOM's types and their own
-  settings (e.g. a second `tsconfig`), not Node's.

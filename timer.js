@@ -11,35 +11,75 @@
 // is set. https://developer.mozilla.org/en-US/docs/Web/API/Performance/now
 // A test passes its own now() instead.
 
+/**
+ * What createStopwatch() returns.
+ *
+ * @typedef {object} Stopwatch
+ * @property {() => void} resume - Starts or carries on counting.
+ * @property {() => void} pause - Stops counting, keeping the time so far.
+ * @property {() => void} freeze - Stops counting for good.
+ * @property {boolean} running - Whether it's counting now (read-only).
+ * @property {boolean} frozen - Whether freeze() has been called (read-only).
+ * @property {() => number} elapsedMs - Milliseconds counted so far.
+ */
+
+/**
+ * Makes a stopwatch, paused at zero.
+ *
+ * @param {() => number} [now] - Returns the current time in milliseconds,
+ *   on a clock that only goes forward. Defaults to performance.now(); a
+ *   test passes a fake clock.
+ * @returns {Stopwatch} The new stopwatch.
+ */
 function createStopwatch(now = () => performance.now()) {
   let countedMs = 0; // time counted in earlier running stretches
-  let runningSince = null; // now() when the current stretch began; null when paused
+  /** now() when the current stretch began; null when paused. @type {number | null} */
+  let runningSince = null;
   let frozen = false;
 
+  /** @type {Stopwatch} */
   const stopwatch = {
-    // Starts or carries on counting. Does nothing if running or frozen.
+    /**
+     * Starts or carries on counting. Does nothing if running or frozen.
+     *
+     * @returns {void}
+     */
     resume() {
       if (frozen || runningSince !== null) return;
       runningSince = now();
     },
-    // Stops counting, keeping the time so far. Does nothing if paused.
+    /**
+     * Stops counting, keeping the time so far. Does nothing if paused.
+     *
+     * @returns {void}
+     */
     pause() {
       if (runningSince === null) return;
       countedMs += now() - runningSince;
       runningSince = null;
     },
-    // Stops counting for good: resume() does nothing afterwards.
+    /**
+     * Stops counting for good: resume() does nothing afterwards.
+     *
+     * @returns {void}
+     */
     freeze() {
       stopwatch.pause();
       frozen = true;
     },
+    /** @returns {boolean} Whether it's counting now. */
     get running() {
       return runningSince !== null;
     },
+    /** @returns {boolean} Whether freeze() has been called. */
     get frozen() {
       return frozen;
     },
-    // Milliseconds counted so far, including the current stretch.
+    /**
+     * Milliseconds counted so far, including the current stretch.
+     *
+     * @returns {number} The time counted, in milliseconds.
+     */
     elapsedMs() {
       return countedMs + (runningSince === null ? 0 : now() - runningSince);
     },
@@ -47,8 +87,13 @@ function createStopwatch(now = () => performance.now()) {
   return stopwatch;
 }
 
-// 0:07, 4:12, 59:59, then 1:00:00 and up. Rounds down to whole seconds,
-// like a clock.
+/**
+ * Formats a time for the timer: 0:07, 4:12, 59:59, then 1:00:00 and up.
+ * Rounds down to whole seconds, like a clock.
+ *
+ * @param {number} ms - Milliseconds; below 0 counts as 0.
+ * @returns {string} m:ss under an hour, h:mm:ss from an hour.
+ */
 function formatElapsed(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
