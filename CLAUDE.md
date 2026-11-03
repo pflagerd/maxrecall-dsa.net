@@ -43,8 +43,8 @@ Teaching them what you're doing comes first. Speed comes second.
   `docs/session-handoff.*.md`. Its name ends in a `YYYYMMDDTHHMMSS±HHMM`
   timestamp in Pacific Time, the owner's zone (`-0800`, or `-0700` in
   daylight saving time), so the last one by name is the newest. Make one
-  with `TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z`. It's a dated snapshot: where it disagrees with
-  `readme.html`, `readme.html` wins.
+  with `TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z`. It's a dated
+  snapshot: where it disagrees with `readme.html`, `readme.html` wins.
 
 ### Continuity between machines
 - Work happens in both Claude Code cloud sessions and a local
