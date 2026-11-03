@@ -133,8 +133,8 @@ JavaScript's stays `main.js`.
 
 1. L1 (and L3, L4): line numbers right for compile and syntax errors in
    every language. A test submits a mistake on a known line in each
-   language and checks the number reported. The existing escape test and
-   browser tests must still pass.
+   language and checks the number reported, in both judging modes. The
+   existing escape test and browser tests must still pass.
 2. L2: line numbers for runtime errors, except C++.
 3. Possible later step (not planned): make a line number in the console
    clickable, jumping to that line in the editor.
