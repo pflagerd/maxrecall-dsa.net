@@ -45,10 +45,18 @@ From the owner's review of pull request #27, and since 2026-11-03 in
   such as a test case's expected JSON value.
 - **Words:** a function's *signature* is its parameters' and return value's
   types (`@param`, `@returns`); a `@typedef` for a record is a *type*.
-- **Inline callbacks** (Express route handlers, `.map()` callbacks) get
-  their types from what they're passed to, and are described by the
-  comment above them. A parameter of one gets a JSDoc type only where the
-  checker needs it (e.g. `req` when it uses `req.userEmail`).
+- **Functions written inline get comment blocks too** (owner,
+  2026-11-03, correcting the rule first used here, which left them
+  out): route handlers, middleware, and callbacks such as a server's
+  `listen` callback. The block goes **directly before the function,
+  inside the call**, e.g. between a route's path and its handler: a
+  block above the whole `app.get(...)` statement belongs to the
+  statement, and TypeScript ignores it for the function (checked: a
+  deliberately wrong `@param` type above the statement gave no error;
+  directly before the function, it did). Done for `server.js` in the
+  `jsdoc-route-handlers` pull request. Short array callbacks such as
+  `.filter((tc) => !tc.hidden)`, and the front end's and judge's inline
+  callbacks: waiting for the owner.
 
 ## Pull request 1: `jsdoc-server` (2026-11-03)
 
