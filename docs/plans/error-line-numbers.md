@@ -1,7 +1,9 @@
 # Plan: error line numbers that match the editor (issue #26)
 
-Status: **waiting for the owner's decisions** (L1–L4). Nothing is changed
-yet. Written 2026-11-03.
+Status: **step 1 done** (2026-11-03, branch `error-line-numbers`); step 2
+next. Decided by the owner: the learner's code as a file of its own (the
+revised recommendation below), D by option 1b (mixin with `#line`), L2 (a)
+runtime lines as step 2, L3 `runpy`, L4 the `solution.*` names.
 
 ## The cause
 
@@ -61,12 +63,14 @@ compilers in the cloud session:
 | C++ | `solution.cpp` as a separate translation unit, linked | Fails: `'vector' does not name a type`, because the includes aren't visible. It would also need a declaration in the harness that matches the learner's exact signature, or the link fails. **Not recommended.** |
 | Java | `Solution.java`, compiled with `javac Main.java Solution.java` | `Solution.java:4` for a compile error, and `at Solution.twoSum(Solution.java:4)` in a stack trace. The learner's own `import`s go in their file. |
 | Python | `solution.py`, run with `runpy.run_path("solution.py", init_globals={"sys": sys, "json": json}, run_name="__main__")` (<https://docs.python.org/3/library/runpy.html#runpy.run_path>) | `File "solution.py", line 3` for runtime and syntax errors. It returns the module's globals, from which the harness takes the function. This is the standard library's tool for running a file as a module. It replaces L3 (a)'s `exec`, keeping `sys`, `json` and `__name__ == '__main__'` as today. |
-| D | `solution.d` as a separate module (`import solution;`) | Fails for code that works today: `writeln is not defined, perhaps import std.stdio; is needed?`. D has no textual `#include`, so **D keeps the `#line` approach** of L1 (a). |
+| D | `solution.d` as a separate module (`import solution;`) | Fails for code that works today: `writeln is not defined, perhaps import std.stdio; is needed?`. Every D file is a module (<https://dlang.org/spec/module.html>), and a module doesn't see another's imports. |
+| D | **1b (chosen):** `solution.d` mixed into `main.d`: `mixin("#line 1 \"solution.d\"\n" ~ import("solution.d"))`, compiled with `-J/work` | `solution.d(3)` for a compile error, and an exception's `file`/`line` say `solution.d:3`. Without the `#line` it says `main.d-mixin-3(5)`. The code sees the harness's imports. The compiler refuses absolute and `..` paths in `import("…")`, so it reads only the work folder. |
+| D | 2: a separate module, with `import judge_prelude;` (which `public import`s the standard modules) put on the same line as the learner's first line | `solution.d(3)`, and `writeln` works. Not chosen: it injects text into line 1. |
 | JavaScript | (not needed) | Already right. |
 
 So L1 becomes: C++ `#include "solution.cpp"` (simpler than counting
 lines for `#line`), Java `Solution.java`, Python `runpy` with
-`solution.py`, D `#line 1 "solution.d"`, JavaScript unchanged. L4's names
+`solution.py`, D 1b (mixin with `#line`), JavaScript unchanged. L4's names
 become `solution.cpp`, `Solution.java`, `solution.py` and `solution.d`,
 with the harness's own lines named `main.cpp`, `Main.java` and `main.py`.
 

@@ -134,7 +134,12 @@ const D_PARAM_EXTRACTORS = {
   'int[]': '__judge_extractIntArray',
 };
 
-// Harness code appended after the user's submitted function definition.
+// The harness: the code that reads the test cases, calls the submitted
+// function and prints the results. In function judging the learner's code
+// is a file of its own next to it (SOLUTION_FILE_NAMES), so compiler and
+// interpreter messages give the line numbers the editor shows (issue #26,
+// docs/plans/error-line-numbers.md); JavaScript's harness comes after the
+// learner's code in the same file, which numbers them right already.
 // Test case args (never the expected answers) are piped in over stdin,
 // so the submission isn't handed the expected outputs. Until it's
 // sandboxed, though, it can still read them from questions/*.json on disk
@@ -158,21 +163,31 @@ process.stdin.on('end', () => {
 `;
 }
 
-function buildPythonSource(userCode, functionName) {
-  return `import sys, json
+// The learner's code is in solution.py, run with runpy.run_path
+// (https://docs.python.org/3/library/runpy.html#runpy.run_path), so
+// tracebacks say File ".../solution.py", line N. It's given sys and json,
+// which it could use without importing when it was pasted into this file,
+// and runs as __main__, as it did then. run_path returns its globals, which
+// the functions defined there keep using.
+function buildPythonSource(functionName) {
+  return `import sys, json, os, runpy
 try:
     import resource
     resource.setrlimit(resource.RLIMIT_AS, (${PYTHON_MEMORY_MB} * 1024 * 1024, ${PYTHON_MEMORY_MB} * 1024 * 1024))
 except Exception:
     pass
 
-${userCode}
+__judge_ns = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), '${SOLUTION_FILE_NAMES.python}'),
+                            init_globals={'sys': sys, 'json': json}, run_name='__main__')
+if '${functionName}' not in __judge_ns:
+    raise NameError("name '${functionName}' is not defined")
+__judge_fn = __judge_ns['${functionName}']
 
 __judge_cases = json.loads(sys.stdin.read())
 __judge_results = []
 for __judge_tc in __judge_cases:
     try:
-        __judge_results.append({'actual': ${functionName}(*__judge_tc['args'])})
+        __judge_results.append({'actual': __judge_fn(*__judge_tc['args'])})
     except Exception as __judge_err:
         __judge_results.append({'error': str(__judge_err)})
 def __judge_default(o):
@@ -191,7 +206,11 @@ sys.stdout.write('\\n${RESULT_MARKER}\\n' + json.dumps(__judge_results, default=
 // type resolves by overload (buildJson is overloaded per type in
 // judge_json.hpp, plus an optional problem-specific overload for custom
 // structs spliced in via signature.customSerializer).
-function buildCppSource(userCode, functionName, signature) {
+// The learner's code is #included from solution.cpp after the harness's
+// includes, so it still sees them and `using namespace std;`, and g++
+// reports its lines as solution.cpp:N, with the source excerpt (g++ reads
+// excerpts from the named file, so it must exist).
+function buildCppSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
     .map((type, i) => {
@@ -216,7 +235,7 @@ function buildCppSource(userCode, functionName, signature) {
 #include <cmath>
 using namespace std;
 
-${userCode}
+#include "${SOLUTION_FILE_NAMES.cpp}"
 
 ${signature.customSerializer || ''}
 int main() {
@@ -252,7 +271,9 @@ int main() {
 // variable's *declared* type, so __judge_result is declared with exactly
 // signature.returns, same as the C++ harness's `auto` relies on the actual
 // return type.
-function buildJavaSource(userCode, functionName, signature) {
+// The learner's code is Solution.java, compiled together with this Main.java
+// (compileCommand), so javac and stack traces report Solution.java:N.
+function buildJavaSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
     .map((type, i) => {
@@ -264,8 +285,6 @@ function buildJavaSource(userCode, functionName, signature) {
   const returns = signature.returns || 'void';
 
   return `import java.util.Scanner;
-
-${userCode}
 
 public class Main {
     static JudgeJson.Value toJson(int v) { return JudgeJson.Value.of((long) v); }
@@ -308,7 +327,15 @@ ${signature.customSerializer || ''}
 // type, so signature.returns isn't functionally needed here — it's kept in
 // each problem's signature.d purely for schema consistency with the other
 // compiled languages.
-function buildDSource(userCode, functionName, signature) {
+// The learner's code is solution.d, mixed in here at compile time: a string
+// import (import("solution.d"), which needs the compiler's -J flag) read
+// into mixin(), so it's in this module and sees its imports, as when it was
+// pasted in. Every D file is a module of its own, and a module doesn't see
+// another's imports, so a separately compiled solution.d would lose them
+// (https://dlang.org/spec/module.html). The #line in front makes the
+// compiler, and exceptions' file and line, say solution.d and count from
+// its first line (https://dlang.org/spec/lex.html#special-token-sequence).
+function buildDSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
     .map((type, i) => {
@@ -329,7 +356,7 @@ import std.range;
 import std.string;
 import std.typecons;
 
-${userCode}
+mixin("#line 1 \\"${SOLUTION_FILE_NAMES.d}\\"\\n" ~ import("${SOLUTION_FILE_NAMES.d}"));
 
 JSONValue __judge_toJson(int v) { return JSONValue(v); }
 JSONValue __judge_toJson(bool v) { return JSONValue(v); }
@@ -407,6 +434,10 @@ function deepEqual(a, b) {
 // fixed file names inside. javac needs the public class's file to be named
 // after it (Main.java); the rest just keep the same shape.
 const SOURCE_FILE_NAMES = { javascript: 'main.js', python: 'main.py', cpp: 'main.cpp', java: 'Main.java', d: 'main.d' };
+// Function judging: the learner's code, in a file of its own next to the
+// harness (see the build*Source functions). JavaScript has none: its
+// harness follows the learner's code in main.js.
+const SOLUTION_FILE_NAMES = { python: 'solution.py', cpp: 'solution.cpp', java: 'Solution.java', d: 'solution.d' };
 const BINARY_FILE_NAME = 'main';
 
 function makeWorkDir() {
@@ -442,9 +473,12 @@ const COMPILER_ADDRESS_SPACE_BYTES = 1024 * 1024 * 1024;
 const JAVAC_HEAP_MB = 256;
 
 // How to compile a submission: { argv, timeoutMs, addressSpaceBytes }, in
-// the paths the compiler sees, or null for interpreted languages.
-function compileCommand(language, paths) {
+// the paths the compiler sees, or null for interpreted languages. Function
+// judging also compiles the learner's own file (Java), or lets the harness
+// read it (D's -J); program judging has just the one file.
+function compileCommand(language, paths, judgeMode = 'function') {
   const file = (name) => path.posix.join(paths.work, name);
+  const functionJudging = judgeMode === 'function';
   switch (language) {
     case 'cpp':
       // judge_json.o is the precompiled JSON helper (ensureCppJsonObjectBuilt).
@@ -457,14 +491,16 @@ function compileCommand(language, paths) {
       // Writes Main.class, Solution.class and any other top-level classes
       // into the work folder; JudgeJson.class is found on the classpath.
       return {
-        argv: ['javac', `-J-Xmx${JAVAC_HEAP_MB}m`, '-cp', paths.javaHelpers, '-d', paths.work, file(SOURCE_FILE_NAMES.java)],
+        argv: ['javac', `-J-Xmx${JAVAC_HEAP_MB}m`, '-cp', paths.javaHelpers, '-d', paths.work, file(SOURCE_FILE_NAMES.java),
+          ...(functionJudging ? [file(SOLUTION_FILE_NAMES.java)] : [])],
         timeoutMs: JAVA_COMPILE_TIMEOUT_MS,
       };
     case 'd':
       // -of names the binary; -od puts the object file the compiler leaves
-      // behind in the work folder too. ldc2 and dmd take the same flags.
+      // behind in the work folder too; -J lets import("solution.d") read
+      // from the work folder. ldc2 and dmd take the same flags.
       return {
-        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d)],
+        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, ...(functionJudging ? [`-J${paths.work}`] : []), file(SOURCE_FILE_NAMES.d)],
         timeoutMs: D_COMPILE_TIMEOUT_MS,
         addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
       };
@@ -537,8 +573,8 @@ function startProcess(proc, options) {
 // compiler runs inside the sandbox, killing it on timeout kills all of it:
 // g++'s child cc1plus used to survive and hold the judge's pipe open.
 // memoryExceeded: the cgroup's OOM killer ended a process meanwhile.
-function compileSubmission(language, workDir, cg = null) {
-  const compile = compileCommand(language, judgePaths(workDir));
+function compileSubmission(language, workDir, cg = null, judgeMode = 'function') {
+  const compile = compileCommand(language, judgePaths(workDir), judgeMode);
   if (!compile) return Promise.resolve(null);
   const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes, cg });
   const before = cg ? cg.memory() : null;
@@ -623,16 +659,17 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 
   const SOURCE_BUILDERS = {
     javascript: () => buildJavascriptSource(code, functionName),
-    python: () => buildPythonSource(code, functionName),
-    cpp: () => buildCppSource(code, functionName, signature || {}),
-    java: () => buildJavaSource(code, functionName, signature || {}),
-    d: () => buildDSource(code, functionName, signature || {}),
+    python: () => buildPythonSource(functionName),
+    cpp: () => buildCppSource(functionName, signature || {}),
+    java: () => buildJavaSource(functionName, signature || {}),
+    d: () => buildDSource(functionName, signature || {}),
   };
   if (!SOURCE_BUILDERS[language]) throw new Error(`Unsupported language: ${language}`);
   const source = SOURCE_BUILDERS[language]();
 
   const workDir = makeWorkDir();
   fs.writeFileSync(path.join(workDir, SOURCE_FILE_NAMES[language]), source);
+  if (SOLUTION_FILE_NAMES[language]) fs.writeFileSync(path.join(workDir, SOLUTION_FILE_NAMES[language]), code);
   // One cgroup for the compile and every run (null without cgroup limits).
   const cg = cgroups.forSubmission();
 
@@ -775,7 +812,7 @@ async function runProgramSubmission({ language, code, testCases }) {
   const cg = cgroups.forSubmission();
 
   try {
-    const compileResult = await compileSubmission(language, workDir, cg);
+    const compileResult = await compileSubmission(language, workDir, cg, 'program');
     if (compileResult) {
       if (!compileResult.success) {
         const errorText = (compileResult.memoryExceeded ? cgroups.MEMORY_LIMIT_MESSAGE : compileResult.timedOut

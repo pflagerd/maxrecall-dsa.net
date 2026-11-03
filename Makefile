@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -57,6 +57,12 @@ dev: build
 # make's "Error 1", unless every probe is contained or skipped.
 sandbox-test: sandbox-deps
 	node judge/sandbox-selftest.js
+
+# Checks that error messages give the editor's line numbers in every
+# language and both judging modes, and that correct answers are still
+# Accepted (issue #26).
+line-numbers-test: sandbox-deps
+	node judge/line-numbers-test.js
 
 # Set up, or update, the systemd service on this machine: docs/deploy-vps.md
 # done for you (scripts/deploy-server.sh). For the VPS. Needs root (asks for
