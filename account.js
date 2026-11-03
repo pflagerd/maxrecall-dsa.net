@@ -35,15 +35,23 @@
   const logout = document.createElement('button');
   logout.type = 'button';
   logout.textContent = 'Log out';
-  logout.addEventListener('click', async () => {
-    logout.disabled = true;
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-    }).catch(() => {});
-    window.location.replace('/login.html');
-  });
+  logout.addEventListener(
+    'click',
+    /**
+     * Logs out, then goes to the login page (even if the request fails).
+     *
+     * @returns {Promise<void>}
+     */
+    async () => {
+      logout.disabled = true;
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }).catch(() => {});
+      window.location.replace('/login.html');
+    },
+  );
 
   el.replaceChildren(name, logout);
 })();
