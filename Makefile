@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -50,6 +50,14 @@ run: build
 dev: build
 	$(OPEN_BROWSER)
 	PORT=$(PORT) npx nodemon server.js
+
+# Unit tests: every *.test.js in the top folder, with Node's built-in test
+# runner. The files are named, not left to node --test's defaults, which
+# would also pick up judge/line-numbers-test.js (it matches *-test.js) and so
+# need the sandbox and every compiler. Needs no sandbox itself.
+TEST_FILES := $(wildcard *.test.js)
+test: toolchain-deps
+	node --test $(TEST_FILES)
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine
