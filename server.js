@@ -17,7 +17,8 @@ const { runSubmission } = require('./judge/runner');
 const { describeSandbox } = require('./judge/sandbox');
 const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
-const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission } = require('./users');
+const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile } = require('./users');
+const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -114,7 +115,8 @@ if (TRUSTED_PORT !== null && !(Number.isInteger(TRUSTED_PORT) && TRUSTED_PORT > 
   throw new Error(`TRUSTED_PORT must be a port number different from PORT, got ${JSON.stringify(process.env.TRUSTED_PORT)}`);
 }
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
-const SUPPORTED_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
+// The judge's five languages, kept in one place (profile.js).
+const SUPPORTED_LANGUAGES = LANGUAGES;
 
 app.use(express.json());
 
@@ -174,11 +176,13 @@ app.use(async (/** @type {AppRequest} */ req, res, next) => {
   }
 });
 
-// Every POST to the API must be JSON. A form on another site can't send JSON
-// here without a CORS preflight, which this server never approves, so this
-// (with SameSite=Lax) stops cross-site request forgery, logout included.
+// Every POST (and PATCH) to the API must be JSON. A form on another site
+// can't send JSON here without a CORS preflight, which this server never
+// approves, so this (with SameSite=Lax) stops cross-site request forgery,
+// logout included. A form can't send PATCH at all, and a cross-site fetch
+// with it needs a preflight too; the same rule covers it for simplicity.
 app.use('/api', (req, res, next) => {
-  if (req.method === 'POST' && !req.is('application/json')) {
+  if ((req.method === 'POST' || req.method === 'PATCH') && !req.is('application/json')) {
     return res.status(415).json({ error: 'Send JSON (Content-Type: application/json)' });
   }
   next();
@@ -379,6 +383,18 @@ async function handleExecution(req, res, { onlyVisible }) {
   if (!problem.starterCode[language]) {
     return res.status(400).json({ error: `This problem doesn't support ${language}.` });
   }
+  // The learner's profile decides which languages they may use (403
+  // otherwise). An invalid profile refuses everything rather than guess
+  // (fail closed): 500, naming the problem.
+  let profile;
+  try {
+    profile = loadProfile(/** @type {string} */ (req.userEmail)); // signed in: the gate
+  } catch (err) {
+    return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+  }
+  if (!profile.allowedLanguages.includes(language)) {
+    return res.status(403).json({ error: `${language} isn't one of the languages you can use (${profile.allowedLanguages.join(', ')}).` });
+  }
 
   const judgeMode = problem.judgeMode || 'function';
   // A function-mode question always has functionName (the problem file
@@ -486,6 +502,77 @@ app.get('/api/submissions/:id', async (/** @type {AppRequest} */ req, res) => {
     res.json(record);
   } catch (err) {
     res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submission' });
+  }
+});
+
+// --- The learner's profile (spaced-repetition plan, D2) -------------------------
+
+/**
+ * The signed-in user's effective profile, from users/<email>/profile.json.
+ *
+ * @param {string} email - The user's email.
+ * @returns {import('./profile').EffectiveProfile} The profile to use.
+ * @throws {Error} ProfileError (code INVALID_PROFILE) if the file is
+ *   invalid; another Error if it can't be read.
+ */
+function loadProfile(email) {
+  return parseProfile(readProfileFile(email));
+}
+
+/**
+ * Answers a request that a profile problem stopped: 500 for an invalid
+ * profile.json (the server's data, not the request, is wrong) or one that
+ * can't be read, and logs it, since the owner has to fix the file.
+ *
+ * @param {Response} res - The response.
+ * @param {Error & { code?: string }} err - From loadProfile() or
+ *   applyPreferredChange().
+ * @returns {Response} The response, sent.
+ */
+function sendProfileError(res, err) {
+  console.error(`Profile problem: ${err.message}`);
+  return res.status(500).json({ error: err.message, code: err.code === 'INVALID_PROFILE' ? 'INVALID_PROFILE' : undefined });
+}
+
+// The effective profile: allowedLanguages, languages (turned on, in order),
+// defaultLanguage and the three can... permissions.
+app.get('/api/profile', (/** @type {AppRequest} */ req, res) => {
+  try {
+    res.json(loadProfile(/** @type {string} */ (req.userEmail))); // signed in: the gate
+  } catch (err) {
+    sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+  }
+});
+
+// The learner changes their own choices: body { languages?, defaultLanguage? }.
+// Only preferred changes (profile.js, applyPreferredChange): 403 when an
+// allowed flag forbids it, 400 when it doesn't fit allowed. Read, changed
+// and written with no await in between (synchronous file calls), so two at
+// once can't overwrite each other's change. Answers the new effective profile.
+app.patch('/api/profile/preferred', (/** @type {AppRequest} */ req, res) => {
+  const email = /** @type {string} */ (req.userEmail); // signed in: the gate
+  let contents;
+  try {
+    const text = readProfileFile(email);
+    let raw;
+    try {
+      raw = text === undefined ? undefined : JSON.parse(text);
+    } catch {
+      // Not JSON: parseProfile says so, as an invalid profile.
+      parseProfile(/** @type {string} */ (text));
+    }
+    contents = applyPreferredChange(raw, req.body || {});
+  } catch (err) {
+    const { code, message } = /** @type {Error & { code?: string }} */ (err);
+    if (code === 'NOT_PERMITTED') return res.status(403).json({ error: message });
+    if (code === 'INVALID_CHANGE') return res.status(400).json({ error: message });
+    return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+  }
+  try {
+    writeProfileFile(email, contents);
+    res.json(parseProfile(readProfileFile(email)));
+  } catch (err) {
+    sendProfileError(res, /** @type {Error} */ (err));
   }
 });
 
