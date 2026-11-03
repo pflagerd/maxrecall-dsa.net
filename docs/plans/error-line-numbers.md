@@ -1,0 +1,132 @@
+# Plan: error line numbers that match the editor (issue #26)
+
+Status: **waiting for the owner's decisions** (L1–L4). Nothing is changed
+yet. Written 2026-11-03.
+
+## The cause
+
+For function judging, `judge/runner.js` writes one source file per
+submission. The file holds the harness (the code that reads the test
+cases, calls the submitted function and prints the results) as well as
+the learner's code. In four of the five languages, harness lines come
+*before* the learner's code (`buildPythonSource`, `buildCppSource`,
+`buildJavaSource`, `buildDSource`), so the compiler or interpreter counts
+those too.
+
+Measured on 2026-11-03 by submitting code with a mistake on **line 3**
+(as the editor numbers it) through `runSubmission`:
+
+| Language | Error | Reported as | Off by | What's in front |
+|---|---|---|---|---|
+| Python | syntax error | `File "/work/main.py", line 10` | +7 | `import sys, json` and the `resource.setrlimit` block |
+| C++ | compile error | `/work/main.cpp:93:12` | +90 | all of `judge/cpp/judge_json.hpp`, inlined, then 13 `#include`s and `using namespace std;` |
+| Java | compile error | `/work/Main.java:5` | +2 | `import java.util.Scanner;` and a blank line |
+| D | compile error | `/work/main.d(14)` | +11 | 10 `import`s and a blank line |
+| JavaScript | (none) | | 0 | nothing: the learner's code comes first |
+
+Program judging (`judgeMode: "program"`) has no harness, so its numbers
+are already right.
+
+Two related problems turned up:
+
+1. **Runtime errors show no line at all** in JavaScript, Python and Java.
+   The harness catches the exception and reports only its message
+   (`err.message`, `str(err)`, `getMessage()`), e.g. "Index 99 out of
+   bounds for length 4".
+2. **Some errors point into the harness.** A C++ submission whose
+   parameter is `vector<int>&` instead of `vector<int>` fails at the
+   harness's call to it (`main.cpp:106`), a line the learner can't see.
+
+## Decisions
+
+### L1. How to make compile and syntax errors report the editor's lines
+
+- **(a) Make the compiler or interpreter count from the learner's
+  code**, so every message is right without changing it afterwards:
+  - **C++:** a `#line 1 "solution.cpp"` directive just before the
+    learner's code, and `#line <n> "judge_harness.cpp"` just after. This is
+    standard C++ (the `#line` directive,
+    <https://en.cppreference.com/w/cpp/preprocessor/line>). Tested with
+    g++ 13.3: messages then say `solution.cpp:3:12`, and a harness line
+    says `judge_harness.cpp:8:28` followed by a note pointing at
+    `solution.cpp:1:33`, the learner's own parameter. GCC prints its
+    `3 | …` source excerpt only if a file of that name exists, because it
+    reads the excerpt from disk. So the judge also writes the learner's
+    code alone as `solution.cpp` in the work folder.
+  - **D:** the same, with D's `#line` special token sequence
+    (<https://dlang.org/spec/lex.html#special-token-sequence>). Tested
+    with LDC 1.36: `solution.d(3): Error: …`.
+  - **Java:** Java has no `#line`. But only one line is in front:
+    `import java.util.Scanner;`. Writing `java.util.Scanner` in full in
+    the harness removes it, so the learner's code starts at line 1. (The
+    learner's own `import`s still work, since they come first.)
+  - **Python:** Python has no `#line` either. The harness would read the
+    learner's code from a separate `solution.py` and run it with
+    `exec(compile(source, 'solution.py', 'exec'), namespace)`, so
+    tracebacks say `File "solution.py", line 3` (L3 has an alternative).
+  - **JavaScript:** already right.
+- (b) Rewrite the numbers in the error text afterwards: subtract the
+  harness's line count from each `main.cpp:93:`, `main.d(14)`,
+  `Main.java:5`, `File "…main.py", line 10`, and GCC's `93 |` excerpts.
+  It's one mechanism for every language, but it depends on each
+  compiler's exact message format, which changes between versions, and
+  on not mistaking other numbers in a message for line numbers.
+
+**Recommendation: (a).** The compilers do the counting themselves, and a
+harness line shows up under a name of its own (`judge_harness.cpp`),
+which helps with problem 2 above.
+
+### L2. Runtime errors: add the line?
+
+- **(a) Yes, as a second step:** the harness finds the deepest stack frame
+  that is in the learner's code and adds "(line N)" to the message:
+  - Python: `traceback.extract_tb`, the last frame in `solution.py`;
+  - JavaScript: the first `main.js:N` frame in `err.stack`;
+  - Java: the first stack trace element that isn't in the harness's
+    `Main` class;
+  - D: `Throwable` carries `file` and `line` itself
+    (<https://dlang.org/phobos/object.html#.Throwable>).
+  - **C++ can't:** a `std::exception` carries no location, and a crash
+    such as a segfault reports none either. That stays as it is.
+- (b) No, not now.
+
+**Recommendation: (a)**, after L1, as its own step and commit.
+
+### L3. Python: how to get the learner's code to line 1
+
+- **(a) `exec` from a separate `solution.py`**, as in L1 (a). The harness
+  keeps its memory limit and its `sys`/`json` imports. The learner's code
+  runs with `__name__ == '__main__'` as now, so an
+  `if __name__ == '__main__':` block behaves the same.
+- (b) Move the memory limit into the run command (`ulimit -v`, as program
+  judging already does, `runCommand` in `judge/runner.js`), and import
+  `sys` and `json` *after* the learner's code. It's simpler, but `sys`
+  would no longer be imported for the learner: code that uses
+  `sys.setrecursionlimit` without `import sys`, which works today, would
+  fail with a `NameError`.
+
+**Recommendation: (a)**, which changes nothing for the learner except the
+line numbers and the file name.
+
+### L4. File names in messages
+
+With L1 (a), messages name `solution.cpp`, `solution.py` and
+`solution.d` instead of `/work/main.cpp` and so on. Java's stays
+`Main.java` (a `public class Main` must be in `Main.java`), and
+JavaScript's stays `main.js`.
+
+- **(a) Fine as described.**
+- (b) Name them all `main.*`, to match today's names.
+
+**Recommendation: (a).** "solution" says it's your code. A
+`judge_harness.*` name says it isn't.
+
+## Steps once decided
+
+1. L1 (and L3, L4): line numbers right for compile and syntax errors in
+   every language. A test submits a mistake on a known line in each
+   language and checks the number reported. The existing escape test and
+   browser tests must still pass.
+2. L2: line numbers for runtime errors, except C++.
+3. Possible later step (not planned): make a line number in the console
+   clickable, jumping to that line in the editor.
