@@ -46,6 +46,24 @@ const FUNCTION_MISTAKES = [
   ['d', 'compile error on line 1', 'int[] twoSum(int[] nums, int target) { return undefinedName; }\n', /solution\.d\(1\)/],
 ];
 
+// Function judging, runtime errors (step 2): the harness catches the
+// exception and adds "(line N)", the deepest line of the learner's code on
+// its stack. `lib` cases throw inside a library function called on line 3.
+const RUNTIME_MISTAKES = [
+  ['javascript', 'runtime error', 'function twoSum(nums, target) {\n    const a = null;\n    return a.boom;\n}\n', /\(line 3\)$/],
+  ['javascript', 'library error', 'function twoSum(nums, target) {\n    const a = 1;\n    return JSON.parse("{oops");\n}\n', /\(line 3\)$/],
+  ['javascript', 'message mentioning main.js:1', 'function twoSum(nums, target) {\n    const a = 1;\n    throw new Error("see main.js:1:1");\n}\n', /^see main\.js:1:1 \(line 3\)$/],
+  ['python', 'runtime error', 'def two_sum(nums, target):\n    a = None\n    return a.boom\n', /\(line 3\)$/],
+  ['python', 'library error', 'def two_sum(nums, target):\n    a = 1\n    return int("oops")\n', /\(line 3\)$/],
+  ['python', 'exception with no message', 'def two_sum(nums, target):\n    a = 1\n    raise ValueError()\n', /^ValueError \(line 3\)$/],
+  ['java', 'runtime error', 'class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        return new int[] { nums[99] };\n    }\n}\n', /\(line 3\)$/],
+  ['java', 'library error', 'class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        return new int[] { Integer.parseInt("oops") };\n    }\n}\n', /\(line 3\)$/],
+  ['d', 'runtime error', 'int[] twoSum(int[] nums, int target) {\n    int[] a = [1];\n    return [a[5]];\n}\n', /\(line 3\)$/],
+  ['d', 'library error', 'int[] twoSum(int[] nums, int target) {\n    int a = 1;\n    return [to!int("oops")];\n}\n', /\(line 3\)$/],
+  // C++ exceptions carry no location: the message is left as it was.
+  ['cpp', 'exception (no line possible)', 'vector<int> twoSum(vector<int> nums, int target) {\n    int a = 1;\n    throw runtime_error("boom");\n}\n', /^boom$/],
+];
+
 // Program judging: the code is the whole file, so its own name and lines.
 const PROGRAM_MISTAKES = [
   ['javascript', 'syntax error', 'const a = 1;\nconst b = 2;\nconst c = ;\n', /main\.js:3\b/],
@@ -88,6 +106,11 @@ async function main() {
   for (const [language, kind, code, expect] of FUNCTION_MISTAKES) {
     const text = reportText(await submit(twoSum, language, code));
     check(`function judging, ${language} ${kind}${/line \d/.test(kind) ? "" : " on line 3"}`, expect.test(text), text);
+  }
+  for (const [language, kind, code, expect] of RUNTIME_MISTAKES) {
+    const result = await submit(twoSum, language, code);
+    const error = (result.results && result.results[0] && result.results[0].error) || '';
+    check(`function judging, ${language} ${kind} on line 3 (runtime)`, result.status === 'Runtime Error' && expect.test(error), `${result.status}: ${error}\n${reportText(result)}`);
   }
   for (const [language, kind, code, expect] of PROGRAM_MISTAKES) {
     const text = reportText(await submit(helloWorld, language, code, 'program'));

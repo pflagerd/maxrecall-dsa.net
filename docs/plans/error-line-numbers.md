@@ -1,7 +1,14 @@
 # Plan: error line numbers that match the editor (issue #26)
 
-Status: **step 1 done** (2026-11-03, branch `error-line-numbers`); step 2
-next. Decided by the owner: the learner's code as a file of its own (the
+Status: **steps 1 and 2 done** (2026-11-03; step 1 merged from branch
+`error-line-numbers`, step 2 on branch `runtime-error-lines`).
+Step 2 as built: the message of an exception the harness catches ends in
+"(line N)", the deepest line of the learner's code on its stack. D
+function judging compiles with `-g` for that, measured at about 200 ms more
+per judging (two-sum median 755 → 952 ms in the cloud), so that a
+library's exception (e.g. `to!int("x")`) also gets the learner's line.
+Without `-g`, only errors thrown at the learner's own line (an index out of
+range) would. Decided by the owner: the learner's code as a file of its own (the
 revised recommendation below), D by option 2 (a separate module with a
 prelude import on line 1; 1b, chosen first, failed on a newer LDC, see
 below), L2 (a) runtime lines as step 2, L3 `runpy`, L4 the `solution.*`

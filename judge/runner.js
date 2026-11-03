@@ -144,8 +144,21 @@ const D_PARAM_EXTRACTORS = {
 // so the submission isn't handed the expected outputs. Until it's
 // sandboxed, though, it can still read them from questions/*.json on disk
 // (gap G2 in docs/plans/sandboxing.md).
+// A caught exception's message gets "(line N)": the deepest frame of its
+// stack that's in the learner's code, which is lines 1 to
+// __judge_userLines of main.js (the harness follows). Only the "at ..."
+// lines are searched, not the message, which the code controls.
 function buildJavascriptSource(userCode, functionName) {
   return `${userCode}
+const __judge_userLines = ${userCode.split('\n').length};
+function __judge_withLine(message, err) {
+  const stack = err && typeof err.stack === 'string' ? err.stack : '';
+  for (const frame of stack.split('\\n').filter((l) => /^\\s+at /.test(l))) {
+    const m = /main\\.js:(\\d+):\\d+/.exec(frame);
+    if (m && Number(m[1]) <= __judge_userLines) return \`\${message} (line \${m[1]})\`;
+  }
+  return message;
+}
 process.on('unhandledRejection', (__judge_err) => { console.error(__judge_err); process.exit(1); });
 let __judge_input = '';
 process.stdin.on('data', (chunk) => { __judge_input += chunk; });
@@ -155,7 +168,7 @@ process.stdin.on('end', () => {
     try {
       return { actual: ${functionName}(...tc.args) };
     } catch (err) {
-      return { error: (err && err.message) || String(err) };
+      return { error: __judge_withLine((err && err.message) || String(err), err) };
     }
   });
   process.stdout.write('\\n${RESULT_MARKER}\\n' + JSON.stringify(__judge_results));
@@ -170,7 +183,7 @@ process.stdin.on('end', () => {
 // and runs as __main__, as it did then. run_path returns its globals, which
 // the functions defined there keep using.
 function buildPythonSource(functionName) {
-  return `import sys, json, os, runpy
+  return `import sys, json, os, runpy, traceback
 try:
     import resource
     resource.setrlimit(resource.RLIMIT_AS, (${PYTHON_MEMORY_MB} * 1024 * 1024, ${PYTHON_MEMORY_MB} * 1024 * 1024))
@@ -183,13 +196,23 @@ if '${functionName}' not in __judge_ns:
     raise NameError("name '${functionName}' is not defined")
 __judge_fn = __judge_ns['${functionName}']
 
+# A caught exception's message (its type's name if it has none) gets
+# "(line N)": the deepest frame of its traceback in solution.py.
+def __judge_with_line(err):
+    message = str(err) or type(err).__name__
+    line = None
+    for frame in traceback.extract_tb(err.__traceback__):
+        if os.path.basename(frame.filename) == '${SOLUTION_FILE_NAMES.python}':
+            line = frame.lineno
+    return f'{message} (line {line})' if line else message
+
 __judge_cases = json.loads(sys.stdin.read())
 __judge_results = []
 for __judge_tc in __judge_cases:
     try:
         __judge_results.append({'actual': __judge_fn(*__judge_tc['args'])})
     except Exception as __judge_err:
-        __judge_results.append({'error': str(__judge_err)})
+        __judge_results.append({'error': __judge_with_line(__judge_err)})
 def __judge_default(o):
     # Lets submissions return custom objects (e.g. a linked list node) by
     # serializing their attributes, recursively, instead of requiring JSON-native types.
@@ -287,6 +310,14 @@ function buildJavaSource(functionName, signature) {
   return `import java.util.Scanner;
 
 public class Main {
+    // A caught exception's message gets "(line N)": the first (deepest)
+    // stack frame in the learner's file.
+    static String __judge_withLine(String message, Throwable err) {
+        for (StackTraceElement el : err.getStackTrace()) {
+            if ("${SOLUTION_FILE_NAMES.java}".equals(el.getFileName()) && el.getLineNumber() > 0) return message + " (line " + el.getLineNumber() + ")";
+        }
+        return message;
+    }
     static JudgeJson.Value toJson(int v) { return JudgeJson.Value.of((long) v); }
     static JudgeJson.Value toJson(boolean v) { return JudgeJson.Value.of(v); }
     static JudgeJson.Value toJson(String v) { return JudgeJson.Value.of(v); }
@@ -312,7 +343,7 @@ ${signature.customSerializer || ''}
             } catch (Throwable __judge_err) {
                 __judge_entry = JudgeJson.Value.object();
                 String __judge_msg = __judge_err.getMessage();
-                __judge_entry.set("error", JudgeJson.Value.of(__judge_msg == null ? __judge_err.toString() : __judge_msg));
+                __judge_entry.set("error", JudgeJson.Value.of(__judge_withLine(__judge_msg == null ? __judge_err.toString() : __judge_msg, __judge_err)));
             }
             __judge_results.add(__judge_entry);
         }
@@ -353,6 +384,26 @@ function buildDSource(functionName, signature) {
   return `${D_STANDARD_IMPORTS.map((m) => `import ${m};`).join('\n')}
 import solution;
 
+// A caught exception's message gets "(line N)": where it was thrown, if
+// that's solution.d (an error the learner's line caused, e.g. an index out
+// of range), else the first solution.d frame of its stack trace, for an
+// exception thrown inside the standard library. Stack traces name files
+// and lines only with debug info, so function judging compiles with -g.
+string __judge_withLine(string message, Throwable err) {
+    import std.path : baseName;
+    if (baseName(err.file) == "${SOLUTION_FILE_NAMES.d}") return message ~ " (line " ~ to!string(err.line) ~ ")";
+    if (err.info is null) return message;
+    foreach (frame; err.info) {
+        auto at = frame.indexOf("${SOLUTION_FILE_NAMES.d}:");
+        if (at < 0) continue;
+        auto digits = frame[at + "${SOLUTION_FILE_NAMES.d}:".length .. $];
+        size_t n = 0;
+        while (n < digits.length && digits[n] >= '0' && digits[n] <= '9') n++;
+        if (n > 0) return message ~ " (line " ~ digits[0 .. n].idup ~ ")";
+    }
+    return message;
+}
+
 JSONValue __judge_toJson(int v) { return JSONValue(v); }
 JSONValue __judge_toJson(bool v) { return JSONValue(v); }
 JSONValue __judge_toJson(string v) { return JSONValue(v); }
@@ -383,7 +434,7 @@ void main() {
             auto __judge_result = solution.${functionName}(${argExprs});
             __judge_entry = JSONValue(["actual": __judge_toJson(__judge_result)]);
         } catch (Throwable __judge_err) {
-            __judge_entry = JSONValue(["error": __judge_toJson(__judge_err.msg)]);
+            __judge_entry = JSONValue(["error": __judge_toJson(__judge_withLine(__judge_err.msg, __judge_err))]);
         }
         __judge_results ~= __judge_entry;
     }
@@ -506,9 +557,11 @@ function compileCommand(language, paths, judgeMode = 'function') {
       };
     case 'd':
       // -of names the binary; -od puts the object files the compiler leaves
-      // behind in the work folder too. ldc2 and dmd take the same flags.
+      // behind in the work folder too; -g (function judging) adds the debug
+      // info that lets stack traces name solution.d's lines, for the
+      // harness's "(line N)". ldc2 and dmd take the same flags.
       return {
-        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, file(SOURCE_FILE_NAMES.d),
+        argv: [D_COMPILER, `-of=${file(BINARY_FILE_NAME)}`, `-od=${paths.work}`, ...(functionJudging ? ['-g'] : []), file(SOURCE_FILE_NAMES.d),
           ...(functionJudging ? [file(SOLUTION_FILE_NAMES.d), file(D_PRELUDE_FILE_NAME)] : [])],
         timeoutMs: D_COMPILE_TIMEOUT_MS,
         addressSpaceBytes: COMPILER_ADDRESS_SPACE_BYTES,
