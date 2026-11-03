@@ -11,6 +11,7 @@ each answer and what it changed.
 | 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order` holds one queue per language or one with a language in each element. D1's details (file name, element shape, `schemaVersion`, safe writes) are proposed and waiting for the owner. |
 | 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile` in their user directory. | **New file**: `users/<email>/profile`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
 | 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's `Accepted`, all tests passing. There is **no "how easy"** in this requirement. Tests may also fail for timeouts, or for other reasons still to be decided. The result is recorded in **`order.json`**, in the user's directory, as an attribute **`pass`** whose value is the string `"yes"` or `"no"`. | Settles D1's file name: **`order.json`**. Each queue element now has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. D4 must say whether one `pass` is enough to decide how far to move, or whether a streak needs more history. |
+| 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**. It goes in its own file, **`advance.js`** (the name is for now). D4 will become much more nuanced over time; this is a starting point. | Replaces the 2^k table proposed in D4. A pair's element needs *k* (passes in a row), which one `pass` field can't give. D4's open details below, including what this rule does on a 65-element queue. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -220,6 +221,63 @@ The original options:
   bump.
 
 ### D4. How far does a pair move?
+
+**Decided 2026-11-03 (owner): 1.3^k ± 10%, in `advance.js`**, as a
+starting point to be changed over time. Details still open, with
+recommendations:
+
+- **What k is:** passes in a row, including this Submit; 0 after a
+  `"no"`. That needs a counter in the element (a field name to choose,
+  e.g. `passesInARow`), since `pass` only holds the latest result.
+  Counting back through the Submit records instead would make the queue
+  depend on them again (D5).
+- **Rounding:** to the nearest whole place, and **at least 1**, so a pair
+  never comes straight back as the next question.
+- **What `advance.js` does:** only works out *how many places*. Moving
+  the element within `order.json` belongs to the code that reads and
+  writes that file. Then changing the rule means editing `advance.js`
+  alone. A move longer than the queue puts the element at the end, as
+  MaxRecall's `advanceFlashcardGuid` does.
+- **Randomness passed in:** e.g. `advance(k, random = Math.random)`, so
+  tests can supply fixed "random" numbers and get repeatable answers.
+- **Module format:** CommonJS (`require`/`module.exports`), like
+  `users.js`. `package.json` has no `"type"` field, so Node treats `.js`
+  files as CommonJS ([Node's `"type"` docs](https://nodejs.org/api/packages.html#type)).
+- **Which Submit moves the queue** (raised with D3): only a Submit of the
+  element at the front, or any Submit of that pair, wherever it is, and
+  every time? Recommended: any saved Submit moves that pair from wherever
+  it is, since the learner can open any question from the list.
+
+**What 1.3^k ± 10% does** (worked out 2026-11-03 with a throwaway
+simulation; rounding as above, every Submit a pass, 13 questions × 5
+languages = 65 elements, all in the queue from the start):
+
+| k | 1.3^k | Places moved (with ±10%) |
+| --- | --- | --- |
+| 0 (failed) | 1.00 | 1 |
+| 1 | 1.30 | 1 |
+| 2 | 1.69 | 2 |
+| 3 | 2.20 | 2 |
+| 4 | 2.86 | 3 |
+| 5 | 3.71 | 3–4 |
+| 6 | 4.83 | 4–5 |
+| 8 | 8.16 | 7–9 |
+| 10 | 13.79 | 12–15 |
+| 16 | 66.54 | 60–73 (the end) |
+
+- **A fail and a first pass move the same distance** (1 place), as do
+  k = 2 and k = 3 (2 places). So early on the rule can't tell a hard
+  question from an easy one.
+- **The ±10% does nothing until k = 5**: below that, rounding swallows it.
+- **It takes 16 passes in a row** for a pair to reach the end of a
+  65-element queue.
+- In the first 100 Submits, all passes, only **12 different pairs** come
+  up, about 10 times each, and it takes **934 Submits** before every one
+  of the 65 has come up once. With 13 elements (one language) it's 111.
+  In effect a working set of about a dozen forms at the front, which is
+  what D6's backlog would otherwise do.
+
+The 2^k proposal it replaces:
 
 Recommended starting numbers for a small bank, with `k` = Accepted in a row
 including this one:
