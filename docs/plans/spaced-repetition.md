@@ -8,7 +8,8 @@ each answer and what it changed.
 
 | Date | Decision | Effect on the rest of the plan |
 | --- | --- | --- |
-| 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order` holds one queue per language or one with a language in each element. |
+| 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order` holds one queue per language or one with a language in each element. D1's details (file name, element shape, `schemaVersion`, safe writes) are proposed and waiting for the owner. |
+| 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile` in their user directory. | **New file**: `users/<email>/profile`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -137,6 +138,42 @@ The original options:
 
 ### D2. One queue per language, or one for everything?
 
+**Decided 2026-11-03 (owner): one queue for everything**, with a per-user
+profile, `users/<email>/profile`, deciding which languages a learner has
+and whether they may switch languages or set a default. Details still
+open:
+
+- **What an element is:** recommended a **(question, language) pair**,
+  e.g. `{"question": "two-sum", "language": "python"}`, keeping the
+  2026-10-30 design that progress is per (question, language). The
+  alternative, one element per question with the language picked from
+  the profile when it comes up, would lose per-language progress.
+- **File name:** `profile` or `profile.json` (same question as D1's
+  `order`).
+- **Who may change what:** recommended keeping two kinds of field apart in
+  the profile: what the learner is *allowed* (languages, may they switch,
+  may they set a default), set by the owner or a teacher; and what the
+  learner *prefers* (their default language), set by the learner within
+  those limits. For now the owner edits the file by hand; an API for the
+  learner's preferences can come later.
+- **Enforced by the server, or only hidden in the page?** Today the
+  server accepts all five languages (`SUPPORTED_LANGUAGES`, `server.js`)
+  from anyone. Recommended: Run and Submit refuse a language the profile
+  doesn't allow (a `403`), so "no access" is real and not only a hidden
+  menu item.
+- **No profile file:** what a user with no `profile` gets. Recommended:
+  all five languages, may switch, so the owner's current setup keeps
+  working until a profile is written.
+- **When the profile changes:** a language added means its pairs have to
+  enter the queue (where? the same question as new questions, D6); a
+  language removed means its pairs are skipped or removed (recommended
+  skipped, so the progress isn't lost if it comes back).
+- **What happens to the `localStorage` settings:** the default language
+  and the language menu would come from the profile instead. Recommended:
+  remove both keys' use once the profile exists, so there's one source.
+
+The original options:
+
 - **(a) One queue per language** (recommended). You work in one language
   at a time (the default language), and the list and "next question"
   follow the language you're in.
@@ -230,7 +267,10 @@ so with D5 (a) a Skip can't change the order.
 
 ## Steps (once decided)
 
-Each step is small and checkable on its own.
+Each step is small and checkable on its own. **To be rewritten** once
+D1–D8 are through: D1 and D2 have already changed them (a stored `order`
+file instead of a replay, and a `profile` file that has to come first,
+since it decides which languages are in the queue).
 
 1. **`scheduler.js`**: a pure function, roughly
    `buildQueue(questions, submissions, language)` returning the ordered
