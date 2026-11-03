@@ -562,11 +562,21 @@ each checked to fail against a deliberately wrong version first.
      deliberately broken versions fails a test, including a bug found
      while writing it (a new default checked against a stale preferred
      list rather than the effective languages).
-   - **4b, the server:** read the profile for each request; `GET
-     /api/profile`; Run and Submit refuse a language it doesn't allow
-     (`403`) and refuse everything when it's invalid; `PATCH
-     /api/profile/preferred`, written safely; the server's language list
-     from `profile.js`.
+   - **4b, done 2026-11-03: the server.** It reads the profile for each
+     request (`users.js`: `readProfileFile`, `writeProfileFile`,
+     synchronous, a temporary file renamed into place). `GET
+     /api/profile` gives the effective profile. Run and Submit refuse a
+     language the profile doesn't allow (`403`; one allowed but turned
+     off is still judged), and anything when it's invalid (`500`, naming
+     the problem, logged), after the request's own `400`s. `PATCH
+     /api/profile/preferred` gives `403` (a `can…` forbids it), `400`
+     (doesn't fit) or `500` (invalid file, left as it is), else writes
+     and answers the new profile; read, changed and written with no
+     `await` between. `POST` and `PATCH` must both be JSON. The server's
+     language list is `profile.js`'s `LANGUAGES`. Checked: with no
+     `profile.json`, the 39 baseline requests are identical to `master`;
+     16 profile cases against the real server behave as above;
+     `users.test.js` (4 tests) for the file functions.
    - **4c, the page:** the language menu, dropdown and default language
      come from `GET /api/profile` and are saved with `PATCH`, replacing
      the two `localStorage` settings; controls are disabled where a

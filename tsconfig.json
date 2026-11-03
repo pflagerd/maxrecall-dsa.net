@@ -21,6 +21,7 @@
     "profile.test.js",
     "paths.js",
     "users.js",
+    "users.test.js",
     "auth.js",
     "server.js",
     "judge/queue.js",

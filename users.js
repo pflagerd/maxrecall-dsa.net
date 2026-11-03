@@ -190,4 +190,58 @@ async function loadSubmission(email, id) {
   }
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission };
+/**
+ * Where a user's profile is: users/<email>/profile.json (profile.js, and
+ * the spaced-repetition plan's D2). The email is checked here, whatever the
+ * caller did, before it becomes part of a path.
+ *
+ * @param {string} email - The user's email.
+ * @returns {string} The file's absolute path (it may not exist).
+ * @throws {Error} "Invalid user" if email doesn't match EMAIL_PATTERN.
+ */
+function profileFile(email) {
+  const file = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email, 'profile.json');
+  if (!file) throw new Error('Invalid user');
+  return file;
+}
+
+/**
+ * A user's profile.json, as text. Synchronous on purpose, like
+ * writeProfileFile: a change reads, changes and writes the file with no
+ * await in between, so two changes at once can't overwrite each other's
+ * (a lost update; spaced-repetition plan, D1).
+ *
+ * @param {string} email - The user's email.
+ * @returns {string | undefined} The file's contents, or undefined if
+ *   there's no file (which means everything is allowed).
+ * @throws {Error} If email isn't valid, or the file exists but can't be read.
+ */
+function readProfileFile(email) {
+  try {
+    return fs.readFileSync(profileFile(email), 'utf8');
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return undefined;
+    throw err;
+  }
+}
+
+/**
+ * Writes a user's profile.json safely: to a temporary file, then rename()d
+ * over the old one, so a crash never leaves half a file. rename() replaces
+ * the file, which is the point here (unlike saveSubmission's link(), which
+ * mustn't). Synchronous, as readProfileFile explains.
+ *
+ * @param {string} email - The user's email.
+ * @param {object} contents - The whole new file, as an object.
+ * @returns {void}
+ * @throws {Error} If email isn't valid, or the file can't be written.
+ */
+function writeProfileFile(email, contents) {
+  const file = profileFile(email);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(contents, null, 2)}\n`);
+  fs.renameSync(tmp, file);
+}
+
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile };
