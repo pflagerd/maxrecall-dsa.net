@@ -97,9 +97,14 @@ clean:
 	rm -rf node_modules
 
 # Opens the SSH tunnel to the VPS's trusted port (docs/deploy-vps.md §7),
-# then browse http://localhost:3005. Ctrl-C closes it. Port 3005 so it
-# doesn't clash with make dev on 3000. Override the host with
-# make open-ssh-3005 VPS_HOST=...
+# then browse http://localhost:3005 (opened for you, as run/dev do).
+# Ctrl-C closes it. Port 3005 so it doesn't clash with make dev on 3000.
+# Override the host with make open-ssh-3005 VPS_HOST=...
+# PORT is overridden to 3005 just for this target (a target-specific
+# variable), so $(OPEN_BROWSER) polls and opens the tunnel's local port
+# instead of the global PORT ?= 3000 default.
 VPS_HOST ?= srv702017.hstgr.cloud
+open-ssh-3005: PORT := 3005
 open-ssh-3005:
+	$(OPEN_BROWSER)
 	ssh -N -L 3005:127.0.0.1:3001 root@$(VPS_HOST)
