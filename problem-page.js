@@ -931,7 +931,7 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(cu
 
   const table = makeEl('table', undefined, 'submissions-table');
   const head = table.createTHead().insertRow();
-  ['When', 'Result', 'Time', ''].forEach((h) => head.appendChild(makeEl('th', h)));
+  ['When', 'Result', 'Runtime', 'Your time', ''].forEach((h) => head.appendChild(makeEl('th', h)));
   const body = table.createTBody();
   for (const s of summaries) {
     const row = body.insertRow();
@@ -942,6 +942,10 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(cu
       makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
       makeEl('td', `${s.runtimeMs} ms`)
     );
+    // How long you took (issue #20); older submissions didn't record it.
+    const took = makeEl('td', s.elapsedMs === null ? '—' : formatElapsed(s.elapsedMs));
+    took.title = s.elapsedMs === null ? 'Not recorded (submitted before the timer existed)' : 'Time on the question before this Submit';
+    row.appendChild(took);
     const loadBtn = makeEl('button', 'Load');
     loadBtn.type = 'button';
     loadBtn.title = 'Load this code into the editor';

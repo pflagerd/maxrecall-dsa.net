@@ -211,12 +211,19 @@ async function handleExecution(req, res, { onlyVisible }) {
   if (!loaded) return res.status(404).json({ error: 'Question not found' });
   const { problem } = loaded;
 
-  const { language, code } = req.body || {};
+  const { language, code, elapsedMs } = req.body || {};
   if (!SUPPORTED_LANGUAGES.includes(language)) {
     return res.status(400).json({ error: `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
   }
   if (typeof code !== 'string' || !code.trim()) {
     return res.status(400).json({ error: 'code is required' });
+  }
+  // How long the learner took, from the problem page's timer (issue #20).
+  // Optional, so a page loaded before the timer existed can still Submit;
+  // the record then says null. It's what the browser reports, not measured
+  // here (docs/plans/elapsed-timer.md, T6).
+  if (elapsedMs !== undefined && !(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0)) {
+    return res.status(400).json({ error: 'elapsedMs must be a whole number of milliseconds, 0 or more' });
   }
 
   if (!problem.starterCode[language]) {
@@ -236,7 +243,8 @@ async function handleExecution(req, res, { onlyVisible }) {
     if (!onlyVisible) {
       try {
         result.submissionId = await saveSubmission(req.userEmail, {
-          schemaVersion: 1,
+          // 2 added elapsedMs (2026-11-03); version 1 records don't have it.
+          schemaVersion: 2,
           submittedAt,
           question: problem.slug,
           questionSha256: loaded.sha256,
@@ -247,6 +255,7 @@ async function handleExecution(req, res, { onlyVisible }) {
           passed: result.passed,
           total: result.total,
           runtimeMs: result.runtimeMs,
+          elapsedMs: elapsedMs ?? null,
           results: result.results.map((r) => r.passed),
           stdout: result.stdout,
           stderr: result.stderr,
@@ -277,8 +286,10 @@ app.post('/api/questions/:slug/submit', (req, res) => handleExecution(req, res, 
 // Express 4 doesn't catch errors from async handlers, hence the try/catch.
 
 // Summaries for a list: everything except code, stdout and stderr.
-function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs }) {
-  return { id, submittedAt, question, language, status, passed, total, runtimeMs };
+// elapsedMs is null for records without it (schemaVersion 1, or a page
+// that didn't send it).
+function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs }) {
+  return { id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null };
 }
 
 // Newest first. Optional ?question=<slug> and ?language=<language> narrow

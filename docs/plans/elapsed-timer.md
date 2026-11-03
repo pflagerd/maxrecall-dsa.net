@@ -1,7 +1,10 @@
 # Plan: elapsed-time timer (issue #20)
 
-Status: **waiting for the owner's decisions** (T1–T7 below). Nothing is
-built yet. Written 2026-11-03.
+Status: **built** on branch `elapsed-timer` (2026-11-03). The owner
+decided T6 (a), saving the time in Submits, and took the recommendation
+for all the others: T1 (a), T2 (a), T3 (a), T4 (a), T5 (a), T7 (a). The
+record change is kept separate from #24's (the owner is thinking that one
+through), so it's a `schemaVersion` bump of its own, 1 to 2.
 
 Issue #20 says only "Add an elapsed time timer." Issue #21, "Allow an
 optional Countdown Timer.", is the same kind of feature, so the timer is
@@ -108,12 +111,23 @@ soon, both record changes could share one `schemaVersion` bump.
 `timer.js`, that counts up. A countdown (#21) can later count down from a
 limit using the same pause, resume and freeze logic.
 
-## Steps once decided
+## Steps (all done)
 
 1. `timer.js`: a clock you can start, pause, resume, freeze and read, with
    no page code in it. A headless test checks pausing and resuming.
 2. The problem page: one clock per language, the toolbar display, pausing
    while the tab is hidden, freezing at a saved Submit. Tested in headless
    Chromium, as for #18.
-3. If T6 (a): `elapsedMs` in the Submit request and the record, with
-   `schemaVersion` 2 and readme.html's record table updated.
+3. `elapsedMs` in the Submit request and the record, with `schemaVersion`
+   2 and readme.html's record table updated. Missing means `null` (a page
+   from before the timer can still Submit); anything but a whole number of
+   milliseconds, 0 or more, is a 400. Summaries include it and the
+   Submissions tab shows it as "Your time".
+
+Decided while building (small choices, owner may overrule):
+- While a Submit is being judged, that language's clock is held, so the
+  saved time is exactly what the page showed at the click.
+- The timer sits at the right-hand end of the editor toolbar, and turns
+  green once frozen.
+- The Submissions tab's "Time" column is now "Runtime", next to the new
+  "Your time".
