@@ -17,6 +17,7 @@ each answer and what it changed.
 | 2026-11-03 | **D5 details (owner):** (1) the consistency check **only reports**. (2) Not a "repair" command but a function that **removes references to a question** from `order.json`, run **when a question is deleted**. (3) The check is a pure function in its own file, run by a `make` target and logged at server start. (4) **Renaming a question updates references to it** in `order.json`, so its progress isn't lost. **D2 detail (owner):** the profile is **`profile.json`**. | Two functions to build alongside the check: remove references, and update references. Still open: what triggers them (a question is a file in `questions/`, so deleting or renaming one is a file operation that nothing in the server sees), and how old Submit records, which keep the old name, are linked to the new one. |
 | 2026-11-03 | **D5 (owner):** accepted the consistency check as proposed, with the adjustments the later decisions imply, and the four recommendations: `make delete-question` / `make rename-question` commands (also usable after a `git pull`), every user, a rename log `questions/renames.json` for old Submit records, and records of deleted questions ignored. | D5 is fully decided. The check now also covers `backlog.json` and `renames.json` (D5 section). |
 | 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. | A sixth source of truth. Remove/update references cover `backlog.json` too. Still open: where creation order comes from (git can't tell in a shallow clone), pairs vs questions, and when a pair moves from the backlog into the queue. |
+| 2026-11-03 | **D6 details (owner):** accepted all seven: a `created` field in each question file (ties broken by file name); the backlog holds (question, language) pairs, by question then by the profile's language order; at least 3 pairs kept in the queue, plus one more from the backlog every 5 Submits, in a function of its own beside `advance.js`; an introduced pair goes to the front; missing pairs are appended to backlogs automatically (server start, a newly allowed language); a new user starts with everything in the backlog; a `submitsSinceLastIntroduced` counter at the top of `order.json`. | D6 is fully decided. Settles D2's "pairs" detail and its "where a new language's pairs go". Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -427,7 +428,7 @@ goals, not for now:
   a *prerequisite graph*, which is a *directed acyclic graph*, put in
   order by a *topological sort*).
 
-**Open, with recommendations:**
+**Details, all accepted by the owner on 2026-11-03:**
 
 - **Where "order of creation" comes from.** Git history can't be relied
   on: this cloud clone is shallow (97 commits), so 9 of the 13 question
@@ -502,12 +503,50 @@ The original options:
 `TODO` says Submit should switch to the next problem. But the Results tab
 is how you see what went wrong.
 
-- **(a) Stay, and show a "Next question →" button** once the Submit is
-  saved (recommended). The grayed Submit's tooltip already says "Go back
-  to the list for the next question" (issue #18).
-- **(b) Go straight to the next question**, as `TODO` says.
-- The problem list would also show the queue order for the current
-  language, with new questions marked.
+**What D1–D6 already fix:** a saved Submit updates the pair's `pass` and
+`passesInARow`, moves it with `advance.js`, counts towards
+`submitsSinceLastIntroduced`, and may bring a pair in from the backlog.
+"Next" is then whatever is at the front of `order.json`, skipping pairs
+whose question is missing (D5). With one queue (D2), **next may be in
+another language**.
+
+**Options:**
+
+- **(a) Stay on the results, and show a "Next →" button** once the Submit
+  is saved, naming what's next, e.g. "Next: Two Sum (C++)"
+  (recommended). You read the results first, and a change of language
+  doesn't come as a surprise. The grayed Submit's tooltip ("Go back to
+  the list for the next question", issue #18) would point to the button
+  instead.
+- **(b) Go straight to the next question**, as `TODO` says. The results
+  are then only in the Submissions tab of the question you left.
+- **(c) Go on by itself after a few seconds**, with a way to stay.
+
+**Details, with recommendations:**
+
+- **The server decides what's next.** A new `GET /api/next` returns the
+  front pair. Bringing a pair in from the backlog happens when the Submit
+  is saved, not when "next" is asked for, so `GET /api/next` changes
+  nothing and asking twice gives the same answer. HTTP calls a GET
+  *safe* for that reason ([RFC 9110 §9.2.1](https://www.rfc-editor.org/rfc/rfc9110#section-9.2.1)).
+- **Which Submits count** (from D4, not yet confirmed): any saved Submit
+  of a pair moves that pair from wherever it is, since the learner can
+  open any question from the list, and Submits failed for other reasons
+  (judge busy, not saved) don't count.
+- **Opening a pair in a given language:** the page has no `?language=`
+  in its address today (it reads only `?slug=` and `?submission=`,
+  `problem-page.js`). "Next" needs one, e.g.
+  `problem.html?slug=two-sum&language=cpp`. It would choose the editor's
+  language for that visit without changing the learner's default (as
+  Load from the Submissions tab already does), and be refused (shown as
+  a message) if the profile doesn't allow that language.
+- **Nothing left:** if the queue and backlog are both empty, the button
+  says so instead of going anywhere.
+- **The problem list:** shows the queue in order with each pair's
+  language, then the backlog, marked "new". Opening any of them is still
+  allowed.
+- **A Submit that wasn't saved** (`saved: false`) moves nothing and shows
+  no "Next →", because nothing changed.
 
 ### D8. What does Skip do?
 
