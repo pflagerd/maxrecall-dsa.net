@@ -26,7 +26,7 @@ const MIN_PLACES = 1;
  *
  * @param {number} value - The number to round. Any finite number; advance()
  *   only passes positive ones.
- * @param {function(): number} random - Returns a number from 0 up to, but not
+ * @param {() => number} random - Returns a number from 0 up to, but not
  *   including, 1, as Math.random does. Called exactly once.
  * @returns {number} A whole number: Math.floor(value), or one more than that
  *   with probability (value - Math.floor(value)).
@@ -42,7 +42,7 @@ function stochasticRound(value, random) {
  *
  * @param {number} k - passesInARow after this Submit has been counted: a
  *   whole number, 0 or more. 0 after a fail or a Skip.
- * @param {function(): number} [random=Math.random] - Returns a number from 0
+ * @param {() => number} [random=Math.random] - Returns a number from 0
  *   up to, but not including, 1. Passed in so tests can supply fixed numbers.
  *   Called exactly twice: first for the random factor, then for rounding.
  * @returns {number} The number of places to move: a whole number, 1 or more.

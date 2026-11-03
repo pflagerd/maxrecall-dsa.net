@@ -1,0 +1,13 @@
+{
+  "//": "make typecheck: TypeScript checks the JSDoc types in these JavaScript files. Nothing is compiled (noEmit). A file is listed here once its functions are documented; see readme.html.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "commonjs",
+    "types": ["node"]
+  },
+  "files": ["advance.js", "advance.test.js"]
+}

@@ -15,7 +15,7 @@ const { advance, stochasticRound } = require('./advance');
  *
  * @param {...number} values - The numbers to return, each from 0 up to, but
  *   not including, 1.
- * @returns {function(): number} A function that returns the next of the
+ * @returns {() => number} A function that returns the next of the
  *   values each time it's called, and throws an Error once they've run out,
  *   which fails the test if advance() calls random() more often than
  *   expected.
@@ -35,7 +35,7 @@ function sequence(...values) {
  *
  * @param {number} seed - The starting state: a whole number (only its low
  *   32 bits are used). The same seed always gives the same numbers.
- * @returns {function(): number} A function that returns the next number each
+ * @returns {() => number} A function that returns the next number each
  *   time it's called, from 0 up to, but not including, 1, like Math.random.
  */
 function seededRandom(seed) {

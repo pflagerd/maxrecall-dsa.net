@@ -467,7 +467,9 @@ own, and merged before the next starts. **Each step is merged through a
 pull request** (owner, 2026-11-03), not pushed to `master` directly.
 **Every function gets a JSDoc comment** documenting each argument and the
 return value, with their types (`@param {type} name`, `@returns {type}`,
-and `@throws` where it throws) (owner, review of pull request #27). Tests use Node's built-in test
+and `@throws` where it throws) (owner, review of pull request #27). A
+file whose functions are documented is added to `tsconfig.json`, so
+`make typecheck` checks its types. Tests use Node's built-in test
 runner ([`node:test`](https://nodejs.org/docs/latest-v22.x/api/test.html)),
 each checked to fail against a deliberately wrong version first.
 
