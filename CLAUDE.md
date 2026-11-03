@@ -46,6 +46,17 @@ Teaching them what you're doing comes first. Speed comes second.
   with `TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z`. It's a dated
   snapshot: where it disagrees with `readme.html`, `readme.html` wins.
 
+### Documenting code
+- Every JavaScript function gets a JSDoc comment documenting each argument
+  and the return value, with their types (`@param {type} name - ...`,
+  `@returns {type} ...`, and `@throws {Type} ...` where it throws). Write
+  a function type as `{() => number}`: TypeScript 7 rejects
+  `{function(): number}`. JavaScript only (owner, 2026-11-03).
+- A documented file is listed in `tsconfig.json`, and `make typecheck`
+  must pass. Where comments alone can't satisfy the checker, use a JSDoc
+  cast (`/** @type {T} */ (expr)`) with a comment saying why, rather than
+  changing behaviour. See `docs/plans/documentation-standard.md`.
+
 ### Continuity between machines
 - Work happens in both Claude Code cloud sessions and a local
   Kubuntu/WebStorm instance. Write plans and decisions to `docs/` in the

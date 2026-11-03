@@ -1,3 +1,5 @@
+// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
+// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // Per-submission cgroup limits: sandboxing step 7 (docs/plans/sandboxing.md).
 //
 // The limits in judge/sandbox.js (prlimit) are per process. A cgroup (Linux

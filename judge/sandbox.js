@@ -1,3 +1,5 @@
+// @ts-nocheck: not yet documented, so make typecheck skips it for now; removed by
+// the jsdoc-judge pull request (docs/plans/documentation-standard.md).
 // The judge's sandbox: builds bubblewrap (bwrap) command lines, checks at
 // startup that bwrap really works here, and refuses judging when it doesn't
 // ("fail closed"). Steps 2 onwards of docs/plans/sandboxing.md.

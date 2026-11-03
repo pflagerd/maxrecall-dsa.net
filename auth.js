@@ -5,7 +5,40 @@ const { promisify } = require('util');
 
 const { OWNER_EMAIL, EMAIL_PATTERN } = require('./users');
 
-const scrypt = promisify(crypto.scrypt);
+// The cast picks crypto.scrypt's four-argument form (with options):
+// promisify() alone gives the type of its shortest form.
+const scrypt = /** @type {(password: string, salt: Buffer, keylen: number, options: crypto.ScryptOptions) => Promise<Buffer>} */ (
+  promisify(crypto.scrypt)
+);
+
+/**
+ * An account, as stored in auth/accounts/<email>.json.
+ *
+ * @typedef {object} Account
+ * @property {number} schemaVersion - 1.
+ * @property {string} email - Lower-cased.
+ * @property {string} createdAt - When it was registered, as UTC ISO 8601.
+ * @property {{ N: number, r: number, p: number, keyLength: number }} scrypt -
+ *   The parameters the hash was made with.
+ * @property {string} salt - Random, base64.
+ * @property {string} hash - The scrypt hash of the password, base64.
+ */
+
+/**
+ * A session, as stored in auth/sessions/<sha256 of token>.json.
+ *
+ * @typedef {object} Session
+ * @property {string} email - Whose session it is.
+ * @property {string} createdAt - When it started, as UTC ISO 8601.
+ * @property {string} expiresAt - When it ends, as UTC ISO 8601.
+ */
+
+/**
+ * What register() and login() return: a new session, or why not.
+ *
+ * @typedef {{ ok: true, email: string, token: string, expiresAt: string }
+ *   | { ok: false, error: string, retryAfterMs?: number }} AuthResult
+ */
 
 // Accounts and sessions live here, never in users/: that folder is committed
 // to a public repo, and published password hashes invite offline guessing.
@@ -43,17 +76,38 @@ if (REGISTRATION_PASSWORD !== null && [...REGISTRATION_PASSWORD].length < MIN_PA
 fs.mkdirSync(ACCOUNTS_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(SESSIONS_DIR, { recursive: true, mode: 0o700 });
 
+/**
+ * An email as typed, made comparable: trimmed and lower-cased.
+ *
+ * @param {unknown} email - From the request body.
+ * @returns {string} The normalized email, or "" if it isn't a string.
+ */
 function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
-// Compares two strings in time that doesn't depend on where they differ.
-// Hashing first gives timingSafeEqual the equal-length inputs it requires.
+/**
+ * Compares two strings in time that doesn't depend on where they differ.
+ * Hashing first gives timingSafeEqual the equal-length inputs it requires.
+ *
+ * @param {unknown} a - One secret (converted with String()).
+ * @param {unknown} b - The other.
+ * @returns {boolean} Whether they're equal.
+ */
 function sameSecret(a, b) {
-  const digest = (s) => crypto.createHash('sha256').update(String(s)).digest();
+  const digest = (/** @type {unknown} */ s) => crypto.createHash('sha256').update(String(s)).digest();
   return crypto.timingSafeEqual(digest(a), digest(b));
 }
 
+/**
+ * Hashes a password with scrypt, as stored in an account.
+ *
+ * @param {unknown} password - The password (converted with String()).
+ * @param {Buffer} salt - The account's salt, or a random one.
+ * @param {{ N: number, r: number, p: number }} [params=SCRYPT_PARAMS] - scrypt's
+ *   cost parameters: an account's own, or the current defaults.
+ * @returns {Promise<Buffer>} The KEY_LENGTH-byte hash.
+ */
 function hashPassword(password, salt, params = SCRYPT_PARAMS) {
   return scrypt(String(password), salt, KEY_LENGTH, { ...params, maxmem: SCRYPT_MAXMEM });
 }
@@ -66,13 +120,28 @@ function hashPassword(password, salt, params = SCRYPT_PARAMS) {
 // from 127.0.0.1. Kept in memory, so a restart clears it.
 const FREE_ATTEMPTS = 5;
 const MAX_DELAY_MS = 15 * 60 * 1000;
-const failures = new Map(); // key -> { count, waitUntil }
+/** Failed attempts so far, by key (e.g. "login:<email>"). @type {Map<string, { count: number, waitUntil: number }>} */
+const failures = new Map();
 
+/**
+ * How long a key must still wait before its next attempt is considered.
+ *
+ * @param {string} key - "register:<email>" or "login:<email>".
+ * @returns {number} Milliseconds, 0 if it needn't wait.
+ */
 function waitRemainingMs(key) {
   const entry = failures.get(key);
   return entry ? Math.max(0, entry.waitUntil - Date.now()) : 0;
 }
 
+/**
+ * Counts one more failure for a key, and sets how long its next attempt must
+ * wait: nothing for the first FREE_ATTEMPTS - 1, then 1 s, doubling each
+ * time, up to MAX_DELAY_MS.
+ *
+ * @param {string} key - "register:<email>" or "login:<email>".
+ * @returns {void}
+ */
 function recordFailure(key) {
   const count = (failures.get(key)?.count || 0) + 1;
   const delay = count < FREE_ATTEMPTS ? 0 : Math.min(1000 * 2 ** (count - FREE_ATTEMPTS), MAX_DELAY_MS);
@@ -81,20 +150,40 @@ function recordFailure(key) {
 
 // --- Accounts -----------------------------------------------------------------
 
+/**
+ * Where an account is stored. The email isn't checked here: readAccount()
+ * checks it, and register() only gets this far with OWNER_EMAIL.
+ *
+ * @param {string} email - Normalized.
+ * @returns {string} The path of auth/accounts/<email>.json.
+ */
 function accountFile(email) {
   return path.join(ACCOUNTS_DIR, `${email}.json`);
 }
 
+/**
+ * Reads an account.
+ *
+ * @param {string} email - Normalized.
+ * @returns {Promise<Account | null>} The account, or null if the email
+ *   doesn't match EMAIL_PATTERN or there's no such account.
+ * @throws {Error} If the file exists but can't be read or parsed.
+ */
 async function readAccount(email) {
   if (!EMAIL_PATTERN.test(email)) return null;
   try {
     return JSON.parse(await fs.promises.readFile(accountFile(email), 'utf8'));
   } catch (err) {
-    if (err.code === 'ENOENT') return null;
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return null;
     throw err;
   }
 }
 
+/**
+ * Whether anyone may register: only when MAXRECALL_PASSWORD is set.
+ *
+ * @returns {boolean} True if registration is open.
+ */
 function registrationOpen() {
   return REGISTRATION_PASSWORD !== null;
 }
@@ -104,12 +193,30 @@ function registrationOpen() {
 const REGISTER_REFUSED = "Registration isn't open for that email and password.";
 const LOGIN_REFUSED = 'Invalid email or password.';
 
+/**
+ * The refusal to give if a key must still wait, or null if it needn't.
+ *
+ * @param {string} key - "register:<email>" or "login:<email>".
+ * @returns {{ ok: false, retryAfterMs: number, error: string } | null} The
+ *   refusal, with how long to wait, or null.
+ */
 function throttled(key) {
   const wait = waitRemainingMs(key);
   return wait > 0 ? { ok: false, retryAfterMs: wait, error: `Too many attempts. Try again in ${Math.ceil(wait / 1000)} s.` } : null;
 }
 
-// Returns { ok: true, email, token, expiresAt } or { ok: false, error, retryAfterMs? }.
+/**
+ * Registers the owner's account and starts a session, if registration is
+ * open, the email is OWNER_EMAIL, the password is MAXRECALL_PASSWORD, and
+ * there's no account yet. Every refusal gives the same message.
+ *
+ * @param {unknown} rawEmail - The email as typed.
+ * @param {unknown} password - The password as typed.
+ * @returns {Promise<AuthResult>} The new session, or why not (with
+ *   retryAfterMs when throttled).
+ * @throws {Error} If an account file can't be read or written for a reason
+ *   other than already existing.
+ */
 async function register(rawEmail, password) {
   const email = normalizeEmail(rawEmail);
   const key = `register:${email}`;
@@ -140,13 +247,23 @@ async function register(rawEmail, password) {
     // can't both succeed.
     await fs.promises.writeFile(accountFile(email), `${JSON.stringify(account, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
   } catch (err) {
-    if (err.code === 'EEXIST') return { ok: false, error: REGISTER_REFUSED };
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'EEXIST') return { ok: false, error: REGISTER_REFUSED };
     throw err;
   }
   failures.delete(key);
   return { ok: true, email, ...(await createSession(email)) };
 }
 
+/**
+ * Checks an email and password against the stored account and starts a
+ * session. Takes about as long whether or not the account exists.
+ *
+ * @param {unknown} rawEmail - The email as typed.
+ * @param {unknown} password - The password as typed.
+ * @returns {Promise<AuthResult>} The new session, or why not (with
+ *   retryAfterMs when throttled).
+ * @throws {Error} If the account file exists but can't be read or parsed.
+ */
 async function login(rawEmail, password) {
   const email = normalizeEmail(rawEmail);
   const key = `login:${email}`;
@@ -175,10 +292,24 @@ async function login(rawEmail, password) {
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/; // 32 bytes, base64url
 
+/**
+ * Where a session is stored: named by the token's SHA-256, not the token.
+ *
+ * @param {string} token - The session token.
+ * @returns {string} The path of auth/sessions/<sha256 hex>.json.
+ */
 function sessionFile(token) {
   return path.join(SESSIONS_DIR, `${crypto.createHash('sha256').update(token).digest('hex')}.json`);
 }
 
+/**
+ * Starts a session: a random 256-bit token, stored by its hash.
+ *
+ * @param {string} email - Whose session it is.
+ * @returns {Promise<{ token: string, expiresAt: string }>} The token
+ *   (base64url, for the cookie) and when it expires (UTC ISO 8601).
+ * @throws {Error} If the session file can't be written.
+ */
 async function createSession(email) {
   const token = crypto.randomBytes(32).toString('base64url');
   const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS).toISOString();
@@ -187,15 +318,22 @@ async function createSession(email) {
   return { token, expiresAt };
 }
 
-// The email a session token belongs to, or null if it's missing, malformed,
-// unknown or expired (expired sessions are deleted when found).
+/**
+ * The email a session token belongs to, or null if it's missing, malformed,
+ * unknown or expired (expired sessions are deleted when found).
+ *
+ * @param {unknown} token - From the session cookie, if there was one.
+ * @returns {Promise<string | null>} The session's email, or null.
+ * @throws {Error} If the session file exists but can't be read or parsed.
+ */
 async function sessionEmail(token) {
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return null;
+  /** @type {Session} */
   let session;
   try {
     session = JSON.parse(await fs.promises.readFile(sessionFile(token), 'utf8'));
   } catch (err) {
-    if (err.code === 'ENOENT') return null;
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return null;
     throw err;
   }
   if (Date.parse(session.expiresAt) <= Date.now()) {
@@ -205,9 +343,17 @@ async function sessionEmail(token) {
   return session.email;
 }
 
+/**
+ * Ends a session by deleting its file. Does nothing for a missing or
+ * malformed token, or one with no session.
+ *
+ * @param {unknown} token - From the session cookie, if there was one.
+ * @returns {Promise<void>}
+ * @throws {Error} If the session file exists but can't be deleted.
+ */
 async function endSession(token) {
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return;
-  await fs.promises.unlink(sessionFile(token)).catch((err) => {
+  await fs.promises.unlink(sessionFile(token)).catch((/** @type {NodeJS.ErrnoException} */ err) => {
     if (err.code !== 'ENOENT') throw err;
   });
 }

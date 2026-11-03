@@ -7,7 +7,16 @@
     "strict": true,
     "target": "es2022",
     "module": "commonjs",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "files": ["advance.js", "advance.test.js"]
+  "files": [
+    "advance.js",
+    "advance.test.js",
+    "paths.js",
+    "users.js",
+    "auth.js",
+    "server.js"
+  ]
 }

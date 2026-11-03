@@ -3,6 +3,35 @@ const path = require('path');
 
 const { resolveInside } = require('./paths');
 
+/**
+ * One saved Submit, as written to users/<email>/submissions/<id>.json
+ * (readme.html, "Where data lives").
+ *
+ * @typedef {object} SubmissionRecord
+ * @property {number} schemaVersion - 2 since elapsedMs was added (2026-11-03); 1 before.
+ * @property {string} submittedAt - When the Submit arrived, as UTC ISO 8601.
+ * @property {string} question - The question's slug (its file name without .json).
+ * @property {string} questionSha256 - SHA-256 of the question's file at the time, in hex.
+ * @property {string} language - One of javascript, python, cpp, java, d.
+ * @property {string} judgeMode - "function" or "program".
+ * @property {string} code - What was submitted.
+ * @property {string} status - The judge's verdict, e.g. "Accepted" or "Wrong Answer".
+ * @property {number} passed - How many test cases passed.
+ * @property {number} total - How many test cases there were.
+ * @property {number} runtimeMs - How long judging took, in milliseconds.
+ * @property {number | null} [elapsedMs] - The page's timer at Submit, or null
+ *   if the page didn't send it. Missing from schemaVersion 1 records.
+ * @property {boolean[]} results - Pass or fail for each test case, in file order.
+ * @property {string} stdout - The program's standard output.
+ * @property {string} stderr - The program's standard error.
+ */
+
+/**
+ * A saved Submit as read back: the record plus its id.
+ *
+ * @typedef {SubmissionRecord & { id: string }} SavedSubmission
+ */
+
 // Where user data lives. Defaults to users/ in the repo, which is gitignored:
 // the owner manages it by hand (2026-10-30).
 // MAXRECALL_USERS_DIR moves it elsewhere, e.g. outside the checkout on the
@@ -16,9 +45,15 @@ const DEFAULT_USER = 'daniel.pflager@gmail.com';
 // allows characters in addresses (such as "/") that mustn't reach a path.
 const EMAIL_PATTERN = /^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
-// MAXRECALL_USER: the owner, the only email allowed to register (auth.js)
-// and who you are on the trusted port. Checked once at startup: a bad value
-// stops the server immediately.
+/**
+ * MAXRECALL_USER: the owner, the only email allowed to register (auth.js)
+ * and who you are on the trusted port. Checked once at startup: a bad value
+ * stops the server immediately.
+ *
+ * @returns {string} MAXRECALL_USER (or daniel.pflager@gmail.com if it's
+ *   unset), trimmed and lower-cased.
+ * @throws {Error} If that isn't a plain email address (EMAIL_PATTERN).
+ */
 function configuredOwner() {
   const user = (process.env.MAXRECALL_USER || DEFAULT_USER).trim().toLowerCase();
   if (!EMAIL_PATTERN.test(user)) {
@@ -29,17 +64,25 @@ function configuredOwner() {
 
 const OWNER_EMAIL = configuredOwner();
 
-// Save one Submit as users/<email>/submissions/<timestamp>.json. All
-// questions share the folder; the record's "question" field says which one.
-// The timestamp is record.submittedAt with ":" replaced by "-" (Windows
-// doesn't allow ":" in file names); it doubles as the submission's id.
-//
-// Written to a temporary file first, then linked into place and the temp
-// file removed. link() is atomic like rename(), so a crash leaves at most a
-// stray temp file, never a half-written record; but unlike rename() it
-// fails with EEXIST instead of overwriting. So two Submits in the same
-// millisecond (e.g. from two tabs) give a "not saved" warning rather than
-// one silently replacing the other.
+/**
+ * Saves one Submit as users/<email>/submissions/<timestamp>.json. All
+ * questions share the folder; the record's "question" field says which one.
+ * The timestamp is record.submittedAt with ":" replaced by "-" (Windows
+ * doesn't allow ":" in file names); it doubles as the submission's id.
+ *
+ * Written to a temporary file first, then linked into place and the temp
+ * file removed. link() is atomic like rename(), so a crash leaves at most a
+ * stray temp file, never a half-written record; but unlike rename() it
+ * fails with EEXIST instead of overwriting. So two Submits in the same
+ * millisecond (e.g. from two tabs) give a "not saved" warning rather than
+ * one silently replacing the other.
+ *
+ * @param {string} email - Whose submission it is (the signed-in user).
+ * @param {SubmissionRecord} record - What to save.
+ * @returns {Promise<string>} The submission's id, e.g. "2026-10-29T04-05-29.199Z".
+ * @throws {Error} If email isn't valid, or the file can't be written,
+ *   including EEXIST when a record with that id already exists.
+ */
 async function saveSubmission(email, record) {
   const id = record.submittedAt.replace(/:/g, '-');
   const file = resolveInside(submissionsDir(email), `${id}.json`);
@@ -60,28 +103,52 @@ async function saveSubmission(email, record) {
 // before it's used in a path, so a crafted id can't reach other files.
 const SUBMISSION_ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z$/;
 
-// email is whoever the request is from (server.js, req.userEmail). Checked
-// again here before it becomes part of a path, whatever the caller did.
+/**
+ * The folder holding one user's saved submissions. email is whoever the
+ * request is from (server.js, req.userEmail). Checked again here before it
+ * becomes part of a path, whatever the caller did.
+ *
+ * @param {unknown} email - The user's email, as the caller has it.
+ * @returns {string} The absolute path of users/<email>/submissions (it may
+ *   not exist yet).
+ * @throws {Error} "Invalid user" if email isn't a string matching EMAIL_PATTERN.
+ */
 function submissionsDir(email) {
   const dir = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email, 'submissions');
   if (!dir) throw new Error('Invalid user');
   return dir;
 }
 
+/**
+ * Reads and parses one submission file. The id isn't checked here; callers
+ * check it first or take it from a directory listing.
+ *
+ * @param {string} email - Whose submission it is.
+ * @param {string} id - The submission's id (its file name without .json).
+ * @returns {Promise<SavedSubmission>} The record, with id added.
+ * @throws {Error} If the file can't be read (e.g. ENOENT) or isn't valid JSON.
+ */
 async function readSubmission(email, id) {
   const record = JSON.parse(await fs.promises.readFile(path.join(submissionsDir(email), `${id}.json`), 'utf8'));
   return { id, ...record };
 }
 
-// Every saved Submit for the current user, newest first (ids sort by time).
-// No folder yet means no submissions. A file that can't be read or parsed is
-// skipped with a warning rather than breaking the whole list.
+/**
+ * Every saved Submit for the current user, newest first (ids sort by time).
+ * No folder yet means no submissions. A file that can't be read or parsed is
+ * skipped with a warning rather than breaking the whole list.
+ *
+ * @param {string} email - Whose submissions to list.
+ * @returns {Promise<SavedSubmission[]>} The records, newest first; empty if
+ *   there are none.
+ * @throws {Error} If email isn't valid, or the folder exists but can't be read.
+ */
 async function listSubmissions(email) {
   let names;
   try {
     names = await fs.promises.readdir(submissionsDir(email));
   } catch (err) {
-    if (err.code === 'ENOENT') return [];
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return [];
     throw err;
   }
   const ids = names
@@ -96,19 +163,28 @@ async function listSubmissions(email) {
     try {
       records.push(await readSubmission(email, id));
     } catch (err) {
-      console.warn(`Skipping unreadable submission ${id}: ${err.message}`);
+      console.warn(`Skipping unreadable submission ${id}: ${/** @type {Error} */ (err).message}`);
     }
   }
   return records;
 }
 
-// One saved Submit, or null if the id is malformed or there's no such file.
+/**
+ * One saved Submit, or null if the id is malformed or there's no such file.
+ *
+ * @param {string} email - Whose submission it is.
+ * @param {string} id - The submission's id, from the request; checked
+ *   against SUBMISSION_ID_PATTERN before it's used in a path.
+ * @returns {Promise<SavedSubmission | null>} The record, or null.
+ * @throws {Error} If email isn't valid, or the file exists but can't be read
+ *   or parsed.
+ */
 async function loadSubmission(email, id) {
   if (!SUBMISSION_ID_PATTERN.test(id)) return null;
   try {
     return await readSubmission(email, id);
   } catch (err) {
-    if (err.code === 'ENOENT') return null;
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return null;
     throw err;
   }
 }
