@@ -12,6 +12,8 @@ each answer and what it changed.
 | 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile` in their user directory. | **New file**: `users/<email>/profile`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
 | 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's `Accepted`, all tests passing. There is **no "how easy"** in this requirement. Tests may also fail for timeouts, or for other reasons still to be decided. The result is recorded in **`order.json`**, in the user's directory, as an attribute **`pass`** whose value is the string `"yes"` or `"no"`. | Settles D1's file name: **`order.json`**. Each queue element now has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. D4 must say whether one `pass` is enough to decide how far to move, or whether a streak needs more history. |
 | 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**. k is **"correct in a row"**, kept in a counter called **`passesInARow`**, tracked as part of the queue element in `order.json`. The function goes in its own file, **`advance.js`** (the name is for now). D4 will become much more nuanced over time; this is a starting point. | Replaces the 2^k table proposed in D4. An element now has at least `question`, `pass` and `passesInARow`, so it's an object, settling D1's "element shape" detail. With stochastic rounding a fail and a first pass differ on average (1.03 vs 1.30 places). D4's open details below, including what this rule does on a 65-element queue. |
+| 2026-11-03 | **D1 details (owner):** accepted all four: `order.json`, elements are objects, a top-level `schemaVersion`, and safe writes (temporary file, then `rename()`; no `await` between reading and writing). | D1 is fully decided. `profile` vs `profile.json` (D2) is still open. |
+| 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. When a question is deleted, it **must be deleted from `order.json` too**. There will be a **function that checks consistency between the sources of truth**. | D5 is decided. New piece of work: a consistency check over `questions/`, `order.json`, the Submit records and the profile (details in D5). How a deleted question leaves `order.json` is still open. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -98,8 +100,8 @@ Each has a recommendation; none is built until you choose.
 ### D1. Queue positions or due dates?
 
 **Decided 2026-11-03 (owner): (a), queue positions, stored in a file
-`order` in the user's directory, as described in the decision log.**
-Details still open:
+`order.json` in the user's directory, as described in the decision log.**
+All four details below were accepted by the owner on 2026-11-03:
 
 - **File name:** `order.json` (owner, with D3).
 - **Element shape:** an object, settled by D3 and D4, which put `pass`
@@ -310,11 +312,60 @@ in one place, so they're easy to tune.
 
 ### D5. Store the queue, or work it out from the records?
 
-**Mostly settled by D1 (2026-11-03): stored**, in `users/<email>/order`.
-Still to discuss: what happens when the file and the records disagree
-(e.g. Submit records copied in from the VPS with `rsync`, or a question
-added to or removed from `questions/`), and whether there should be a way
-to rebuild `order` from the records.
+**Decided 2026-11-03 (owner): stored**, in `users/<email>/order.json`.
+Ways to recalculate it from the Submit records come later. A deleted
+question must be deleted from `order.json` too. A function will check
+consistency between the sources of truth.
+
+**The sources of truth** and what each one owns:
+
+| Source | Owns |
+| --- | --- |
+| `questions/*.json` | Which questions exist, and which languages each has (`starterCode`) |
+| `users/<email>/profile` | Which languages this learner has |
+| `users/<email>/submissions/*.json` | What was submitted and how it was judged (the history; never changed) |
+| `users/<email>/order.json` | The queue order, and each pair's `pass` and `passesInARow` |
+
+**Proposed checks** (each finding names the user, the element and what's
+wrong):
+
+1. **File itself:** `order.json` parses as JSON, has a known
+   `schemaVersion`, and every element has the fields it must, with valid
+   values (`question` a string, `language` one of the five, `pass` absent
+   or exactly `"yes"`/`"no"`, `passesInARow` a whole number, 0 or more,
+   and 0 whenever `pass` is `"no"`).
+2. **No duplicates:** each (question, language) pair at most once.
+3. **Deleted questions:** every element's `question` has a file in
+   `questions/`, and that question has the element's language.
+4. **Missing pairs:** every pair the learner could do (the question has
+   the language, and the profile allows it) is in the queue. A missing
+   one is usually a new question or a newly allowed language (D6).
+5. **Profile:** elements whose language the profile no longer allows.
+   Reported as information, not an error, since they're kept on purpose
+   (D2).
+6. **Records agree:** for each pair, the latest saved Submit's verdict
+   matches `pass` (`Accepted` ↔ `"yes"`), and `passesInARow` equals the
+   number of `Accepted` Submits at the end of its history. A pair with
+   records but no `pass`, or a `pass` with no records, is reported.
+   Check 6 is also the core of the later "recalculate from the records".
+
+**Recommendations, waiting for the owner:**
+
+- **The check only reports; it never changes anything.** Fixing is a
+  separate, deliberate step. Reason: a question file can be missing for
+  a harmless reason. Checking out a branch that doesn't have it yet, for
+  instance, would otherwise wipe that question's progress from
+  `order.json`.
+- **So a deleted question leaves `order.json` through an explicit
+  repair command** that removes the elements check 3 reported (and shows
+  what it removed), not automatically. Until then, the server skips such
+  elements when choosing the next question.
+- **Where it lives and when it runs:** a pure function in its own file
+  (e.g. `consistency.js`) that takes the four sources and returns a list
+  of findings. It's run by a `make` target for the owner, and once at
+  server start, logging what it finds without refusing to start.
+- **Renaming a question file** looks like a deletion plus a new question,
+  so its progress would be lost. Worth knowing before renaming one.
 
 - **(a) Work it out from the Submit records each time** (recommended).
   Replay every Submit for that language in time order through the rules
