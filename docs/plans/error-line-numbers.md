@@ -8,7 +8,8 @@ function judging compiles with `-g` for that, measured at about 200 ms more
 per judging (two-sum median 755 → 952 ms in the cloud), so that a
 library's exception (e.g. `to!int("x")`) also gets the learner's line.
 Without `-g`, only errors thrown at the learner's own line (an index out of
-range) would. Decided by the owner: the learner's code as a file of its own (the
+range) would. The owner chose to keep `-g`. `make line-numbers-test`: 36 of
+36 in the cloud (LDC 1.36) and on the owner's Kubuntu (LDC 1.41.0). Decided by the owner: the learner's code as a file of its own (the
 revised recommendation below), D by option 2 (a separate module with a
 prelude import on line 1; 1b, chosen first, failed on a newer LDC, see
 below), L2 (a) runtime lines as step 2, L3 `runpy`, L4 the `solution.*`
