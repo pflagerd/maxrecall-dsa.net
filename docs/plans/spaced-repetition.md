@@ -10,6 +10,7 @@ each answer and what it changed.
 | --- | --- | --- |
 | 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order` holds one queue per language or one with a language in each element. D1's details (file name, element shape, `schemaVersion`, safe writes) are proposed and waiting for the owner. |
 | 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile` in their user directory. | **New file**: `users/<email>/profile`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
+| 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's `Accepted`, all tests passing. There is **no "how easy"** in this requirement. Tests may also fail for timeouts, or for other reasons still to be decided. The result is recorded in **`order.json`**, in the user's directory, as an attribute **`pass`** whose value is the string `"yes"` or `"no"`. | Settles D1's file name: **`order.json`**. Each queue element now has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. D4 must say whether one `pass` is enough to decide how far to move, or whether a streak needs more history. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -99,9 +100,7 @@ Each has a recommendation; none is built until you choose.
 `order` in the user's directory, as described in the decision log.**
 Details still open:
 
-- **File name:** `order` or `order.json`? Recommended `order.json`, the
-  same as every other JSON file in the project, so editors and tools
-  recognise it.
+- **File name:** `order.json` (owner, with D3).
 - **Element shape:** recommended an object, e.g. `{"question": "two-sum"}`,
   not a bare string as in MaxRecall's `guidOrder.json`. Then the fields
   still to be decided can be added later without changing what an
@@ -181,6 +180,33 @@ The original options:
   from Python to D.
 
 ### D3. What counts as right, and does "how easy" matter yet?
+
+**Decided 2026-11-03 (owner): right = `Accepted`, recorded as
+`"pass": "yes"` or `"pass": "no"` in the element's entry in
+`order.json`. No "how easy".** Notes and details still open:
+
+- **Timeouts already fail.** The judge returns `Time Limit Exceeded` with
+  `passed: 0` (`judge/runner.js`, the `outcome.timedOut` branch), and
+  memory-limit kills and runtime and compile errors also aren't
+  `Accepted`. So today `pass` is `"yes"` exactly when `status` is
+  `Accepted`.
+- **Other failure reasons, still to be decided** (for example, perhaps,
+  a countdown running out, issue #21): recommended deciding `pass` in one
+  small function, so a new reason is added in one place.
+- **Strings, not JSON's `true`/`false`:** owner's choice. One advantage:
+  a string leaves room for more values later. The cost: `"Yes"` or a typo
+  in a hand-edited file is still valid JSON, so the server should check
+  that the value is exactly `"yes"` or `"no"` when it reads the file.
+- **Never submitted:** recommended leaving `pass` out of the element,
+  rather than `"no"`, so "new" and "failed" can be told apart (D6).
+- **Only the latest result:** one `pass` holds the last Submit's result.
+  The full history stays in the Submit records. Whether D4 needs more
+  (a streak count) is for D4.
+- **Order of writing:** recommended updating `order.json` only after the
+  Submit record has been saved, so the queue never reflects a Submit that
+  has no record.
+
+The original options:
 
 - **(a) Right = `Accepted` (all tests pass), anything else = wrong**
   (recommended, to start). Simple and objective. `status` is set in
