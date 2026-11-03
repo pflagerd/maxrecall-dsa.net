@@ -1,27 +1,22 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **in planning, 2026-11-03.** Nothing is built yet. The owner is
-going through D1–D8 one at a time; the decision log just below records
-each answer and what it changed.
+Status: **planned, 2026-11-03.** Nothing is built yet. All eight
+decisions, D1–D8, are made; the decision log just below has one entry
+per decision, and the sections under "Decisions for the owner" give the
+reasoning and options behind each.
 
 ## Decision log
 
 | Date | Decision | Effect on the rest of the plan |
 | --- | --- | --- |
-| 2026-11-03 | **D1 (owner):** order by queue position, with flexibility in how a question advances. The queue is a JSON file, `order.json`, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and probably more fields, still to be decided. | Settles most of **D5**: the queue is **stored**, not worked out from the records. D4's step sizes become one possible advance rule, not the only one. D2 (per language) now decides whether `order.json` holds one queue per language or one with a language in each element. D1's details (file name, element shape, `schemaVersion`, safe writes) are proposed and waiting for the owner. |
-| 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, a JSON file `profile.json` in their user directory. | **New file**: `users/<email>/profile.json`. The profile decides which languages' pairs are in the queue. The two language settings now kept in the browser's `localStorage` (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) become profile matters. Details still open: see D2. |
-| 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's `Accepted`, all tests passing. There is **no "how easy"** in this requirement. Tests may also fail for timeouts, or for other reasons still to be decided. The result is recorded in **`order.json`**, in the user's directory, as an attribute **`pass`** whose value is the string `"yes"` or `"no"`. | Settles D1's file name: **`order.json`**. Each queue element now has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. D4 must say whether one `pass` is enough to decide how far to move, or whether a streak needs more history. |
-| 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**. k is **"correct in a row"**, kept in a counter called **`passesInARow`**, tracked as part of the queue element in `order.json`. The function goes in its own file, **`advance.js`** (the name is for now). D4 will become much more nuanced over time; this is a starting point. | Replaces the 2^k table proposed in D4. An element now has at least `question`, `pass` and `passesInARow`, so it's an object, settling D1's "element shape" detail. With stochastic rounding a fail and a first pass differ on average (1.03 vs 1.30 places). D4's open details below, including what this rule does on a 65-element queue. |
-| 2026-11-03 | **D1 details (owner):** accepted all four: `order.json`, elements are objects, a top-level `schemaVersion`, and safe writes (temporary file, then `rename()`; no `await` between reading and writing). | D1 is fully decided. |
-| 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. When a question is deleted, it **must be deleted from `order.json` too**. There will be a **function that checks consistency between the sources of truth**. | D5 is decided. New piece of work: a consistency check over `questions/`, `order.json`, the Submit records and the profile (details in D5). How a deleted question leaves `order.json` is still open. |
-| 2026-11-03 | **D5 details (owner):** (1) the consistency check **only reports**. (2) Not a "repair" command but a function that **removes references to a question** from `order.json`, run **when a question is deleted**. (3) The check is a pure function in its own file, run by a `make` target and logged at server start. (4) **Renaming a question updates references to it** in `order.json`, so its progress isn't lost. **D2 detail (owner):** the profile is **`profile.json`**. | Two functions to build alongside the check: remove references, and update references. Still open: what triggers them (a question is a file in `questions/`, so deleting or renaming one is a file operation that nothing in the server sees), and how old Submit records, which keep the old name, are linked to the new one. |
-| 2026-11-03 | **D5 (owner):** accepted the consistency check as proposed, with the adjustments the later decisions imply, and the four recommendations: `make delete-question` / `make rename-question` commands (also usable after a `git pull`), every user, a rename log `questions/renames.json` for old Submit records, and records of deleted questions ignored. | D5 is fully decided. The check now also covers `backlog.json` and `renames.json` (D5 section). |
-| 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. | A sixth source of truth. Remove/update references cover `backlog.json` too. Still open: where creation order comes from (git can't tell in a shallow clone), pairs vs questions, and when a pair moves from the backlog into the queue. |
-| 2026-11-03 | **D6 details (owner):** accepted all seven: a `created` field in each question file (ties broken by file name); the backlog holds (question, language) pairs, by question then by the profile's language order; at least 3 pairs kept in the queue, plus one more from the backlog every 5 Submits, in a function of its own beside `advance.js`; an introduced pair goes to the front; missing pairs are appended to backlogs automatically (server start, a newly allowed language); a new user starts with everything in the backlog; a `submitsSinceLastIntroduced` counter at the top of `order.json`. | D6 is fully decided. Settles D2's "pairs" detail and its "where a new language's pairs go". Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
-| 2026-11-03 | **D7 (owner):** (a), stay on the results after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. The D7 details below are still recommendations. |
-| 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. | Skip now changes `order.json`, though on 2026-10-29 Skips were decided not to be recorded. Unless Skips get a record of their own, check 6 (records agree) will report every Skip, and recalculating from the records will lose them. See D8. |
-| 2026-11-03 | **D2, D3 and D4 details (owner):** all accepted. D2: allowed and preferred fields kept apart in `profile.json`; Run and Submit refuse a language the profile doesn't allow (`403`); no `profile.json` means all five languages, switching allowed; a removed language's pairs are skipped, not deleted; the two `localStorage` language settings go. D3: `pass` decided in one function; only exactly `"yes"`/`"no"` accepted; no `pass` on a pair never submitted; `order.json` updated only after the Submit record is saved. D4: at least 1 place; `advance.js` only works out how many places (a move past the end goes last); the random function is passed in; CommonJS; any saved Submit of a pair moves it, wherever it is. | D1–D6 are fully decided. Still open: the D7 and D8 details, chiefly whether Skips get a record of their own. Steps rewritten. |
-| 2026-11-03 | **D7 details (owner):** all accepted: "Next" on the button with what's next in its tooltip; Next ignores clicks for its first second; a reload shows Submit again; an unsaved Submit stays Submit. **D8 (owner):** Skips are treated as the learner failing, and **a Skip is saved as a submission record with `skipped` = `"yes"`**; normally `skipped` is empty. **D8 details (owner):** all accepted: a Skip counts like a failed Submit (`passesInARow` to 0, moved `advance(0)` places, counted towards `submitsSinceLastIntroduced`); Skip is hidden once the button says Next; a confirmation when `passesInARow` is more than 0; a backlog pair moves into the queue when skipped or submitted. | **Changes the 2026-10-29 decision** that Skips aren't recorded: they are now, in the same `submissions/` folder. The record format changes, so `schemaVersion` goes to 3. Check 6 and recalculating from the records treat a Skip record as a fail, which removes the conflict D8 raised. Small details still open in D8. |
+| 2026-11-03 | **D1 (owner):** order by **queue position**, with flexibility in how a question advances. The queue is a JSON file, **`order.json`**, in the user's directory (to be replaced by a real database eventually). Each queue element holds the question's name, its file name without `.json` (e.g. `two-sum` for `questions/two-sum.json`), and more fields as decided below. Details, all accepted: elements are **objects**; the file has a top-level **`schemaVersion`**; it's **written safely** (a temporary file, then `rename()`; no `await` between reading and writing it). | Settles most of D5: the queue is **stored**, not worked out from the records. D4's rule becomes one possible advance rule, not the only one. |
+| 2026-11-03 | **D2 (owner):** **one queue for everything**, not one per language. Not every learner will have every language. How a learner is shown questions, and whether they may switch languages or set a default language at all, depends on their **user profile**, **`profile.json`** in their user directory. Details, all accepted: queue elements are **(question, language) pairs**; **allowed** fields (set by the owner or a teacher) are kept apart from **preferred** ones (set by the learner); Run and Submit **refuse a language the profile doesn't allow** (`403`); **no `profile.json`** means all five languages, switching allowed; a **removed language's pairs are skipped**, not deleted; the two `localStorage` language settings (`maxrecall-dsa:default-language`, `maxrecall-dsa:available-languages`) **go**. A newly allowed language's pairs go into the backlog (D6). | **New file** `users/<email>/profile.json`, which decides which pairs exist, so it's built before the queue. |
+| 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's **`Accepted`**, all tests passing. There is **no "how easy"**. Tests may also fail for timeouts (they already do: `Time Limit Exceeded`), or for other reasons still to be decided. The result is recorded in `order.json` as an attribute **`pass`**, the string **`"yes"` or `"no"`**. Details, all accepted: `pass` is decided in **one function**; the server accepts **only exactly `"yes"`/`"no"`** when reading; a pair never submitted has **no `pass`**; `order.json` is updated **only after the Submit record is saved**. | Each queue element has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. |
+| 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**, and **at least 1 place**. k is **"correct in a row"**, kept in a counter **`passesInARow`** in the queue element (a pass adds 1, a fail sets it to 0, then the move uses the new value). The function goes in its own file, **`advance.js`** (the name is for now), tested by **`advance.test.js`** beside it. D4 will become much more nuanced over time; this is a starting point. Details, all accepted: `advance.js` only works out **how many places** (a move past the end goes last); the **random function is passed in**; **CommonJS**; **any saved Submit of a pair moves it**, wherever it is in the queue. | Replaces the 2^k table first proposed. An element has at least `question`, `language`, `pass` and `passesInARow`. On average a fail moves 1.03 places and a first pass 1.30. Tests are run by a new `make test` (`node --test`). |
+| 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. There is a **consistency check** between the sources of truth (`questions/`, `questions/renames.json`, `profile.json`, the submission records, `order.json`, `backlog.json`), accepted as proposed in the D5 section. Details, all accepted: the check **only reports**; it's a **pure function in its own file**, run by a `make` target and logged at server start. **Deleting a question removes references to it**, and **renaming one updates references to it** (so its progress is kept), in every user's `order.json` and `backlog.json`, through **`make delete-question`** and **`make rename-question`**, which also work after a `git pull` has already changed the file. A **rename log, `questions/renames.json`**, links old Submit records to the new name; records of deleted questions are kept and ignored. | Three functions to build: the check, remove references, update references. |
+| 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. Details, all accepted: a **`created` field in each question file** (ties broken by file name); the backlog holds **pairs**, by question and then by the profile's language order; **at least 3 pairs kept in the queue, plus one more every 5 Submits**, in a file of its own, **`introduce.js`**; an introduced pair goes to the **front**; missing pairs are **appended automatically** (at server start, and when a language is newly allowed); a **new user** starts with everything in the backlog; a **`submitsSinceLastIntroduced`** counter at the top of `order.json`. | Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
+| 2026-11-03 | **D7 (owner):** (a), **stay on the results** after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. Details, all accepted: per language, as now; **"Next" on the button, what's next in its tooltip**; Next **ignores clicks for its first second** (a double click on Submit mustn't leave the results unread); a **reload shows Submit again**; an **unsaved Submit stays Submit**. The server says what's next (`GET /api/next`), and the page takes **`?language=`** in its address. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. |
+| 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. Skips are **treated as the learner failing**, and **a Skip is saved as a submission record with `"skipped": "yes"`**; ordinary Submits **leave the field out**. Details, all accepted: a Skip counts **exactly like a failed Submit** (`passesInARow` to 0, moved `advance(0)` places, counted towards `submitsSinceLastIntroduced`); Skip is **hidden once the button says Next**; a **confirmation** when `passesInARow` is more than 0; a **backlog pair moves into the queue** when skipped or submitted; records go to **`schemaVersion` 3**; a Skip record has the **same fields as a Submit**, with `status`, `passed`, `total`, `runtimeMs`, `stdout` and `stderr` `null` and `results` `[]`, since it isn't judged; the **Submissions tab lists Skips** as "Skipped"; a Skip **doesn't count as having answered** (the Learning/Applying tab rule). | **Changes the 2026-10-29 decision** that Skips aren't recorded: they are now, in the same `submissions/` folder. Check 6 and the later recalculation read a Skip record as a fail, so `order.json` and the records agree. Anything reading `submissions/` has to check `skipped`. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -473,8 +468,8 @@ goals, not for now:
 
   (Whether 70% or all of the Submits passed made no difference to these
   counts, since the rule counts Submits, not passes.) Recommended: **at
-  least 3 in the queue, and one more every 5 Submits**, in a small
-  function of its own beside `advance.js`, so it can later be made to
+  least 3 in the queue, and one more every 5 Submits**, in a file of
+  its own beside `advance.js`, **`introduce.js`** (owner), so it can later be made to
   depend on how well the learner is doing, as MaxRecall's
   `countUntilNextNewCard` does (32 Submits apart at 0% correct, 4 apart
   at 100%).
@@ -606,15 +601,13 @@ agree again.
   language, which saves the record, updates `order.json` and answers with
   what's next.
 
-**Open, with recommendations:**
+**Record details, accepted by the owner on 2026-11-03:**
 
-- **"Empty" in JSON:** ordinary Submits write `"skipped": ""`, so every
-  new record has the field, and records from before it (no field) are
-  read as `""` too. (The alternative, leaving it out of ordinary
-  Submits, works the same way for reading.)
-- **`schemaVersion` 3** for records with `skipped`. It's separate from
-  the record changes the owner is thinking through in issues #19 and #24,
-  as `elapsedMs` (version 2) was.
+- **Ordinary Submits leave `skipped` out** (owner), so only a Skip record
+  has it, and records from before it are read the same way.
+- **`schemaVersion` 3** for records written once this is built. It's
+  separate from the record changes the owner is thinking through in
+  issues #19 and #24, as `elapsedMs` (version 2) was.
 - **What else a Skip record holds:** the same fields as a Submit, for one
   shape of record: `submittedAt` (when it was skipped), `question`,
   `questionSha256`, `language`, `judgeMode`, the editor's `code` at that
@@ -625,8 +618,9 @@ agree again.
   and Load still puts their code in the editor. `GET /api/submissions`
   summaries gain `skipped`.
 - **Which tab opens (Learning or Applying):** a Skip doesn't count as
-  having answered, so a pair with only Skips still opens on Learning
-  (`showLanguage` in `problem-page.js` looks for a saved Submit).
+  having answered, so a pair with only Skips still opens on Learning.
+- **Anything that reads `submissions/`** (the "your time" column, future
+  statistics) has to check `skipped`, or it will count Skips as Submits.
 
 ## Steps
 
@@ -637,13 +631,14 @@ each checked to fail against a deliberately wrong version first.
 
 1. **`advance.js`**: `advance(k, random = Math.random)` returns how many
    places, 1.3^k ± 10%, stochastically rounded, at least 1. Nothing uses
-   it yet. Tests with fixed "random" numbers, and a statistical one that
-   the average over many runs is close to 1.3^k. Needs only D4, so it can
-   start now.
-2. **The introduction rule**, a file of its own beside `advance.js`
-   (name to choose, e.g. `introduce.js`): given the queue's length and
-   `submitsSinceLastIntroduced`, whether to bring in a backlog pair
-   (fewer than 3 in the queue, or 5 Submits since the last). Tests.
+   it yet. Tested by `advance.test.js` beside it, run by a new
+   `make test` (`node --test`): fixed "random" numbers, and a statistical
+   test that the average over many runs is close to 1.3^k. Needs only
+   D4, so it can start now.
+2. **`introduce.js`**, the introduction rule: given the queue's length
+   and `submitsSinceLastIntroduced`, whether to bring in a backlog pair
+   (fewer than 3 in the queue, or 5 Submits since the last). Tested by
+   `introduce.test.js`.
 3. **`created` in every question file**, filled in by the owner on
    Kubuntu from the full git history (the `git log --diff-filter=A`
    command in D6); `readme.html` section 5 updated.
@@ -660,7 +655,7 @@ each checked to fail against a deliberately wrong version first.
 7. **Next**: `GET /api/next`, `?language=` in the page address, and
    Submit turning into Next (with the one-second guard).
 8. **Skip**: `POST /api/questions/:slug/skip`, Skip records
-   (`skipped`: `"yes"`, `schemaVersion` 3) in `submissions/`, and the
+   (`"skipped": "yes"`, `schemaVersion` 3) in `submissions/`, and the
    Skip button on the page.
 9. **The problem list** in queue order, then the backlog, marked "new".
 10. **`consistency.js`**, its `make` target and the log at server start.
