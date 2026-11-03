@@ -57,6 +57,10 @@ Teaching them what you're doing comes first. Speed comes second.
   signature as you write it. When you change, or come across, an existing
   function with no comment block, or one that doesn't document its
   signature, document it in the same change.
+- That includes functions written inline: route handlers, middleware, and
+  callbacks passed to `listen()` and the like. Put the block directly
+  before the function, inside the call (e.g. between a route's path and
+  its handler): above the whole statement, TypeScript ignores it.
 - Words (owner): a function's *signature* is its parameters' and return
   value's types; a `@typedef` for a record or object is a *type*, not a
   "shape".
