@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Step 1 (`advance.js`) is done; nothing uses it yet. All eight
+Status: **being built.** Steps 1 (`advance.js`) and 2 (`introduce.js`) are done; nothing uses them yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -479,10 +479,19 @@ each checked to fail against a deliberately wrong version first.
    `make test` (`node --test`): fixed "random" numbers, and a statistical
    test that the average over many runs is close to 1.3^k. Needs only
    D4, so it can start now.
-2. **`introduce.js`**, the introduction rule: given the queue's length
-   and `submitsSinceLastIntroduced`, whether to bring in a backlog pair
-   (fewer than 3 in the queue, or 5 Submits since the last). Tested by
-   `introduce.test.js`.
+2. **Done 2026-11-03.** **`introduce.js`**, the introduction rule:
+   `introduceCount(queueLength, submitsSinceLastIntroduced,
+   backlogLength)` returns how many pairs to bring in: enough to keep 3 in
+   the queue, or 1 once 5 Submits (or Skips) have passed, whichever is
+   more, never more than the backlog has. A count rather than the yes/no
+   first described here, so a new user's empty queue gets 3 at once
+   instead of the caller looping; the caller takes them from the front of
+   `backlog.json`, puts them at the front of `order.json`, and sets
+   `submitsSinceLastIntroduced` back to 0. Tested by `introduce.test.js`
+   (16 tests, including the queue never falling below 3 over 400
+   Submits); each of 5 deliberately broken versions (sum instead of the
+   larger, `>` instead of `>=`, no cap at the backlog, a minimum of 2, no
+   argument check) fails the test named for it.
 3. **`created` in every question file**, filled in by the owner on
    Kubuntu from the full git history (the `git log --diff-filter=A`
    command in D6); `readme.html` section 5 updated.
