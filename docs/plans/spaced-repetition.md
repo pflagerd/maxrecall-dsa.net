@@ -463,7 +463,8 @@ records agree.
 ## Steps
 
 Rewritten 2026-11-03, after D1–D8. Each step is small, checkable on its
-own, and merged before the next starts. Tests use Node's built-in test
+own, and merged before the next starts. **Each step is merged through a
+pull request** (owner, 2026-11-03), not pushed to `master` directly. Tests use Node's built-in test
 runner ([`node:test`](https://nodejs.org/docs/latest-v22.x/api/test.html)),
 each checked to fail against a deliberately wrong version first.
 
