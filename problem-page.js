@@ -497,75 +497,191 @@ timerBtn.addEventListener('click', () => {
 document.addEventListener('visibilitychange', updateClocks);
 // A quarter second, so the display never skips a second.
 setInterval(renderTimer, 250);
-const DEFAULT_LANGUAGE_STORAGE_KEY = 'maxrecall-dsa:default-language';
+// --- The learner's profile (spaced-repetition plan, D2; step 4c) -------------
+// Which languages the learner has, their default, and what they may change
+// come from the server (GET /api/profile), and changes are saved there
+// (PATCH /api/profile/preferred). Before 2026-11-03 the default language and
+// the language menu's choices were kept in this browser's localStorage; they
+// are copied to the profile once (migrateLocalStorageChoices) and not used
+// after that.
 
 /**
- * The learner's default language, as remembered in localStorage.
+ * The profile as GET /api/profile sends it (profile.js, effectiveProfile).
  *
- * @returns {string} One of KNOWN_LANGUAGES: the remembered one, or
- *   "javascript" if there isn't one or storage can't be read.
+ * @typedef {object} EffectiveProfile
+ * @property {string[]} allowedLanguages - Languages the learner may use at all.
+ * @property {string[]} languages - The allowed ones turned on, in the learner's order.
+ * @property {string} defaultLanguage - One of languages.
+ * @property {boolean} canChooseLanguages - May they turn languages on and off?
+ * @property {boolean} canSwitchLanguage - May they change a question's language themselves?
+ * @property {boolean} canSetDefaultLanguage - May they set their default language?
  */
-function getStoredDefaultLanguage() {
-  let saved;
+
+/**
+ * The learner's profile. Until it has loaded, or if it can't be loaded,
+ * everything is allowed (the server refuses Run and Submit itself when the
+ * profile is invalid).
+ *
+ * @type {EffectiveProfile}
+ */
+let profile = {
+  allowedLanguages: [...KNOWN_LANGUAGES],
+  languages: [...KNOWN_LANGUAGES],
+  defaultLanguage: 'javascript',
+  canChooseLanguages: true,
+  canSwitchLanguage: true,
+  canSetDefaultLanguage: true,
+};
+
+/**
+ * Sends a request about the profile and reads the answer.
+ *
+ * @param {RequestInit} [options] - fetch()'s options: none for GET.
+ * @returns {Promise<EffectiveProfile>} The profile the server answers with.
+ * @throws {Error} The server's message if it refuses, with status set to
+ *   the HTTP status (0 if no answer came back at all).
+ */
+async function profileRequest(options) {
+  const url = options ? '/api/profile/preferred' : '/api/profile';
+  let res;
   try {
-    saved = localStorage.getItem(DEFAULT_LANGUAGE_STORAGE_KEY);
+    res = await fetch(url, options);
   } catch {
-    return 'javascript';
+    throw Object.assign(new Error("Can't reach the server."), { status: 0 });
   }
-  // includes() accepts null at runtime (it's just not found).
-  return KNOWN_LANGUAGES.includes(/** @type {string} */ (saved)) ? /** @type {string} */ (saved) : 'javascript';
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
+  return data;
 }
 
 /**
- * Remembers the learner's default language, if storage allows.
+ * Saves a change to the learner's own choices, and keeps the answer.
  *
- * @param {string} language - e.g. "python".
+ * @param {{ languages?: string[], defaultLanguage?: string }} change - What to change.
+ * @returns {Promise<EffectiveProfile>} The new profile (also kept in profile).
+ * @throws {Error} As profileRequest() does, if it's refused or fails.
+ */
+async function saveProfileChange(change) {
+  profile = await profileRequest({
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(change),
+  });
+  return profile;
+}
+
+// Where these choices were kept before the profile (step 4c).
+const OLD_DEFAULT_LANGUAGE_KEY = 'maxrecall-dsa:default-language';
+const OLD_AVAILABLE_LANGUAGES_KEY = 'maxrecall-dsa:available-languages';
+
+/**
+ * Copies the language choices this browser kept in localStorage into the
+ * profile, once (owner's decision, 2026-11-03), then forgets them. Only
+ * what the profile permits is sent: languages it allows, the menu's choices
+ * if canChooseLanguages, the default if canSetDefaultLanguage and on. If
+ * the server refuses them, they're forgotten anyway, so this isn't tried on
+ * every page load; if it can't be reached, they're kept for next time.
+ *
+ * @returns {Promise<void>} Never rejects.
+ */
+async function migrateLocalStorageChoices() {
+  /** @type {string | null} */
+  let savedDefault = null;
+  /** @type {string | null} */
+  let savedLanguages = null;
+  try {
+    savedDefault = localStorage.getItem(OLD_DEFAULT_LANGUAGE_KEY);
+    savedLanguages = localStorage.getItem(OLD_AVAILABLE_LANGUAGES_KEY);
+  } catch {
+    return; // storage unavailable: nothing to copy
+  }
+  if (savedDefault === null && savedLanguages === null) return;
+
+  /** @type {{ languages?: string[], defaultLanguage?: string }} */
+  const change = {};
+  let parsed = null;
+  try {
+    parsed = JSON.parse(savedLanguages || 'null');
+  } catch {
+    // Not a list: nothing to copy for the menu.
+  }
+  if (profile.canChooseLanguages && Array.isArray(parsed)) {
+    const languages = profile.allowedLanguages.filter((l) => parsed.includes(l));
+    if (languages.length) change.languages = languages;
+  }
+  const turnedOn = change.languages || profile.languages;
+  if (profile.canSetDefaultLanguage && savedDefault !== null && turnedOn.includes(savedDefault)) {
+    change.defaultLanguage = savedDefault;
+  }
+
+  if (Object.keys(change).length) {
+    try {
+      await saveProfileChange(change);
+    } catch (err) {
+      if (/** @type {Error & { status?: number }} */ (err).status === 0) return; // try again next time
+      console.warn(`Couldn't copy this browser's language choices to your profile: ${/** @type {Error} */ (err).message}`);
+    }
+  }
+  try {
+    localStorage.removeItem(OLD_DEFAULT_LANGUAGE_KEY);
+    localStorage.removeItem(OLD_AVAILABLE_LANGUAGES_KEY);
+  } catch {
+    // Storage unavailable: nothing to forget.
+  }
+}
+
+/**
+ * Loads the profile, copies any old localStorage choices into it, and sets
+ * the language menu and language-select from it. If it can't be loaded,
+ * says why and carries on with everything allowed.
+ *
+ * @returns {Promise<void>} Never rejects.
+ */
+async function loadProfile() {
+  try {
+    profile = await profileRequest();
+    await migrateLocalStorageChoices();
+  } catch (err) {
+    alert(`Your profile couldn't be loaded: ${/** @type {Error} */ (err).message}\n\nThe page shows every language, but the server will refuse Run and Submit until it's fixed.`);
+  }
+  applyProfileToControls();
+}
+
+/**
+ * Sets the language menu and language-select from the profile: languages
+ * not allowed are hidden; the checkboxes show the ones turned on, and are
+ * disabled unless canChooseLanguages; language-select offers the ones on,
+ * disabled unless canSwitchLanguage; the default is marked.
+ *
  * @returns {void}
  */
-function setStoredDefaultLanguage(language) {
-  try {
-    localStorage.setItem(DEFAULT_LANGUAGE_STORAGE_KEY, language);
-  } catch {
-    // Ignore (private browsing, storage disabled, etc.) — just won't persist.
-  }
-}
-
-// Which languages are offered at all (checkboxes in the header's language
-// filter menu), separate from which one is the default. Unchecking a
-// language here removes it as an option from language-select everywhere.
-const AVAILABLE_LANGUAGES_STORAGE_KEY = 'maxrecall-dsa:available-languages';
-
-/**
- * Which languages the learner has left switched on in the language menu, as
- * remembered in localStorage.
- *
- * @returns {Set<string>} The remembered languages that are known, or all of
- *   KNOWN_LANGUAGES if none are remembered or storage can't be read.
- */
-function getAvailableLanguages() {
-  let saved;
-  try {
-    // JSON.parse(null) is null, which the check below turns into "none saved".
-    saved = JSON.parse(/** @type {string} */ (localStorage.getItem(AVAILABLE_LANGUAGES_STORAGE_KEY)));
-  } catch {
-    return new Set(KNOWN_LANGUAGES);
-  }
-  const filtered = Array.isArray(saved) ? saved.filter((l) => KNOWN_LANGUAGES.includes(l)) : [];
-  return new Set(filtered.length ? filtered : KNOWN_LANGUAGES);
+function applyProfileToControls() {
+  languageCheckboxes.forEach((cb) => {
+    const lang = /** @type {string} */ (cb.dataset.lang); // every checkbox has data-lang
+    // Each checkbox is in its row, a .language-filter-row (problem.html).
+    /** @type {HTMLElement} */ (cb.closest('.language-filter-row')).hidden = !profile.allowedLanguages.includes(lang);
+    cb.checked = profile.languages.includes(lang);
+  });
+  updateCheckboxDisabledStates();
+  renderLanguageSelectOptions(new Set(profile.languages));
+  languageSelect.disabled = !profile.canSwitchLanguage;
+  updateDefaultLanguageHighlight();
 }
 
 /**
- * Remembers which languages are switched on, if storage allows.
+ * Saves a new default language, if the profile permits and it's changed.
  *
- * @param {Set<string>} languageSet - The languages switched on.
- * @returns {void}
+ * @param {string} language - The new default.
+ * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
  */
-function setAvailableLanguages(languageSet) {
+async function saveDefaultLanguage(language) {
+  if (!profile.canSetDefaultLanguage || language === profile.defaultLanguage || !profile.languages.includes(language)) return;
   try {
-    localStorage.setItem(AVAILABLE_LANGUAGES_STORAGE_KEY, JSON.stringify(Array.from(languageSet)));
-  } catch {
-    // Ignore (private browsing, storage disabled, etc.) — just won't persist.
+    await saveProfileChange({ defaultLanguage: language });
+  } catch (err) {
+    alert(`Couldn't save ${LANGUAGE_LABELS[language]} as your default language: ${/** @type {Error} */ (err).message}`);
   }
+  updateDefaultLanguageHighlight();
 }
 
 /**
@@ -583,29 +699,28 @@ function renderLanguageSelectOptions(available) {
   if (available.has(previousValue)) languageSelect.value = previousValue;
 }
 
-// Picks which language a problem should open with: the stored default if
-// it's both globally available and supported by this problem, otherwise the
-// first known language that satisfies both. The stored preference itself is
-// never touched here — a problem/availability mismatch is a one-off
-// fallback for this load, not a change to what the user actually wants.
+// Picks which language a problem should open with: the profile's default
+// if this problem supports it, otherwise the first language turned on that
+// it does. The default itself is never touched here — a mismatch is a
+// one-off fallback for this load, not a change to what the user wants.
 /**
  * @param {PublicProblem} problem - The question being opened.
  * @returns {string} The language to open it in.
  */
 function pickInitialLanguage(problem) {
-  const preferred = getStoredDefaultLanguage();
-  const available = getAvailableLanguages();
-  const candidates = [preferred, ...KNOWN_LANGUAGES];
-  return candidates.find((l) => available.has(l) && problem.starterCode[l]) || KNOWN_LANGUAGES[0];
+  const candidates = [profile.defaultLanguage, ...profile.languages];
+  return candidates.find((l) => problem.starterCode[l]) || profile.languages[0];
 }
 
 // A checkbox for the only remaining checked language can't be unchecked —
-// language-select must never end up with zero options.
+// language-select must never end up with zero options. None can be changed
+// unless the profile's canChooseLanguages allows it.
 /** @returns {void} */
 function updateCheckboxDisabledStates() {
   const checkedCount = languageCheckboxes.filter((cb) => cb.checked).length;
   languageCheckboxes.forEach((cb) => {
-    cb.disabled = checkedCount === 1 && cb.checked;
+    cb.disabled = !profile.canChooseLanguages || (checkedCount === 1 && cb.checked);
+    cb.title = profile.canChooseLanguages ? '' : 'Choosing languages is turned off for you.';
   });
 }
 
@@ -619,105 +734,140 @@ function closeLanguageFilterMenu() {
   languageFilterBtn.setAttribute('aria-expanded', 'false');
 }
 
-// Marks whichever language name is the current default — independent of
+// Marks whichever language name is the profile's default — independent of
 // the checkboxes, which only control availability.
 /** @returns {void} */
 function updateDefaultLanguageHighlight() {
-  const defaultLanguage = getStoredDefaultLanguage();
   languageFilterNames.forEach((el) => {
-    el.classList.toggle('is-default', el.dataset.lang === defaultLanguage);
+    el.classList.toggle('is-default', el.dataset.lang === profile.defaultLanguage);
   });
 }
 
-languageFilterBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const isOpen = !languageFilterMenu.hidden;
-  if (isOpen) {
-    closeLanguageFilterMenu();
-  } else {
-    languageFilterMenu.hidden = false;
-    languageFilterBtn.setAttribute('aria-expanded', 'true');
-  }
-});
+languageFilterBtn.addEventListener(
+  'click',
+  /**
+   * Opens or closes the language menu.
+   *
+   * @param {MouseEvent} e - The click, kept from reaching the document's
+   *   close-on-click-outside handler.
+   * @returns {void}
+   */
+  (e) => {
+    e.stopPropagation();
+    const isOpen = !languageFilterMenu.hidden;
+    if (isOpen) {
+      closeLanguageFilterMenu();
+    } else {
+      languageFilterMenu.hidden = false;
+      languageFilterBtn.setAttribute('aria-expanded', 'true');
+    }
+  },
+);
 
-document.addEventListener('click', (e) => {
-  // A click's target is an element.
-  if (!languageFilterMenu.hidden && !/** @type {Element} */ (e.target).closest('.language-filter')) closeLanguageFilterMenu();
-});
+document.addEventListener(
+  'click',
+  /**
+   * Closes the language menu on a click outside it.
+   *
+   * @param {MouseEvent} e - Any click on the page.
+   * @returns {void}
+   */
+  (e) => {
+    // A click's target is an element.
+    if (!languageFilterMenu.hidden && !/** @type {Element} */ (e.target).closest('.language-filter')) closeLanguageFilterMenu();
+  },
+);
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !languageFilterMenu.hidden) closeLanguageFilterMenu();
-});
+document.addEventListener(
+  'keydown',
+  /**
+   * Closes the language menu on Escape.
+   *
+   * @param {KeyboardEvent} e - Any key pressed on the page.
+   * @returns {void}
+   */
+  (e) => {
+    if (e.key === 'Escape' && !languageFilterMenu.hidden) closeLanguageFilterMenu();
+  },
+);
 
 languageCheckboxes.forEach((checkbox) => {
-  checkbox.addEventListener('change', async () => {
-    const lang = checkbox.dataset.lang;
+  checkbox.addEventListener(
+    'change',
+    /**
+     * Turns a language on or off, and saves that to the profile. Reverts
+     * the checkbox if it can't be saved.
+     *
+     * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
+     */
+    async () => {
+      const lang = /** @type {string} */ (checkbox.dataset.lang); // every checkbox has data-lang
 
-    // Unchecking the language currently active in the editor: switch to
-    // another available language this problem supports first, or revert
-    // the checkbox if there's no such language to fall back to.
-    if (!checkbox.checked && problem && lang === currentLanguage) {
-      // problem was checked just above; the checker can't see that inside this callback.
-      const fallback = KNOWN_LANGUAGES.find((l) =>
-        l !== lang
-        && /** @type {PublicProblem} */ (problem).starterCode[l]
-        && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
-      );
-      if (!fallback || !(await switchLanguage(fallback))) {
-        checkbox.checked = true;
-        return;
+      // Unchecking the language currently active in the editor: switch to
+      // another available language this problem supports first, or revert
+      // the checkbox if there's no such language to fall back to.
+      if (!checkbox.checked && problem && lang === currentLanguage) {
+        // problem was checked just above; the checker can't see that inside this callback.
+        const fallback = KNOWN_LANGUAGES.find((l) =>
+          l !== lang
+          && /** @type {PublicProblem} */ (problem).starterCode[l]
+          && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
+        );
+        if (!fallback || !(await switchLanguage(fallback))) {
+          checkbox.checked = true;
+          return;
+        }
       }
-    }
 
-    const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => /** @type {string} */ (cb.dataset.lang))); // every checkbox has data-lang
-    setAvailableLanguages(available);
-    renderLanguageSelectOptions(available);
-    updateCheckboxDisabledStates();
-  });
+      // The learner's order is kept (it orders new pairs, D2 decision 2); a
+      // language turned on goes last.
+      const languages = checkbox.checked ? [...profile.languages, lang] : profile.languages.filter((l) => l !== lang);
+      try {
+        await saveProfileChange({ languages });
+      } catch (err) {
+        checkbox.checked = !checkbox.checked;
+        alert(`Couldn't save that: ${/** @type {Error} */ (err).message}`);
+      }
+      applyProfileToControls();
+    },
+  );
 });
 
 // Clicking a language's name sets it as the default and switches the editor
 // to it (independent of its checkbox — clicking the checkbox only toggles
 // availability, never the default). Setting a language as default also
-// makes it available, since a default that isn't selectable in
-// language-select wouldn't make sense.
+// turns it on, since a default that isn't selectable in language-select
+// wouldn't make sense. Each part happens only if the profile permits it.
 languageFilterNames.forEach((nameEl) => {
-  nameEl.addEventListener('click', async () => {
-    const lang = /** @type {string} */ (nameEl.dataset.lang); // every name has data-lang (problem.html)
-    // Every language name in the menu has a checkbox for the same language (problem.html).
-    const checkbox = /** @type {HTMLInputElement} */ (languageCheckboxes.find((cb) => cb.dataset.lang === lang));
-    const wasChecked = checkbox.checked;
-    checkbox.checked = true;
-
-    const switched = await switchLanguage(lang);
-    if (!switched) {
-      checkbox.checked = wasChecked;
-      return;
-    }
-
-    if (!wasChecked) {
-      const available = new Set(languageCheckboxes.filter((cb) => cb.checked).map((cb) => /** @type {string} */ (cb.dataset.lang))); // every checkbox has data-lang
-      setAvailableLanguages(available);
-      renderLanguageSelectOptions(available);
-      updateCheckboxDisabledStates();
-    }
-    closeLanguageFilterMenu();
-  });
+  nameEl.addEventListener(
+    'click',
+    /**
+     * Turns the language on if needed, then switches to it (which also
+     * saves it as the default), as far as the profile permits.
+     *
+     * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
+     */
+    async () => {
+      const lang = /** @type {string} */ (nameEl.dataset.lang); // every name has data-lang (problem.html)
+      if (!profile.languages.includes(lang)) {
+        if (!profile.canChooseLanguages) {
+          alert(`${LANGUAGE_LABELS[lang]} is turned off, and choosing languages is turned off for you.`);
+          return;
+        }
+        try {
+          await saveProfileChange({ languages: [...profile.languages, lang] });
+        } catch (err) {
+          alert(`Couldn't turn ${LANGUAGE_LABELS[lang]} on: ${/** @type {Error} */ (err).message}`);
+          return;
+        }
+        applyProfileToControls();
+      }
+      if (profile.canSwitchLanguage) await switchLanguage(lang);
+      else await saveDefaultLanguage(lang);
+      closeLanguageFilterMenu();
+    },
+  );
 });
-
-/**
- * Sets the language menu's checkboxes and language-select from what's
- * remembered. Runs once, as the page loads.
- *
- * @returns {void}
- */
-(function initLanguageFilter() {
-  const available = getAvailableLanguages();
-  languageCheckboxes.forEach((cb) => { cb.checked = available.has(/** @type {string} */ (cb.dataset.lang)); });
-  updateCheckboxDisabledStates();
-  renderLanguageSelectOptions(available);
-  updateDefaultLanguageHighlight();
-})();
 
 // Browser-chrome shortcuts CodeMirror doesn't bind itself (Tab, Ctrl-Z/Y,
 // Ctrl-A are already in its default keymap and need no help). Bound to a
@@ -920,7 +1070,7 @@ function loadLanguage(language) {
   }
   currentLanguage = language;
   languageSelect.value = language;
-  languageSelect.title = `Current language: ${LANGUAGE_LABELS[language]}`;
+  languageSelect.title = `Current language: ${LANGUAGE_LABELS[language]}${profile.canSwitchLanguage ? '' : ' (changing it is turned off for you)'}`;
   renderLanguageContent(language);
   restoreConsoleState(language);
   updateSubmitButton();
@@ -947,18 +1097,15 @@ function loadLanguage(language) {
  */
 async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
   if (!problem) {
-    setStoredDefaultLanguage(newLanguage);
-    updateDefaultLanguageHighlight();
+    await saveDefaultLanguage(newLanguage);
     return true;
   }
   if (newLanguage !== currentLanguage) {
     if (!(await showLanguage(newLanguage))) return true; // a later switch took over
     if (chosenByUser) setSubmissionInAddress(null);
   }
-  if (chosenByUser) {
-    setStoredDefaultLanguage(newLanguage);
-    updateDefaultLanguageHighlight();
-  }
+  // The default is saved to the profile only if it permits (saveDefaultLanguage).
+  if (chosenByUser) await saveDefaultLanguage(newLanguage);
   return true;
 }
 
@@ -1487,7 +1634,11 @@ async function openSubmissionFromAddress() {
  * @returns {Promise<void>} Never rejects: failures are shown in the title.
  */
 async function init() {
+  // The profile decides which languages there are and which one opens, so
+  // it's loaded before anything else uses them. Never rejects.
+  const profilePromise = loadProfile();
   if (!slug) {
+    await profilePromise;
     titleEl.textContent = 'No problem specified';
     return;
   }
@@ -1503,6 +1654,7 @@ async function init() {
     titleEl.textContent = `Failed to load problem: ${/** @type {Error} */ (err).message}`;
     return;
   }
+  await profilePromise;
 
   renderHeader(await labelsPromise);
   // Opening the question in its initial language applies the same

@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file) and 4a (`profile.js`) are done; nothing uses them yet. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file) and 4 (`profile.json`, read by the server and the page) are done; `advance.js` and `introduce.js` aren't used yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -577,10 +577,24 @@ each checked to fail against a deliberately wrong version first.
      `profile.json`, the 39 baseline requests are identical to `master`;
      16 profile cases against the real server behave as above;
      `users.test.js` (4 tests) for the file functions.
-   - **4c, the page:** the language menu, dropdown and default language
-     come from `GET /api/profile` and are saved with `PATCH`, replacing
-     the two `localStorage` settings; controls are disabled where a
-     `can…` is false.
+   - **4c, done 2026-11-03: the page.** `problem-page.js` loads the
+     profile before anything picks a language. The menu hides languages
+     not allowed, ticks the ones on, and saves changes at once with
+     `PATCH` (a language turned on goes last, keeping the learner's
+     order); its checkboxes are disabled unless `canChooseLanguages`.
+     language-select offers the languages on, disabled unless
+     `canSwitchLanguage`. The dropdown and the menu's names save the
+     default if `canSetDefaultLanguage`. **The old `localStorage`
+     choices are copied once** (owner's decision (a)): only what the
+     profile permits is sent, and the keys are removed afterwards,
+     unless the server couldn't be reached. An unloadable profile gets
+     an alert and every language shown (the server refuses Run and
+     Submit then). The inline listeners it changes have signature blocks
+     (owner's decision (b) on inline functions). Checked in headless
+     Chromium: #30's 37 observations identical to `master`'s, and 11
+     profile cases (the copy, a refused copy, a restricted profile, each
+     `can…` false, turning languages off and on across a reload, the
+     default from a name, an invalid profile).
 5. **`order.json` and `backlog.json`**: reading with validation, safe
    writing, and filling each user's backlog with missing pairs at server
    start. Nothing changes them on Submit yet.
