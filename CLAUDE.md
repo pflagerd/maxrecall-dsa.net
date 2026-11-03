@@ -41,8 +41,9 @@ Teaching them what you're doing comes first. Speed comes second.
   of date, following its "Maintaining this file" section.
 - Also at the start of a session, read the newest
   `docs/session-handoff.*.md`. Its name ends in a `YYYYMMDDTHHMMSS±HHMM`
-  timestamp (local time, then its offset from UTC), so the last one by name
-  is the newest. It's a dated snapshot: where it disagrees with
+  timestamp in Pacific Time, the owner's zone (`-0800`, or `-0700` in
+  daylight saving time), so the last one by name is the newest. Make one
+  with `TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z`. It's a dated snapshot: where it disagrees with
   `readme.html`, `readme.html` wins.
 
 ### Continuity between machines

@@ -1,4 +1,4 @@
-# Session handoff, 2026-11-03 13:57 UTC
+# Session handoff, 2026-11-03 05:57 Pacific Time (PST, −08:00; 13:57 UTC)
 
 A snapshot for starting a new Claude Code session, cloud or WebStorm. It's
 dated because it doesn't get kept up to date: for how things are *now*,
