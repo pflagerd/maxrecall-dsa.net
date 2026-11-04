@@ -26,11 +26,20 @@ const EVERYTHING = {
  * @returns {void}
  */
 function throwsCode(fn, code, message) {
-  assert.throws(fn, (/** @type {any} */ err) => {
-    assert.equal(err.code, code);
-    if (message) assert.match(err.message, message);
-    return true;
-  });
+  assert.throws(
+    fn,
+    /**
+     * Checks the error's code (and message).
+     *
+     * @param {any} err - What fn threw.
+     * @returns {boolean} true, as assert.throws expects once the checks pass.
+     */
+    (err) => {
+      assert.equal(err.code, code);
+      if (message) assert.match(err.message, message);
+      return true;
+    },
+  );
 }
 
 test('LANGUAGES is the judge\'s five, in menu order', () => {

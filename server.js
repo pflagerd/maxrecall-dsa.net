@@ -379,12 +379,20 @@ function listProblems() {
   return fs
     .readdirSync(QUESTIONS_DIR)
     .filter((f) => f.endsWith('.json'))
-    .map((f) => {
-      const { slug, title, difficulty, topics, sources } = JSON.parse(
-        fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8')
-      );
-      return { slug, title, difficulty, topics, sources };
-    })
+    .map(
+    /**
+     * Reads one question file's summary.
+     *
+     * @param {string} f - The file's name in questions/.
+     * @returns {ProblemSummary} Its slug, title, difficulty, topics and sources.
+     */
+    (f) => {
+        const { slug, title, difficulty, topics, sources } = JSON.parse(
+          fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8')
+        );
+        return { slug, title, difficulty, topics, sources };
+      },
+  )
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 

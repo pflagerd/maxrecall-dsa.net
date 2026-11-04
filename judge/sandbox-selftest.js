@@ -40,10 +40,22 @@ const { cgroupStatus, MEMORY_LIMIT_MB } = cgroupsModule;
 /** @type {MemoryCounters | null} */
 let lastCgroupMemory = null;
 const originalForSubmission = cgroupsModule.forSubmission;
+/**
+ * cgroups.forSubmission, wrapped so that each cgroup's memory figures are
+ * kept (in lastCgroupMemory) just before it's removed.
+ *
+ * @returns {import('./cgroups').SubmissionCgroup | null} What
+ *   forSubmission gives.
+ */
 cgroupsModule.forSubmission = () => {
   const cg = originalForSubmission();
   if (cg) {
     const destroy = cg.destroy.bind(cg);
+    /**
+     * Keeps the cgroup's memory figures, then removes it.
+     *
+     * @returns {void}
+     */
     cg.destroy = () => {
       lastCgroupMemory = cg.memory();
       destroy();
@@ -648,7 +660,15 @@ async function runConcurrencyProbe() {
   queue.resetPeak();
   const started = Date.now();
   let observedPeak = 0;
-  const sampler = setInterval(() => { observedPeak = Math.max(observedPeak, countChildren()); }, 50);
+  const sampler = setInterval(
+    /**
+     * Counts this process's children now, keeping the most seen.
+     *
+     * @returns {void}
+     */
+    () => { observedPeak = Math.max(observedPeak, countChildren()); },
+    50,
+  );
   const outcomes = await Promise.allSettled(Array.from({ length: total }, () => runSubmission({
     language: 'python',
     code: 'import time\ndef probe():\n    time.sleep(0.5)\n    return "ok"\n',
@@ -787,7 +807,15 @@ async function main() {
   process.exitCode = outcomes.every((o) => o.verdict === 'contained' || o.verdict === 'skipped') ? 0 : 1;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 2;
-});
+main().catch(
+  /**
+   * Prints an error main() didn't expect, and fails the run.
+   *
+   * @param {unknown} err - What was thrown.
+   * @returns {void}
+   */
+  (err) => {
+    console.error(err);
+    process.exitCode = 2;
+  },
+);

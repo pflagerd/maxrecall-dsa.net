@@ -68,8 +68,31 @@ From the owner's review of pull request #27, and since 2026-11-03 in
   one per line and indents the function's body. Checked: four blocks
   broken on purpose are caught (including a destructured parameter,
   `([name, panel])`); with comments removed the code is identical to
-  `master`'s; the browser check's 37 observations are identical. The
-  Node files' 56 (29 of them test bodies) are next.
+  `master`'s; the browser check's 37 observations are identical (#40).
+- **Test bodies are exempt** (owner, 2026-11-03, 1b): a function passed
+  straight to `test(...)` in a `*.test.js` file; its name documents it.
+  Helpers in test files aren't exempt.
+- **Node files** (the `jsdoc-inline-node` pull request): 29 inline
+  functions, in the judge (process events, loop and `.map()` callbacks,
+  the escape test's wrappers), `auth.js`, `sandbox.js`, `server.js`, and
+  three test helpers. Blocks go before the function inside its call or
+  `new` (`new Promise(...)`), above the `const` or the assignment it's
+  held in, or inside parentheses after `return`.
+- **`make doc-check`** (owner, 2026-11-03: "keep the scanner"):
+  `scripts/doc-check.js`, with TypeScript 6.0.3's parser installed as
+  the npm alias `typescript6`, since TypeScript 7's package has no
+  JavaScript API. It checks every function, named or inline, in the
+  files the two tsconfig files list: a block, a `@param` for each
+  parameter (by name, or by position for a destructured one), and a
+  `@returns` (not for constructors and setters). It found two false
+  alarms of its own on its first run (immediately invoked functions,
+  whose block TypeScript attaches to the parentheses), fixed by reading
+  such a block's tags itself; and it caught its own undocumented
+  callback. Checked: each of six omissions made on purpose is reported
+  (a whole block, one `@param`, a `@returns`, a destructured
+  parameter's `@param`, an immediately invoked function's block, a test
+  helper's block). One lesson on the way: `@param` or `@returns` written
+  in a block's prose is read as a tag; say "param tag" instead.
 
 ## Pull request 1: `jsdoc-server` (2026-11-03)
 

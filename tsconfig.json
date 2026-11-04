@@ -29,6 +29,7 @@
     "judge/sandbox.js",
     "judge/runner.js",
     "judge/line-numbers-test.js",
-    "judge/sandbox-selftest.js"
+    "judge/sandbox-selftest.js",
+    "scripts/doc-check.js"
   ]
 }

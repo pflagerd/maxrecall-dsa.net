@@ -21,11 +21,19 @@ const { advance, stochasticRound } = require('./advance');
  *   expected.
  */
 function sequence(...values) {
-  return () => {
-    const value = values.shift();
-    if (value === undefined) throw new Error('random() called more times than expected');
-    return value;
-  };
+  return (
+    /**
+     * The stand-in itself.
+     *
+     * @returns {number} The next of the values.
+     * @throws {Error} Once they've run out.
+     */
+    () => {
+      const value = values.shift();
+      if (value === undefined) throw new Error('random() called more times than expected');
+      return value;
+    }
+  );
 }
 
 /**
@@ -39,12 +47,19 @@ function sequence(...values) {
  *   time it's called, from 0 up to, but not including, 1, like Math.random.
  */
 function seededRandom(seed) {
-  return () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+  return (
+    /**
+     * The generator itself.
+     *
+     * @returns {number} The next number, from 0 up to, but not including, 1.
+     */
+    () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+  );
 }
 
 test('k = 0 with the factor at exactly 1 moves 1 place', () => {

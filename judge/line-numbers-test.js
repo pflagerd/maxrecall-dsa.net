@@ -140,7 +140,15 @@ async function main() {
   /** @type {string[]} */
   const lines = [];
   let failures = 0;
-  const check = (/** @type {string} */ name, /** @type {boolean} */ ok, /** @type {string} */ detail) => {
+  /**
+   * Records one check's result, for the report.
+   *
+   * @param {string} name - What it checks.
+   * @param {boolean} ok - Whether it passed.
+   * @param {string} detail - What the judge said, shown if it failed.
+   * @returns {void}
+   */
+  const check = (name, ok, detail) => {
     if (!ok) failures += 1;
     lines.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : `\n      ${detail.replace(/\n/g, '\n      ').slice(0, 600)}`}`);
   };
@@ -186,7 +194,15 @@ async function main() {
   process.exitCode = failures ? 1 : 0;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+main().catch(
+  /**
+   * Prints an error main() didn't expect, and fails the run.
+   *
+   * @param {unknown} err - What was thrown.
+   * @returns {void}
+   */
+  (err) => {
+    console.error(err);
+    process.exitCode = 1;
+  },
+);
