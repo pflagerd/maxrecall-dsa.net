@@ -316,4 +316,25 @@ function describeCounts({ error, warning, info }) {
   return `${error} ${error === 1 ? 'error' : 'errors'}, ${warning} ${warning === 1 ? 'warning' : 'warnings'}, ${info} info`;
 }
 
-module.exports = { checkConsistency, expectedProgress, parseRenames, currentName, countLevels, formatFinding, describeCounts };
+/**
+ * The rename log after renaming `from` to `to` (step 11, detail 4), kept so
+ * every value is a current question's name: names that led to `from` now
+ * lead to `to`, and renaming back (to was an old name) removes that entry,
+ * so no loop is ever written.
+ *
+ * @param {Record<string, string>} renames - From parseRenames() (not changed).
+ * @param {string} from - The name being renamed, a current question's.
+ * @param {string} to - Its new name.
+ * @returns {Record<string, string>} The new rename log.
+ */
+function updateRenames(renames, from, to) {
+  /** @type {Record<string, string>} */
+  const result = {};
+  for (const [old, current] of Object.entries(renames)) {
+    if (old !== to) result[old] = current === from ? to : current;
+  }
+  result[from] = to;
+  return result;
+}
+
+module.exports = { checkConsistency, expectedProgress, parseRenames, updateRenames, currentName, countLevels, formatFinding, describeCounts };

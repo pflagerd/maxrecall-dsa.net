@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -87,6 +87,22 @@ doc-check: node_modules
 # lists each backlog pair that has records, instead of one summary line.
 consistency-check:
 	node scripts/consistency-check.js $(if $(VERBOSE),--verbose)
+
+# Deleting and renaming a question (docs/plans/spaced-repetition.md, D5;
+# step 11): make delete-question SLUG=two-sum, make rename-question
+# FROM=two-sum TO=pair-sum. Each changes the question file with git, staged
+# but not committed (unless a git pull already did it), then updates every
+# user's order.json and backlog.json; records are never changed. Stop the
+# server first: they refuse if one answers on 127.0.0.1:$PORT. DRY_RUN=1
+# prints what would change and changes nothing. SLUG, FROM, TO and DRY_RUN
+# reach the script through its environment (GNU make puts command-line
+# variables there), never pasted into this recipe, so a name can't run as
+# shell code; the script checks them.
+delete-question:
+	node scripts/question-admin.js delete
+
+rename-question:
+	node scripts/question-admin.js rename
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

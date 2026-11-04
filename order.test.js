@@ -1,13 +1,13 @@
 'use strict';
 
 // Tests for order.js (docs/plans/spaced-repetition.md, D1, D3–D7, steps 5
-// to 9). Run
+// to 11). Run
 // with `make test`.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -269,4 +269,81 @@ test('the list leaves out pairs that can\'t be opened, and starts with what next
 
 test('an empty list when nothing can be opened', () => {
   assert.deepEqual(listPairs(queueOf(['a']), backlogOf(['x/cpp']), () => false), []);
+});
+
+/**
+ * A queue and backlog of pairs, as "question/language" strings.
+ *
+ * @param {string[]} queue - The queue's pairs, front first.
+ * @param {string[]} backlog - The backlog's.
+ * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} The files.
+ */
+function filesOf(queue, backlog) {
+  return {
+    order: { schemaVersion: 1, submitsSinceLastIntroduced: 0, queue: queue.map((k) => ({ question: k.split('/')[0], language: k.split('/')[1], passesInARow: 0 })) },
+    backlog: backlogOf(backlog),
+  };
+}
+
+/**
+ * The pairs in each file, as "question/language" strings.
+ *
+ * @param {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} f - The files.
+ * @returns {string[][]} [queue, backlog].
+ */
+const pairsIn = (f) => [f.order.queue.map((e) => `${e.question}/${e.language}`), f.backlog.backlog.map((p) => `${p.question}/${p.language}`)];
+
+/**
+ * Throws unless the files would pass parseQueueFiles().
+ *
+ * @param {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} f - The files.
+ * @returns {void}
+ */
+const assertValid = (f) => { parseQueueFiles(JSON.stringify(f.order), JSON.stringify(f.backlog)); };
+
+test('delete removes every pair of the question from both files, and nothing else', () => {
+  const { order, backlog } = filesOf(['a/python', 'gone/python', 'b/python'], ['gone/cpp', 'c/python']);
+  const result = removeReferences(order, backlog, 'gone');
+  assert.deepEqual(pairsIn(result), [['a/python', 'b/python'], ['c/python']]);
+  assert.deepEqual(result.removed, ['order.json: gone in python', 'backlog.json: gone in cpp']);
+  assert.equal(order.queue.length, 3, 'the files given are left alone');
+  assert.deepEqual(removeReferences(order, backlog, 'nothing').removed, []);
+});
+
+test('rename keeps each pair\'s place and progress under the new name', () => {
+  const files = filesOf(['a/python', 'old/python', 'b/python'], ['old/cpp', 'c/python']);
+  files.order.queue[1] = { question: 'old', language: 'python', pass: 'yes', passesInARow: 3 };
+  const result = renameReferences(files.order, files.backlog, 'old', 'new');
+  assert.deepEqual(pairsIn(result), [['a/python', 'new/python', 'b/python'], ['new/cpp', 'c/python']]);
+  assert.deepEqual(result.order.queue[1], { question: 'new', language: 'python', pass: 'yes', passesInARow: 3 });
+  assert.deepEqual(result.renamed, ['order.json: old in python', 'backlog.json: old in cpp']);
+  assert.deepEqual(result.dropped, []);
+  assertValid(result);
+});
+
+test('rename: the backlog copy step 5 added under the new name is dropped, keeping the queue\'s (step 10\'s note)', () => {
+  const { order, backlog } = filesOf(['old/python'], ['c/python', 'new/python']);
+  const result = renameReferences(order, backlog, 'old', 'new');
+  assert.deepEqual(pairsIn(result), [['new/python'], ['c/python']]);
+  assert.deepEqual(result.dropped, ['backlog.json: new in python, in the queue as new']);
+  assertValid(result);
+});
+
+test('rename: in the queue under both names, the new-name element is kept (detail 3)', () => {
+  const { order, backlog } = filesOf(['old/python', 'a/python', 'new/python'], []);
+  const result = renameReferences(order, backlog, 'old', 'new');
+  assert.deepEqual(pairsIn(result), [['a/python', 'new/python'], []]);
+  assert.deepEqual(result.dropped, ['order.json: old in python, already in the queue as new']);
+  assertValid(result);
+});
+
+test('rename: a backlog pair under the old name whose new name is in the queue, or in the backlog, is dropped', () => {
+  const a = filesOf(['new/python'], ['old/python']);
+  const inQueue = renameReferences(a.order, a.backlog, 'old', 'new');
+  assert.deepEqual(pairsIn(inQueue), [['new/python'], []]);
+  const b = filesOf([], ['new/python', 'old/python']);
+  const both = renameReferences(b.order, b.backlog, 'old', 'new');
+  assert.deepEqual(pairsIn(both), [[], ['new/python']]);
+  assert.deepEqual(both.dropped, ['backlog.json: old in python, already in the backlog as new']);
+  assertValid(inQueue); assertValid(both);
 });
