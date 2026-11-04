@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) and 11 (deleting and renaming questions) are done: every step but the later step 12. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) 11 (deleting and renaming questions) and 12a (recalculating from the records) are done; 12b is for later. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -837,5 +837,29 @@ each checked to fail against a deliberately wrong version first.
     dry run, four refusals, a rename staged as `R` with the slug, rename
     log and progress right and step 10's check then clean, the VPS case
     dropping the start-up fill's backlog copy, renaming back, delete).
-12. Later: recalculating from the records, courses, dependencies, and an
-    introduction rule that depends on how well the learner is doing.
+12. **12a, done 2026-11-03: recalculating from the records**, `make
+    recalculate-queue EMAIL=…` (`recalculate.js`,
+    `scripts/recalculate-queue.js`). Owner's details: it **replays**,
+    starting as a new user does and putting every record, oldest first,
+    through `recordSubmit`, rather than repairing today's queue (1); the
+    random numbers come from a generator **seeded from the email**
+    (mulberry32, seeded by FNV-1a), so the dry run shows exactly what will
+    be written (2); **one user at a time**, `EMAIL` required (3); a dry
+    run, a refusal while a server answers, and **copies of both files**
+    before writing, `<name>.before-recalculate-<UTC time>` (4); records
+    in a language turned off or no longer allowed are **replayed too**,
+    kept and passed over while off (5). Records of deleted questions are
+    left out, old names followed through `renames.json`; it refuses if a
+    record can't be read, since the replay would leave it out.
+    `canOpenPair` moved from `server.js` to `order.js`, so the replay
+    brings pairs in by the same rule. Checked: `recalculate.test.js` (8
+    tests, one replaying 60 random records and finding nothing with
+    `checkConsistency`); 10 deliberately broken versions, all caught once
+    `seedFor` was tested against FNV-1a's published vectors (a weaker
+    test let a broken hash through); the 39 baseline requests identical
+    to step 11; a run over an owner with history from before the queue:
+    the check's 5-pair warning gone afterwards, two dry runs identical,
+    the real run writing what they showed, copies kept and restoring.
+    **12b, later:** courses, dependencies, and an introduction rule that
+    depends on how well the learner is doing. With replay, a changed rule
+    can be applied to a learner's whole history by running it again.
