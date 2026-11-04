@@ -19,6 +19,8 @@
     "questions.test.js",
     "profile.js",
     "profile.test.js",
+    "order.js",
+    "order.test.js",
     "paths.js",
     "users.js",
     "users.test.js",

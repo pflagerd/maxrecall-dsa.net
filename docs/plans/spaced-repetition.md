@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file) and 4 (`profile.json`, read by the server and the page) are done; `advance.js` and `introduce.js` aren't used yet. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) and 5 (`order.json` and `backlog.json`, created and filled at server start) are done; `advance.js` and `introduce.js` aren't used yet, and nothing changes the queue on Submit yet. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -14,7 +14,7 @@ reasoning behind it.
 | 2026-11-03 | **D3 (owner):** as recommended, a Submit passes only if it's **`Accepted`**, all tests passing. There is **no "how easy"**. Tests may also fail for timeouts (they already do: `Time Limit Exceeded`), or for other reasons still to be decided. The result is recorded in `order.json` as an attribute **`pass`**, the string **`"yes"` or `"no"`**. Details, all accepted: `pass` is decided in **one function**; the server accepts **only exactly `"yes"`/`"no"`** when reading; a pair never submitted has **no `pass`**; `order.json` is updated **only after the Submit record is saved**. | Each queue element has a `pass` field. D3's options (b) `elapsedMs` and (c) asking the learner are dropped. |
 | 2026-11-03 | **D4 (owner):** start with a function like MaxRecall's 2-to-the-n-with-randomness, but less aggressive: **1.3^k, plus or minus 10%**, with **stochastic rounding**, and **at least 1 place**. k is **"correct in a row"**, kept in a counter **`passesInARow`** in the queue element (a pass adds 1, a fail sets it to 0, then the move uses the new value). The function goes in its own file, **`advance.js`** (the name is for now), tested by **`advance.test.js`** beside it. D4 will become much more nuanced over time; this is a starting point. Details, all accepted: `advance.js` only works out **how many places** (a move past the end goes last); the **random function is passed in**; **CommonJS**; **any saved Submit of a pair moves it**, wherever it is in the queue. | Replaces the 2^k table first proposed. An element has at least `question`, `language`, `pass` and `passesInARow`. On average a fail moves 1.03 places and a first pass 1.30. Tests are run by a new `make test` (`node --test`). |
 | 2026-11-03 | **D5 (owner):** the queue is **stored in a file** (`order.json`). Ways to **recalculate it from the Submit records** will be worked out later. There is a **consistency check** between the sources of truth (`questions/`, `questions/renames.json`, `profile.json`, the submission records, `order.json`, `backlog.json`), accepted as proposed in the D5 section. Details, all accepted: the check **only reports**; it's a **pure function in its own file**, run by a `make` target and logged at server start. **Deleting a question removes references to it**, and **renaming one updates references to it** (so its progress is kept), in every user's `order.json` and `backlog.json`, through **`make delete-question`** and **`make rename-question`**, which also work after a `git pull` has already changed the file. A **rename log, `questions/renames.json`**, links old Submit records to the new name; records of deleted questions are kept and ignored. | Three functions to build: the check, remove references, update references. |
-| 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. Details, all accepted: a **`created` field in each question file** (ties broken by file name); the backlog holds **pairs**, by question and then by the profile's language order; **at least 3 pairs kept in the queue, plus one more every 5 Submits**, in a file of its own, **`introduce.js`**; an introduced pair goes to the **front**; missing pairs are **appended automatically** (at server start, and when a language is newly allowed); a **new user** starts with everything in the backlog; a **`submitsSinceLastIntroduced`** counter at the top of `order.json`. | Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
+| 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. Details, all accepted: a **`created` field in each question file** (ties broken by file name); the backlog holds **pairs**, by question and then by the profile's language order; **at least 3 pairs kept in the queue, plus one more every 5 Submits**, in a file of its own, **`introduce.js`**; an introduced pair goes to the **front**; missing pairs are **appended automatically** (at server start, and when a language is newly allowed); a **new user** starts with everything in the backlog; a **`submitsSinceLastIntroduced`** counter at the top of `order.json`. **Layout and details, decided later the same day (owner, step 5):** `order.json` is `{ schemaVersion, submitsSinceLastIntroduced, queue: [{ question, language, pass?, passesInARow }] }` and `backlog.json` is `{ schemaVersion, backlog: [{ question, language }] }`; the lists are named `queue` and `backlog` (1); the backlog gets every pair the profile **allows**, languages turned off included, by creation time, then the languages turned on in the learner's order, then the other allowed ones (2); an invalid file **fails closed**, refusing that learner's Run and Submit with `500` (3); the files are created or filled **only at server start** (4); the users are the folders in `users/` holding `submissions/` or `profile.json` (5). | Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
 | 2026-11-03 | **D7 (owner):** (a), **stay on the results** after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. Details, all accepted: per language, as now; **"Next" on the button, what's next in its tooltip**; Next **ignores clicks for its first second** (a double click on Submit mustn't leave the results unread); a **reload shows Submit again**; an **unsaved Submit stays Submit**. The server says what's next (`GET /api/next`), and the page takes **`?language=`** in its address. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. |
 | 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. Skips are **treated as the learner failing**, and **a Skip is saved as a submission record with `"skipped": "yes"`**; ordinary Submits **leave the field out**. Details, all accepted: a Skip counts **exactly like a failed Submit** (`passesInARow` to 0, moved `advance(0)` places, counted towards `submitsSinceLastIntroduced`); Skip is **hidden once the button says Next**; a **confirmation** when `passesInARow` is more than 0; a **backlog pair moves into the queue** when skipped or submitted; records go to **`schemaVersion` 3**; a Skip record has the **same fields as a Submit**, with `status`, `passed`, `total`, `runtimeMs`, `stdout` and `stderr` `null` and `results` `[]`, since it isn't judged; the **Submissions tab lists Skips** as "Skipped"; a Skip **doesn't count as having answered** (the Learning/Applying tab rule). | **Changes the 2026-10-29 decision** that Skips aren't recorded: they are now, in the same `submissions/` folder. Check 6 and the later recalculation read a Skip record as a fail, so `order.json` and the records agree. Anything reading `submissions/` has to check `skipped`. |
 
@@ -408,6 +408,55 @@ put in order by a *topological sort*). For now, creation order only.**
   `submitsSinceLastIntroduced` in `order.json`, next to `schemaVersion`,
   so it survives a server restart.
 
+**The files' layout** (owner, step 5, 2026-11-03):
+
+```json
+{
+  "schemaVersion": 1,
+  "submitsSinceLastIntroduced": 2,
+  "queue": [
+    { "question": "two-sum", "language": "python", "pass": "yes", "passesInARow": 3 },
+    { "question": "hello-world", "language": "cpp", "passesInARow": 0 }
+  ]
+}
+```
+
+is `users/<email>/order.json`, front of the queue first, and
+
+```json
+{
+  "schemaVersion": 1,
+  "backlog": [{ "question": "valid-parentheses", "language": "python" }]
+}
+```
+
+is `users/<email>/backlog.json`, in the order the pairs will come in.
+`pass` is absent until the pair's first Submit (D3), and `passesInARow`
+is 0 unless `pass` is `"yes"`. Backlog elements have neither (D5, check
+1). With it, five details:
+
+1. **The lists are named `queue` and `backlog`.**
+2. **The backlog gets every pair the profile allows**, including
+   languages turned off, so turning one on later needs nothing new (D2,
+   decision 1). The order: questions by `created`, ties by file name;
+   within a question, the languages turned on in the learner's order,
+   then the other allowed ones.
+3. **Invalid files fail closed**, like the profile: an unknown field, an
+   unknown language, `pass` other than `"yes"` or `"no"`, a count below
+   0, or a pair listed twice (in one file or across both) refuses that
+   learner's Run and Submit with `500`, naming the problem and, for a
+   pair listed twice, where it was first.
+4. **Created or filled only at server start**: a user with neither file
+   gets an empty queue and a full backlog; otherwise pairs in neither
+   file are appended to the backlog. So a language the owner newly
+   allows by hand, or a new question, reaches the backlog at the next
+   restart.
+5. **The users** are the folders in `users/` named by an email that hold
+   `submissions/` or `profile.json`.
+
+A question deleted from `questions/` stays in these files until step 11's
+`make delete-question` exists; the steps that read the queue skip it (D5).
+
 **Why a rule is needed** (simulated 2026-11-03: 65 pairs, starting from
 an empty queue, 300 Submits, with D4's rule): a queue holding one pair
 always gives back that same pair, so with no rule beyond "when the queue
@@ -595,9 +644,29 @@ each checked to fail against a deliberately wrong version first.
      profile cases (the copy, a refused copy, a restricted profile, each
      `can…` false, turning languages off and on across a reload, the
      default from a name, an invalid profile).
-5. **`order.json` and `backlog.json`**: reading with validation, safe
-   writing, and filling each user's backlog with missing pairs at server
-   start. Nothing changes them on Submit yet.
+5. **Done 2026-11-03.** **`order.json` and `backlog.json`**, layout and
+   details in D6. `order.js`: pure functions, like `profile.js`.
+   `parseOrder`, `parseBacklog` and `parseQueueFiles` (both together, so
+   a pair can't be in both) fail closed with `QueueFileError` (code
+   `INVALID_QUEUE`); `allowedPairs(questions, profile)` lists the pairs
+   in backlog order, and `fillBacklog` appends the missing ones.
+   `users.js`: `readUserFile` and `writeUserFile` for `profile.json`,
+   `order.json` and `backlog.json` only (synchronous, a temporary file
+   renamed into place), and `listUsers()`. `server.js`: at start,
+   before listening, each user's files are created or filled, written
+   only if new or changed, and logged (`Queues: <email>: 0 in
+   order.json, 26 in backlog.json (26 added)`); a user whose profile or
+   queue files are invalid is left alone and logged. Run and Submit
+   refuse with `500` while either file is invalid, after the profile's
+   checks. Nothing changes the files on Submit yet. Checked:
+   `order.test.js` (22 tests) and `users.test.js` (now 7); 14 of 15
+   deliberately broken versions caught (the 15th, `listUsers` without
+   `isDirectory()`, can't behave differently: a file holds no
+   `submissions/`); the 39 baseline requests identical to `master`;
+   six scenarios against the real server (first start for three kinds
+   of user, a restart writing nothing, a new question and a removed pair
+   appended, a typo in `order.json`, a pair in both files, and the files
+   fixed again).
 6. **Submit updates the queue**, after the record is saved: `pass`,
    `passesInARow`, the move from `advance.js`, the introduction rule, and
    a backlog pair moving into the queue when it's submitted.

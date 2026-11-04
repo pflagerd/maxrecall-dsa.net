@@ -17,8 +17,9 @@ const { runSubmission } = require('./judge/runner');
 const { describeSandbox } = require('./judge/sandbox');
 const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
-const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile } = require('./users');
+const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
+const { parseQueueFiles, allowedPairs, fillBacklog } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -57,6 +58,8 @@ const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessio
  * @property {string} difficulty - "Easy", "Medium" or "Hard".
  * @property {string[]} topics
  * @property {string[]} sources
+ * @property {string} created - When it was created, as UTC ISO 8601
+ *   (spaced-repetition plan, step 3): the backlog's order.
  * @property {string} [judgeMode] - "function" (the default) or "program".
  * @property {Record<string, string>} starterCode - By language; a language
  *   missing here can't be submitted for this question.
@@ -498,6 +501,13 @@ async function handleExecution(req, res, { onlyVisible }) {
   if (!profile.allowedLanguages.includes(language)) {
     return res.status(403).json({ error: `${language} isn't one of the languages you can use (${profile.allowedLanguages.join(', ')}).` });
   }
+  // Broken order.json or backlog.json: refused the same way (step 5,
+  // decision 3). Nothing uses the queue here yet; step 6 will.
+  try {
+    loadQueueFiles(/** @type {string} */ (req.userEmail)); // signed in: the gate
+  } catch (err) {
+    return sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
+  }
 
   const judgeMode = problem.judgeMode || 'function';
   // A function-mode question always has functionName (the problem file
@@ -792,6 +802,97 @@ app.get(
     res.sendFile(path.join(__dirname, 'index.html'));
   },
 );
+
+// --- The learner's queue and backlog (spaced-repetition plan, D1, D5, D6) ---
+
+/**
+ * A user's order.json and backlog.json, checked together (order.js).
+ *
+ * @param {string} email - The user's email.
+ * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }}
+ *   Both; a missing file reads as an empty queue or backlog.
+ * @throws {Error} QueueFileError (code INVALID_QUEUE) if either is invalid,
+ *   or a pair is in both; another Error if one can't be read.
+ */
+function loadQueueFiles(email) {
+  return parseQueueFiles(readUserFile(email, 'order.json'), readUserFile(email, 'backlog.json'));
+}
+
+/**
+ * Answers a request that a queue problem stopped: 500, as for the profile
+ * (sendProfileError), and logs it, since the owner has to fix the file.
+ *
+ * @param {Response} res - The response.
+ * @param {Error & { code?: string }} err - From loadQueueFiles().
+ * @returns {Response} The response, sent.
+ */
+function sendQueueError(res, err) {
+  console.error(`Queue problem: ${err.message}`);
+  return res.status(500).json({ error: err.message, code: err.code === 'INVALID_QUEUE' ? 'INVALID_QUEUE' : undefined });
+}
+
+/**
+ * What order.js needs to know about every question in questions/.
+ *
+ * @returns {import('./order').QuestionInfo[]} One per .json file: its file
+ *   name without .json (D1), created, and its starterCode's languages.
+ * @throws {Error} If questions/ can't be read, or a file isn't valid JSON.
+ */
+function questionInfos() {
+  return fs
+    .readdirSync(QUESTIONS_DIR)
+    .filter((f) => f.endsWith('.json'))
+    .map(
+      /**
+       * Reads what's needed from one question file.
+       *
+       * @param {string} f - The file's name in questions/.
+       * @returns {import('./order').QuestionInfo} Its slug, created and languages.
+       */
+      (f) => {
+        /** @type {Problem} */
+        const problem = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8'));
+        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode) };
+      },
+    );
+}
+
+/**
+ * At start, gives every user (listUsers()) an order.json and a backlog.json
+ * holding every pair their profile allows (step 5, decision 4; D6): a user
+ * with neither file gets an empty queue and a full backlog, and otherwise
+ * the pairs in neither file are appended to the backlog. A file is written
+ * only if it's new or has changed. A user whose profile or queue files are
+ * invalid is left alone, and logged: their Run and Submit refuse until the
+ * file is fixed (fail closed). Nothing here stops the server starting.
+ *
+ * @returns {void}
+ */
+function prepareQueues() {
+  let questions, users;
+  try {
+    questions = questionInfos();
+    users = listUsers();
+  } catch (err) {
+    console.error(`Queues: not prepared: ${/** @type {Error} */ (err).message}`);
+    return;
+  }
+  for (const email of users) {
+    try {
+      const orderText = readUserFile(email, 'order.json');
+      const backlogText = readUserFile(email, 'backlog.json');
+      const { order, backlog } = parseQueueFiles(orderText, backlogText);
+      const filled = fillBacklog(order, backlog, allowedPairs(questions, loadProfile(email)));
+      if (orderText === undefined) writeUserFile(email, 'order.json', order);
+      if (backlogText === undefined || filled.added > 0) writeUserFile(email, 'backlog.json', filled.backlog);
+      console.log(`Queues: ${email}: ${order.queue.length} in order.json, ${filled.backlog.backlog.length} in backlog.json (${filled.added} added)`);
+    } catch (err) {
+      console.error(`Queues: ${email}: left alone, ${/** @type {Error} */ (err).message}`);
+    }
+  }
+}
+
+prepareQueues();
 
 // PORT may be a string from the environment, and HOST undefined (every
 // interface). Node's listen() accepts both, but Express's types allow only a
