@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) 11 (deleting and renaming questions) and 12a (recalculating from the records) are done; 12b is for later. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) 11 (deleting and renaming questions) 12a (recalculating from the records) and 13 (a chosen backlog) are done; 12b is for later. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -863,3 +863,49 @@ each checked to fail against a deliberately wrong version first.
     **12b, later:** courses, dependencies, and an introduction rule that
     depends on how well the learner is doing. With replay, a changed rule
     can be applied to a learner's whole history by running it again.
+13. **Done 2026-11-04: a chosen backlog**, asked for by the owner: start
+    over with no records and only Hello World in the backlog, choose which
+    questions come next and in what order, and use only Python for now.
+    Owner's details, all yes ("1-6 yes"):
+    1. A top-level **`"backlog": "chosen"`** in `profile.json` (default
+       `"all"`, today's rule), set by hand like `allowed`: the server
+       then adds nothing to the backlog by itself, at start, at a Submit,
+       or for a new question. No `backlog.json` means an empty one. An
+       unknown value is a `ProfileError` (fail closed: a typo mustn't
+       mean "all"). `order.js`'s `backlogPairs` is the one rule, used by
+       server start, Next, the problem list, check 4 and the replay.
+    2. The **consistency check** knows: check 4 (a pair in neither file)
+       isn't run for a chosen backlog.
+    3. **`make recalculate-queue`** starts from the pairs chosen (every
+       pair in the two files now: the queue's, in queue order, since the
+       order they were chosen in isn't kept once they're in the queue,
+       then the backlog's), not every allowed pair, and refuses if the
+       files are invalid.
+    4. **`make backlog-show`, `backlog-add`, `backlog-remove`**
+       (`scripts/backlog.js`; rules `pairsToAdd`, `addToBacklog`,
+       `removeFromBacklog` in `order.js`): add puts questions in, in the
+       order given, in each language turned on, at the end or from `AT`
+       (1 is the front); a pair already in either file is listed as not
+       added. Server stopped (they refuse otherwise); `DRY_RUN=1`.
+    5. **Later:** a page for choosing, through the server, so it needn't
+       be stopped.
+    6. **The owner's reset on the VPS**: `docs/deploy-vps.md` §10.
+    Python only needed nothing new: the problem page's language menu
+    saves `preferred.languages`; `allowed.languages` by hand is the hard
+    lock. Checked: 18 new tests (185 in all); 19 deliberately broken
+    versions, all caught once a test's languages were put in an order
+    different from the question's (with the same order, taking the
+    question's order instead of the learner's went unnoticed); the
+    default unchanged (a user with no profile still gets 65 pairs); a
+    scenario against a real server doing §10's steps: archive, a new
+    profile, `backlog-add SLUGS=hello-world`, start (`1 in backlog.json
+    (0 added)`, Next is Hello World), add refused while it runs, a
+    Python Submit (Accepted; Hello World in the queue, backlog empty),
+    adds with `AT` and at the end, removes, refusals, a dry-run replay,
+    the check (nothing found), a restart (nothing added), and a typo
+    (`"choosen"`) refused.
+    **Noted, not decided:** a pair added comes into the queue only at the
+    next Submit or Skip (`recordSubmit`'s introduction). With only Hello
+    World in the queue, adding Two Sum still leaves Hello World as Next
+    once more. `backlog-add` could also top the queue up to 3 at once,
+    as a Submit would; that would change `order.json` too.

@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue invite sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue backlog-show backlog-add backlog-remove invite sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -123,6 +123,25 @@ recalculate-queue:
 # script through its environment, as for rename-question.
 invite:
 	node scripts/invite.js
+
+# Choosing a learner's backlog (docs/plans/spaced-repetition.md, step 13),
+# for a profile.json with "backlog": "chosen", where the server adds nothing
+# to the backlog by itself. make backlog-show EMAIL=… lists their queue,
+# backlog and every question (only reads). make backlog-add EMAIL=…
+# SLUGS="hello-world two-sum" adds those questions, in that order, in each
+# language turned on, at the end, or from position AT=n (1 is the front).
+# make backlog-remove EMAIL=… SLUGS="…" takes them out of the backlog.
+# add and remove: stop the server first (they refuse if one answers on
+# 127.0.0.1:$PORT); DRY_RUN=1 changes nothing. EMAIL, SLUGS, AT and DRY_RUN
+# reach the script through its environment, as for rename-question.
+backlog-show:
+	node scripts/backlog.js show
+
+backlog-add:
+	node scripts/backlog.js add
+
+backlog-remove:
+	node scripts/backlog.js remove
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

@@ -234,6 +234,36 @@ The alternative is the earlier recommendation: `rsync` of the whole
 what's stored and that the owner can read it. I'm not giving legal
 advice; whether anything more is needed depends on where testers live.
 
+## What spaced-repetition step 13 changes here (2026-11-04)
+
+Step 13 (a chosen backlog, pull request #51) was merged to `master` while
+step 1 was being built, and merged into this branch the same day. Three
+consequences for live testing:
+
+- **Changing anyone's backlog stops the site for everyone.**
+  `make backlog-add` and `backlog-remove` refuse while a server answers
+  (a Submit rewrites `backlog.json` too), so each change is stop, change,
+  start (`docs/deploy-vps.md` §10). With testers, nginx shows them an error
+  for those seconds. Fine for a handful; if it becomes routine, the server
+  could make the change itself, under the same no-`await` rule that keeps
+  `updateQueue` safe. Not planned yet.
+- **What a new tester starts with is a choice (Q3, below).** With no
+  `profile.json` a tester gets `"backlog": "all"`: every question in all
+  five languages waiting in the backlog. The owner has just started
+  themselves on a chosen backlog (Python, Hello World only, §10).
+- **D5:** §10 moves a user's folder to `/srv/maxrecall/data/archive/`,
+  outside `users/` (the server would count a folder named like an email as
+  a user). A git repository per user moves with its folder, so the two fit;
+  backups should include `archive/` too.
+
+- **Q3. How should a new tester start?** (a) As the code does now, every
+  question in every language; (b) set up by hand before the invite goes
+  out, as §10 does for the owner (a `profile.json`, then `make
+  backlog-add` with the server stopped); (c) `make invite` writes a
+  starting `profile.json` and backlog as well. Recommendation: **(b)** for
+  the first few testers, since the tools exist; (c) once it's tedious.
+  Waiting for the owner.
+
 ## Steps (once the decisions are made)
 
 Each is small and can be checked before the next.
@@ -346,3 +376,4 @@ the same change.
 | 2026-11-04 | D5 (owner's idea): a git repository per user folder, asking how git handles names like `daniel.pflager@gmail.com`. Checked: fine; the `safe.directory` ownership check is what needs handling. Details waiting. Step 1's ten details proposed. |
 | 2026-11-04 | Step 1 details (owner): 6, drop `MAXRECALL_PASSWORD`, yes; 7, at least 12 characters for new passwords; the rest as proposed. |
 | 2026-11-04 | Step 1 done. Correction: detail 9's "nginx must replace `X-Forwarded-For`" was wrong; appending is also safe with Express's `trust proxy`. |
+| 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |

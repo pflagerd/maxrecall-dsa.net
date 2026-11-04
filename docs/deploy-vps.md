@@ -584,3 +584,116 @@ If you log in as a user other than root, `/srv/maxrecall` may not be readable
 by you, since `adduser` makes home folders private by default (my guess for
 24.04's defaults). In that case add `--rsync-path="sudo rsync"`, which needs
 `sudo` to work without a password prompt over SSH.
+
+## 10. Starting over with a chosen backlog [VPS, then Kubuntu]
+
+Added 2026-11-04 (spaced-repetition plan, step 13, detail 6). This puts
+your records aside, not deleting them, and starts you with no records, only
+Hello World in your backlog, and only Python turned on. From then on, the
+server adds nothing to your backlog by itself: you choose what comes next
+with `make backlog-add`. It needs the step 13 code on the VPS: once its
+pull request is merged, update first ("The quick way", or §8).
+
+All commands are run as root on the VPS.
+
+```bash
+systemctl stop maxrecall-dsa.test.service
+```
+- Stops the server: `make backlog-add` refuses while one answers, since a
+  Submit rewrites `backlog.json` too.
+
+```bash
+install -d -o maxrecall -g maxrecall -m 750 /srv/maxrecall/data/archive
+```
+- Creates the folder your old records go to. `-d` creates a directory,
+  `-o`/`-g` set its owner and group, `-m 750` lets only `maxrecall` (and
+  its group) in. See [install(1)](https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html).
+- It must be **outside** `users/`: the server counts any folder there whose
+  name looks like an email (`users.js`, `EMAIL_PATTERN`) as a user, and
+  `daniel.pflager@gmail.com.old` matches that pattern.
+
+```bash
+mv /srv/maxrecall/data/users/daniel.pflager@gmail.com /srv/maxrecall/data/archive/daniel.pflager@gmail.com.$(date -u +%Y%m%dT%H%M%SZ)
+```
+- Moves your whole folder (records, `profile.json`, `order.json`,
+  `backlog.json`) aside, named with the UTC time. `date -u +FORMAT` prints
+  the time in UTC in that format ([date(1)](https://www.gnu.org/software/coreutils/manual/html_node/date-invocation.html)).
+  If it says "No such file or directory", you had nothing there yet:
+  carry on. To undo, stop the server and move it back.
+- Your sign-in account, in `/srv/maxrecall/data/auth`, isn't touched.
+
+```bash
+sudo -u maxrecall mkdir /srv/maxrecall/data/users/daniel.pflager@gmail.com
+```
+- `sudo -u maxrecall` runs it as the service's user, so the folder is
+  its own ([sudo(8)](https://www.sudo.ws/docs/man/sudo.man/)).
+
+```bash
+sudo -u maxrecall vi /srv/maxrecall/data/users/daniel.pflager@gmail.com/profile.json
+```
+Put this in it:
+```json
+{
+  "schemaVersion": 1,
+  "preferred": { "languages": ["python"] },
+  "backlog": "chosen"
+}
+```
+- `preferred.languages`: only Python turned on. It's what the language
+  menu on the problem page changes, so you can turn others back on there.
+  For a lock the menu can't undo, use `"allowed": { "languages":
+  ["python"] }` instead.
+- `"backlog": "chosen"`: the server adds nothing to your backlog by
+  itself.
+- A mistake (an unknown field, `"choosen"`) makes the server refuse your
+  Run and Submit and log why, rather than guess.
+
+```bash
+cd /srv/maxrecall/maxrecall-dsa.net
+```
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=daniel.pflager@gmail.com
+```
+- `env MAXRECALL_USERS_DIR=…`: the users folder the service uses (its unit
+  file sets the same); without it, the script would look in the checkout.
+  See [env(1)](https://www.gnu.org/software/coreutils/manual/html_node/env-invocation.html).
+- `EMAIL`: whose backlog. Only reads. The first line should say
+  `backlog "chosen"; languages turned on: python`, then an empty queue and
+  backlog, then every question with `python: not chosen`.
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=daniel.pflager@gmail.com SLUGS=hello-world DRY_RUN=1
+```
+- `SLUGS`: the questions to add, by file name without `.json`, separated
+  by spaces (quote them: `SLUGS="hello-world two-sum"`), in the order you
+  want them. Each is added in every language you have turned on.
+- `DRY_RUN=1`: shows `Backlog after (1): 1. hello-world in python` and
+  writes nothing. Run it again without `DRY_RUN=1` to write it.
+
+```bash
+systemctl start maxrecall-dsa.test.service
+```
+
+```bash
+journalctl -u maxrecall-dsa.test.service -n 20 --no-pager | grep -E 'Queues|Consistency'
+```
+Should show `Queues: daniel.pflager@gmail.com: 0 in order.json, 1 in
+backlog.json (0 added)` and `Consistency: … nothing found`. `(0 added)` is
+the chosen backlog working.
+
+**[Kubuntu]** Open the tunnel (§7) and <http://localhost:3000>. The list
+should hold one row, Hello World in Python, marked **new**. Open it once,
+then check the first line of `make backlog-show` again: **if it no longer
+says only `python`**, untick the others in the language menu. (A browser
+that still has the language choices from before 2026-11-03 copies them into
+your profile once, the first time it opens a problem page:
+`problem-page.js`, `migrateLocalStorageChoices`. I can't tell from here
+whether yours still has them.)
+
+**Adding questions later.** The same three steps each time: stop the
+server, `make backlog-add` (with `AT=1` to put them at the front instead of
+the end), start it. `make backlog-remove … SLUGS="…"` takes them out of
+the backlog again. What you add comes into your queue at your **next Submit
+or Skip**, not at once: with only Hello World in the queue, Next is Hello
+World once more, and the new ones come in after that Submit.

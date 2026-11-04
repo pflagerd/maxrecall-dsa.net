@@ -42,6 +42,7 @@
     "scripts/consistency-check.js",
     "scripts/question-admin.js",
     "scripts/recalculate-queue.js",
-    "scripts/invite.js"
+    "scripts/invite.js",
+    "scripts/backlog.js"
   ]
 }

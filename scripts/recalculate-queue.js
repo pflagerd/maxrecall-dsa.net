@@ -80,15 +80,26 @@ async function recalculateQueue(dryRun) {
   const questions = questionInfos();
   const canOpen = canOpenPair(profile, questions);
 
-  const result = recalculate(records, questions, profile, renames, seededRandom(seedFor(email)));
-  console.log(`Recalculate ${email}'s queue from ${result.replayed} ${result.replayed === 1 ? 'record' : 'records'}${dryRun ? ' (dry run: nothing is written)' : ''}`);
-  if (result.leftOut) console.log(`  ${result.leftOut} left out: their question is gone`);
+  /** @type {{ order: import('../order').OrderFile, backlog: import('../order').BacklogFile } | undefined} */
+  let before;
+  let invalid = '';
   try {
-    const before = parseQueueFiles(readUserFile(email, 'order.json'), readUserFile(email, 'backlog.json'));
+    before = parseQueueFiles(readUserFile(email, 'order.json'), readUserFile(email, 'backlog.json'));
+  } catch (err) {
+    invalid = /** @type {Error} */ (err).message;
+    // A chosen backlog is read from these files (step 13, detail 3), so
+    // replacing them would lose the choice.
+    if (profile.backlog === 'chosen') throw new Refusal(`${invalid}: fix it first, since the chosen backlog is read from it`);
+  }
+
+  const result = recalculate(records, questions, profile, renames, seededRandom(seedFor(email)), before);
+  console.log(`Recalculate ${email}'s queue from ${result.replayed} ${result.replayed === 1 ? 'record' : 'records'}${profile.backlog === 'chosen' ? ', starting from the pairs chosen' : ''}${dryRun ? ' (dry run: nothing is written)' : ''}`);
+  if (result.leftOut) console.log(`  ${result.leftOut} left out: their question is gone`);
+  if (before) {
     console.log(`  queue before: ${describeQueue(before.order, canOpen)}`);
     console.log(`  backlog before: ${before.backlog.backlog.length} pairs`);
-  } catch (err) {
-    console.log(`  the files now are invalid (${/** @type {Error} */ (err).message}); they'd be replaced`);
+  } else {
+    console.log(`  the files now are invalid (${invalid}); they'd be replaced`);
   }
   console.log(`  queue after: ${describeQueue(result.order, canOpen)}`);
   console.log(`  backlog after: ${result.backlog.backlog.length} pairs`);

@@ -8,12 +8,17 @@
 //     "schemaVersion": 1,
 //     "allowed":   { "languages": [...], "canChooseLanguages": true,
 //                    "canSwitchLanguage": true, "canSetDefaultLanguage": true },
-//     "preferred": { "languages": [...], "defaultLanguage": "python" }
+//     "preferred": { "languages": [...], "defaultLanguage": "python" },
+//     "backlog":   "all"
 //   }
 //
 // `allowed` is set by the owner or a teacher, never by the learner;
 // `preferred` is the learner's, within `allowed`. Every field is optional,
-// and no file at all means everything is allowed. The rest of the code uses
+// and no file at all means everything is allowed. `backlog` (step 13,
+// 2026-11-04) is "all", the default, where the server keeps every allowed
+// pair in the backlog (D6), or "chosen", where it adds none by itself and
+// the backlog holds only what make backlog-add put there; it's set by hand,
+// like `allowed`. The rest of the code uses
 // only the *effective* profile worked out here, never the file itself.
 //
 // Invalid files fail closed (decision 4): this is about who may use what, so
@@ -26,6 +31,8 @@
 const LANGUAGES = Object.freeze(['javascript', 'python', 'cpp', 'java', 'd']);
 /** The profile.json format this file reads and writes. @type {number} */
 const SCHEMA_VERSION = 1;
+/** The values profile.json's backlog may have (step 13); the first is the default. @type {readonly string[]} */
+const BACKLOG_MODES = Object.freeze(['all', 'chosen']);
 
 const ALLOWED_FLAGS = ['canChooseLanguages', 'canSwitchLanguage', 'canSetDefaultLanguage'];
 
@@ -38,6 +45,8 @@ const ALLOWED_FLAGS = ['canChooseLanguages', 'canSwitchLanguage', 'canSetDefault
  *   What the learner may do: set by the owner or a teacher.
  * @property {{ languages?: string[], defaultLanguage?: string }} [preferred]
  *   The learner's own choices, within allowed.
+ * @property {'all' | 'chosen'} [backlog] - How the backlog is filled
+ *   (step 13): set by hand, like allowed. Absent means "all".
  */
 
 /**
@@ -54,6 +63,9 @@ const ALLOWED_FLAGS = ['canChooseLanguages', 'canSwitchLanguage', 'canSetDefault
  * @property {boolean} canSwitchLanguage - May they change a question's
  *   language themselves? (Next still goes wherever the queue says, decision 3.)
  * @property {boolean} canSetDefaultLanguage - May they set their default language?
+ * @property {'all' | 'chosen'} backlog - "all": every allowed pair is kept
+ *   in the backlog automatically (D6). "chosen": none is; the backlog holds
+ *   only pairs make backlog-add put there (step 13).
  */
 
 /**
@@ -132,6 +144,7 @@ function checkLanguageList(value, where) {
  *   away from allowed is skipped, not an error (D2); if none is left, all
  *   allowed languages are on.
  * - A defaultLanguage that isn't on falls back to the first one that is.
+ * - No backlog means "all" (step 13).
  *
  * @param {unknown} raw - The parsed file, or undefined if there's none.
  * @returns {EffectiveProfile} The profile to use.
@@ -140,7 +153,7 @@ function checkLanguageList(value, where) {
 function effectiveProfile(raw) {
   if (raw === undefined) raw = { schemaVersion: SCHEMA_VERSION };
   if (!isPlainObject(raw)) throw new ProfileError('must be a JSON object');
-  rejectUnknownFields(raw, ['schemaVersion', 'allowed', 'preferred'], '');
+  rejectUnknownFields(raw, ['schemaVersion', 'allowed', 'preferred', 'backlog'], '');
   if (raw.schemaVersion !== SCHEMA_VERSION) throw new ProfileError(`schemaVersion must be ${SCHEMA_VERSION}`);
 
   const allowed = raw.allowed === undefined ? {} : raw.allowed;
@@ -168,6 +181,11 @@ function effectiveProfile(raw) {
     ? /** @type {string} */ (preferred.defaultLanguage)
     : languages[0];
 
+  const backlog = raw.backlog === undefined ? BACKLOG_MODES[0] : raw.backlog;
+  if (typeof backlog !== 'string' || !BACKLOG_MODES.includes(backlog)) {
+    throw new ProfileError(`backlog must be one of ${BACKLOG_MODES.map((m) => JSON.stringify(m)).join(', ')}`);
+  }
+
   return {
     allowedLanguages,
     languages,
@@ -175,6 +193,7 @@ function effectiveProfile(raw) {
     canChooseLanguages: flags.canChooseLanguages,
     canSwitchLanguage: flags.canSwitchLanguage,
     canSetDefaultLanguage: flags.canSetDefaultLanguage,
+    backlog: /** @type {'all' | 'chosen'} */ (backlog), // checked against BACKLOG_MODES just above
   };
 }
 
@@ -250,4 +269,4 @@ function applyPreferredChange(raw, change) {
   return file;
 }
 
-module.exports = { LANGUAGES, SCHEMA_VERSION, ProfileError, ProfileChangeError, effectiveProfile, parseProfile, applyPreferredChange };
+module.exports = { LANGUAGES, SCHEMA_VERSION, BACKLOG_MODES, ProfileError, ProfileChangeError, effectiveProfile, parseProfile, applyPreferredChange };

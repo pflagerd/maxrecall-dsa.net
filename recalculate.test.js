@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { seededRandom, seedFor, recalculate } = require('./recalculate');
+const { seededRandom, seedFor, startingBacklog, recalculate } = require('./recalculate');
 const { effectiveProfile } = require('./profile');
 const { checkConsistency } = require('./consistency');
 const { allowedPairs } = require('./order');
@@ -108,6 +108,63 @@ test('the replayed files pass every check of the consistency check: they are wha
     questions: QUESTIONS,
     renamesText: undefined,
     users: [{ email: 'learner@example.com', profileText: JSON.stringify(RAW_PROFILE), orderText: JSON.stringify(order), backlogText: JSON.stringify(backlog), records, unreadable: [] }],
+  });
+  assert.deepEqual(findings, []);
+});
+
+// Step 13, detail 3: a chosen backlog.
+
+const CHOSEN = effectiveProfile({ ...RAW_PROFILE, backlog: 'chosen' });
+
+/**
+ * order.json and backlog.json from "question/language" strings, nothing
+ * submitted yet.
+ *
+ * @param {string[]} queue - The queue's pairs, front first.
+ * @param {string[]} backlog - The backlog's.
+ * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} The files.
+ */
+function filesOf(queue, backlog) {
+  /**
+   * One pair from its string.
+   *
+   * @param {string} k - "question/language".
+   * @returns {{ question: string, language: string }} The pair.
+   */
+  const pair = (k) => {
+    const [question, language] = k.split('/');
+    return { question, language };
+  };
+  return {
+    order: { schemaVersion: 1, submitsSinceLastIntroduced: 0, queue: queue.map((k) => ({ ...pair(k), passesInARow: 0 })) },
+    backlog: { schemaVersion: 1, backlog: backlog.map(pair) },
+  };
+}
+
+test('startingBacklog: every allowed pair for "all"; for "chosen", the queue\'s pairs then the backlog\'s', () => {
+  assert.deepEqual(startingBacklog(QUESTIONS, PROFILE), allowedPairs(QUESTIONS, PROFILE));
+  const current = filesOf(['d/python', 'a/python'], ['c/python']);
+  assert.deepEqual(startingBacklog(QUESTIONS, CHOSEN, current).map((p) => `${p.question}/${p.language}`), ['d/python', 'a/python', 'c/python']);
+  assert.throws(() => startingBacklog(QUESTIONS, CHOSEN), TypeError, 'without the files the choice would be lost');
+});
+
+test('a chosen backlog with no records replays to an empty queue and the chosen pairs, nothing added', () => {
+  const { order, backlog } = recalculate([], QUESTIONS, CHOSEN, {}, seededRandom(1), filesOf([], ['hello/python']));
+  assert.deepEqual(order.queue, []);
+  assert.deepEqual(backlog.backlog, [{ question: 'hello', language: 'python' }]);
+});
+
+test('a chosen backlog: the replay brings in only chosen pairs, and passes the consistency check', () => {
+  const current = filesOf(['b/python'], ['d/python', 'a/python']);
+  const records = [rec('b/python', 1, 'Accepted'), rec('d/python', 2, 'Wrong Answer'), rec('b/python', 3, 'Accepted')];
+  const { order, backlog } = recalculate(records, QUESTIONS, CHOSEN, {}, seededRandom(3), current);
+  const all = [...order.queue, ...backlog.backlog].map((p) => `${p.question}/${p.language}`).sort();
+  assert.deepEqual(all, ['a/python', 'b/python', 'd/python'], 'no pair that was not chosen comes in');
+  assert.ok(show(order).includes('b/python yes 2'));
+  const findings = checkConsistency({
+    questions: QUESTIONS,
+    renamesText: undefined,
+    users: [{ email: 'learner@example.com', profileText: JSON.stringify({ ...RAW_PROFILE, backlog: 'chosen' }), orderText: JSON.stringify(order), backlogText: JSON.stringify(backlog), records, unreadable: [] }],
   });
   assert.deepEqual(findings, []);
 });
