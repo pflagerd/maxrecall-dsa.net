@@ -49,14 +49,20 @@ const AUTH_DIR = process.env.MAXRECALL_AUTH_DIR
   : path.join(__dirname, 'auth');
 const ACCOUNTS_DIR = path.join(AUTH_DIR, 'accounts');
 const SESSIONS_DIR = path.join(AUTH_DIR, 'sessions');
+const INVITES_DIR = path.join(AUTH_DIR, 'invites');
 
 const SESSION_LIFETIME_MS = 360 * 24 * 60 * 60 * 1000;
 
-// The owner chose 10 (2026-10-30). That's below NIST SP 800-63B rev. 4,
-// which requires 15 for a password used as the only factor (8 only as part
-// of multi-factor login); throttling and the slow scrypt hash still make
-// guessing expensive. No composition rules, as NIST also says.
-const MIN_PASSWORD_LENGTH = 10;
+// How long an invite code can be used for (docs/plans/limited-live.md,
+// step 1, detail 3).
+const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
+// For new passwords: NIST SP 800-63B rev. 4 requires 15 for a password used
+// as the only factor (8 only as part of multi-factor login), with no
+// composition rules. The owner chose 10 for their own account (2026-10-30);
+// with other people's accounts it's 15 (docs/plans/limited-live.md, step 1,
+// detail 7). Only registering checks it, so existing passwords still work.
+const MIN_PASSWORD_LENGTH = 15;
 
 // OWASP Password Storage Cheat Sheet's scrypt minimum (Node 22 has no
 // built-in Argon2id). N=2^17 needs 128 MiB, above Node's 32 MiB default
@@ -65,16 +71,14 @@ const SCRYPT_PARAMS = { N: 2 ** 17, r: 8, p: 1 };
 const SCRYPT_MAXMEM = 256 * 1024 * 1024;
 const KEY_LENGTH = 64;
 
-// The fixed password that registering requires (the owner's decision,
-// 2026-10-29). Unset or empty means registration is closed. Checked at
-// startup so a too-short one stops the server rather than surprising later.
-const REGISTRATION_PASSWORD = process.env.MAXRECALL_PASSWORD || null;
-if (REGISTRATION_PASSWORD !== null && [...REGISTRATION_PASSWORD].length < MIN_PASSWORD_LENGTH) {
-  throw new Error(`MAXRECALL_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters`);
-}
+// Registering needs an invite code from `make invite` (docs/plans/
+// limited-live.md, D2). Until 2026-11-04 it needed a fixed password,
+// MAXRECALL_PASSWORD, and only the owner could register; that variable is
+// now ignored (server.js says so at startup if it's still set).
 
 fs.mkdirSync(ACCOUNTS_DIR, { recursive: true, mode: 0o700 });
 fs.mkdirSync(SESSIONS_DIR, { recursive: true, mode: 0o700 });
+fs.mkdirSync(INVITES_DIR, { recursive: true, mode: 0o700 });
 
 /**
  * An email as typed, made comparable: trimmed and lower-cased.
