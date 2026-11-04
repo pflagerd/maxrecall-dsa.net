@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) and 5 (`order.json` and `backlog.json`, created and filled at server start) are done; `advance.js` and `introduce.js` aren't used yet, and nothing changes the queue on Submit yet. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) and 6 (a saved Submit moves its pair and brings new ones in) are done. Nothing tells the page what's next yet (step 7). All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -667,9 +667,37 @@ each checked to fail against a deliberately wrong version first.
    of user, a restart writing nothing, a new question and a removed pair
    appended, a typo in `order.json`, a pair in both files, and the files
    fixed again).
-6. **Submit updates the queue**, after the record is saved: `pass`,
-   `passesInARow`, the move from `advance.js`, the introduction rule, and
-   a backlog pair moving into the queue when it's submitted.
+6. **Done 2026-11-03.** **Submit updates the queue**, after the record is
+   saved (D3), in `recordSubmit(order, backlog, pair, pass, options)` in
+   `order.js` (owner's detail 7a: it works on `order.js`'s types; a
+   file of its own is kept for a rule, like `advance.js`). `passFor(status)`
+   is D3's one function. In order: the pair is taken from where it is
+   (D4), and **from the backlog it starts at the front** of the queue
+   (detail 1), as does **a pair in neither file**, e.g. a question added
+   since the server started (detail 2); `pass` and `passesInARow` are set;
+   it moves `advance(passesInARow)` places, that many others getting
+   ahead of it; the counter goes up; then `introduceCount` pairs come in,
+   **only ones whose language is turned on and whose question still has
+   that language**, the others staying where they are (detail 3), **in
+   backlog order** so the backlog's first is next (detail 4), and the
+   counter goes back to 0 if any came. **A failed update keeps the
+   result:** the response says `queueUpdated: false` and `queueError`,
+   and it's logged (detail 5); a success says `queueUpdated: true`. **A
+   user without both files is filled first**, as at start (detail 6).
+   `server.js`'s `updateQueue` reads, changes and writes with no `await`,
+   and writes `backlog.json` before `order.json`, so a crash between
+   them leaves a pair in neither file (put back at the next start), not
+   in both (refused until fixed by hand). Checked: `order.test.js` (now 33
+   tests); 12 of 13 deliberately broken versions caught (the 13th, no
+   `Math.min` at the end, can't behave differently: `splice` already
+   treats a position past the end as the end); the 39 baseline requests
+   identical to `master` except the two saved Submits' new
+   `"queueUpdated":true`; eight cases against the real server (filling a
+   new queue to 3 with turned-on languages only, a pass at the end, a
+   turned-off language's pair joining, a refused language and a Run
+   changing nothing, the fifth Submit bringing a pair in, two Submits at
+   once both counted, and a broken question file giving `queueError`,
+   naming the file, with the record saved and the files unchanged).
 7. **Next**: `GET /api/next`, `?language=` in the page address, and
    Submit turning into Next (with the one-second guard).
 8. **Skip**: `POST /api/questions/:slug/skip`, Skip records

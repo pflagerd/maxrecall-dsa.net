@@ -1,12 +1,13 @@
 'use strict';
 
-// Tests for order.js (docs/plans/spaced-repetition.md, D1, D5, D6). Run
+// Tests for order.js (docs/plans/spaced-repetition.md, D1, D3–D6, steps 5
+// and 6). Run
 // with `make test`.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -100,4 +101,124 @@ test('filling appends only the pairs in neither file, and leaves the given backl
   assert.deepEqual(backlog.backlog.map((p) => `${p.question}/${p.language}`), ['valid-parentheses/python', 'new-one/python', 'new-one/cpp']);
   assert.equal(JSON.stringify(BACKLOG), before);
   assert.equal(fillBacklog(ORDER, backlog, pairs).added, 0, 'filling twice adds nothing the second time');
+});
+
+test('only Accepted is a pass (D3)', () => {
+  assert.equal(passFor('Accepted'), 'yes');
+  for (const status of ['Wrong Answer', 'Time Limit Exceeded', 'Runtime Error', 'Compile Error', 'accepted']) assert.equal(passFor(status), 'no');
+});
+
+// For recordSubmit(): advance() with random() always 0.5 has a factor of
+// exactly 1 and rounds down unless the fraction is over 0.5, so k = 0 or 1
+// moves 1 place, k = 2 moves 2 (1.3^2 = 1.69), k = 3 moves 2 (2.197), and
+// k = 20 moves 190.
+const HALF = () => 0.5;
+const ANY = () => true;
+
+/**
+ * A queue of pairs in Python, from short names, all passed once.
+ *
+ * @param {string[]} names - The questions, front first.
+ * @param {number} [submitsSinceLastIntroduced] - The counter.
+ * @returns {import('./order').OrderFile} order.json.
+ */
+function queueOf(names, submitsSinceLastIntroduced = 0) {
+  return { schemaVersion: 1, submitsSinceLastIntroduced, queue: names.map((question) => ({ question, language: 'python', pass: /** @type {'yes'} */ ('yes'), passesInARow: 1 })) };
+}
+
+/**
+ * A backlog of pairs, from "question/language" strings.
+ *
+ * @param {string[]} keys - The pairs, front first.
+ * @returns {import('./order').BacklogFile} backlog.json.
+ */
+function backlogOf(keys) {
+  return { schemaVersion: 1, backlog: keys.map((k) => ({ question: k.split('/')[0], language: k.split('/')[1] })) };
+}
+
+/**
+ * The queue as short strings: "question/language pass k".
+ *
+ * @param {import('./order').OrderFile} order - order.json.
+ * @returns {string[]} One per element, front first.
+ */
+function show(order) {
+  return order.queue.map((e) => `${e.question}/${e.language} ${e.pass ?? '-'} ${e.passesInARow}`);
+}
+
+const PY = (/** @type {string} */ q) => ({ question: q, language: 'python' });
+
+test('a pass adds 1 to passesInARow and moves the pair advance(k) places', () => {
+  const { order } = recordSubmit(queueOf(['a', 'b', 'c', 'd', 'e']), backlogOf([]), PY('a'), 'yes', { canIntroduce: ANY, random: HALF });
+  // a had passed once (k becomes 2: 1.69 → 2 places): b and c ahead of it.
+  assert.deepEqual(show(order), ['b/python yes 1', 'c/python yes 1', 'a/python yes 2', 'd/python yes 1', 'e/python yes 1']);
+  const third = recordSubmit(order, backlogOf([]), PY('a'), 'yes', { canIntroduce: ANY, random: HALF });
+  // From position 2, k = 3 moves 2 places: d and e get ahead of it.
+  assert.deepEqual(show(third.order), ['b/python yes 1', 'c/python yes 1', 'd/python yes 1', 'e/python yes 1', 'a/python yes 3']);
+});
+
+test('a fail sets passesInARow to 0 and pass to "no", moving 1 place', () => {
+  const { order } = recordSubmit(queueOf(['a', 'b', 'c']), backlogOf([]), PY('a'), 'no', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(show(order), ['b/python yes 1', 'a/python no 0', 'c/python yes 1']);
+});
+
+test('a pair anywhere in the queue moves from where it is (D4)', () => {
+  const { order } = recordSubmit(queueOf(['a', 'b', 'c', 'd']), backlogOf([]), PY('b'), 'no', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(show(order).map((s) => s.split(' ')[0]), ['a/python', 'c/python', 'b/python', 'd/python']);
+});
+
+test('a move past the end puts the pair last', () => {
+  const start = queueOf(['a', 'b', 'c']);
+  start.queue[0].passesInARow = 19; // k = 20: 190 places
+  const { order } = recordSubmit(start, backlogOf([]), PY('a'), 'yes', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(show(order), ['b/python yes 1', 'c/python yes 1', 'a/python yes 20']);
+});
+
+test('a backlog pair leaves the backlog and starts at the front (detail 1)', () => {
+  const { order, backlog } = recordSubmit(queueOf(['a', 'b', 'c']), backlogOf(['x/python', 'y/python']), PY('y'), 'yes', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(show(order), ['a/python yes 1', 'y/python yes 1', 'b/python yes 1', 'c/python yes 1']);
+  assert.deepEqual(backlog.backlog, [PY('x')]);
+});
+
+test('a pair in neither file joins the queue the same way (detail 2)', () => {
+  const { order } = recordSubmit(queueOf(['a', 'b', 'c']), backlogOf([]), { question: 'new', language: 'cpp' }, 'no', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(show(order), ['a/python yes 1', 'new/cpp no 0', 'b/python yes 1', 'c/python yes 1']);
+});
+
+test('the counter goes up by 1, and the 5th Submit brings one pair in, to the front, resetting it', () => {
+  const backlog = backlogOf(['x/python', 'y/python']);
+  const fourth = recordSubmit(queueOf(['a', 'b', 'c'], 3), backlog, PY('a'), 'yes', { canIntroduce: ANY, random: HALF });
+  assert.equal(fourth.order.submitsSinceLastIntroduced, 4);
+  assert.deepEqual(fourth.introduced, []);
+  const fifth = recordSubmit(fourth.order, fourth.backlog, PY('b'), 'yes', { canIntroduce: ANY, random: HALF });
+  assert.deepEqual(fifth.introduced, [PY('x')]);
+  assert.equal(fifth.order.submitsSinceLastIntroduced, 0);
+  assert.deepEqual(show(fifth.order)[0], 'x/python - 0'); // no pass yet (D3)
+  assert.deepEqual(fifth.backlog.backlog, [PY('y')]);
+});
+
+test('a short queue is filled to 3 in backlog order, passing over pairs that can\'t come in (details 3, 4)', () => {
+  const backlog = backlogOf(['x/cpp', 'y/python', 'gone/python', 'z/python', 'w/python']);
+  const canIntroduce = (/** @type {{ question: string, language: string }} */ p) => p.language === 'python' && p.question !== 'gone';
+  const { order, backlog: after, introduced } = recordSubmit(queueOf([]), backlog, PY('a'), 'no', { canIntroduce, random: HALF });
+  assert.deepEqual(introduced, [PY('y'), PY('z')]);
+  assert.deepEqual(show(order).map((s) => s.split(' ')[0]), ['y/python', 'z/python', 'a/python']);
+  assert.deepEqual(after.backlog.map((p) => `${p.question}/${p.language}`), ['x/cpp', 'gone/python', 'w/python']);
+  assert.equal(order.submitsSinceLastIntroduced, 0);
+});
+
+test('nothing comes in when the backlog has nothing that can, and the counter keeps counting', () => {
+  const { order, introduced } = recordSubmit(queueOf(['a'], 7), backlogOf(['x/cpp']), PY('a'), 'yes', { canIntroduce: () => false, random: HALF });
+  assert.deepEqual(introduced, []);
+  assert.equal(order.submitsSinceLastIntroduced, 8);
+  assert.equal(order.queue.length, 1);
+});
+
+test('recordSubmit leaves the files it was given unchanged, and its result is valid', () => {
+  const order = queueOf(['a', 'b']);
+  const backlog = backlogOf(['x/python', 'y/python']);
+  const before = JSON.stringify([order, backlog]);
+  const result = recordSubmit(order, backlog, PY('x'), 'yes', { canIntroduce: ANY, random: HALF });
+  assert.equal(JSON.stringify([order, backlog]), before);
+  assert.doesNotThrow(() => parseQueueFiles(JSON.stringify(result.order), JSON.stringify(result.backlog)));
 });
