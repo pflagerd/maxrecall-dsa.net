@@ -263,7 +263,8 @@ consequences for live testing:
   backlog-add` with the server stopped); (c) `make invite` writes a
   starting `profile.json` and backlog as well. Recommendation: **(b)** for
   the first few testers, since the tools exist; (c) once it's tedious.
-  Waiting for the owner.
+  **The owner is dealing with Q3 in another session** (2026-11-04); see
+  `docs/plans/spaced-repetition.md` and the readme for what it decides.
 
 ## Steps (once the decisions are made)
 
@@ -379,3 +380,4 @@ the same change.
 | 2026-11-04 | Step 1 done. Correction: detail 9's "nginx must replace `X-Forwarded-For`" was wrong; appending is also safe with Express's `trust proxy`. |
 | 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |
 | 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
+| 2026-11-04 | Q3 (owner): to be dealt with in another session. Step 1 goes to `master` through a pull request. |
