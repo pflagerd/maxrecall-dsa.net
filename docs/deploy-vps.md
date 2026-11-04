@@ -694,3 +694,128 @@ the end), start it. `make backlog-remove … SLUGS="…"` takes them out of
 the backlog again. What you add comes into your queue at your **next Submit
 or Skip**, not at once: with only Hello World in the queue, Next is Hello
 World once more, and the new ones come in after that Submit.
+
+## 11. The firewall: only SSH in [VPS, then Kubuntu]
+
+Added 2026-11-04: step 2 of `docs/plans/limited-live.md`. It turns on
+Ubuntu's firewall, `ufw` ("uncomplicated firewall"), so that nothing but
+SSH can be reached from outside. Today the app's ports already listen on
+`127.0.0.1` only, so this is a second layer: anything that starts listening
+on a public address later (by mistake, or a package's default) stays
+unreachable. Ports 80 and 443 are opened in step 3, together with nginx,
+when something answers on them.
+
+**What doesn't change.** Your SSH tunnel keeps working: it reaches
+`127.0.0.1:3001` over the loopback interface, `lo`, and `ufw` accepts
+everything there before its own rules (`/usr/share/ufw/iptables/before.rules`,
+lines 20–22, `-A ufw-before-input -i lo -j ACCEPT`, read from Ubuntu
+24.04's `ufw` 0.36.2-6 package on 2026-11-04). It's separate from the
+service's own `IPAddressDeny=`/`IPAddressAllow=` (§5): that limits what
+the server's processes may talk to; `ufw` limits what may reach the
+machine. Outgoing traffic (`apt`, `git pull`) stays allowed.
+
+**The risk is locking yourself out of SSH.** The steps below allow SSH
+before turning the firewall on, check it from a fresh connection, and keep
+a second session open meanwhile. All commands are run as root.
+
+```bash
+ufw status verbose
+```
+- Shows whether `ufw` is on and its rules. Expect `Status: inactive` if
+  nobody has turned it on. If it's already active with rules, stop here and
+  paste the output into a session, rather than adding to rules nobody has
+  looked at. See [ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html).
+- `ufw` is part of Ubuntu's standard install. If the command isn't found:
+  `apt install -y ufw`.
+
+```bash
+ss -tlnp
+```
+- Lists every listening TCP socket: `-t` TCP, `-l` listening, `-n`
+  numbers rather than names, `-p` the process
+  ([ss(8)](https://manpages.ubuntu.com/manpages/noble/man8/ss.8.html)).
+- Find SSH's port: usually `0.0.0.0:22` and `[::]:22`. On 24.04 the
+  process column may say `systemd` rather than `sshd`, if SSH is started
+  by systemd's `ssh.socket` (my understanding of 24.04's default; either
+  way the port is what matters).
+- Note anything else listening on `0.0.0.0`, `[::]` or the VPS's own
+  address. Once the firewall is on, those are unreachable from outside.
+  `127.0.0.1:3000` and `127.0.0.1:3001` are the app and aren't affected.
+
+**Before going on, open a second SSH session to the VPS** and leave it
+alone. `ufw` lets connections that already exist carry on whatever the
+rules say (`before.rules` line 25, `--ctstate RELATED,ESTABLISHED -j
+ACCEPT`, in the same package), so if the new rules are wrong you can still
+type `ufw disable` there.
+
+```bash
+ufw default deny incoming
+ufw default allow outgoing
+```
+- New connections from outside are refused unless a rule allows them;
+  connections this machine makes are allowed. These are already `ufw`'s
+  defaults (`/etc/default/ufw`: `DEFAULT_INPUT_POLICY="DROP"`,
+  `DEFAULT_OUTPUT_POLICY="ACCEPT"`); setting them says so explicitly.
+
+```bash
+ufw allow 22/tcp comment 'SSH'
+```
+- Allows new connections to port 22, for IPv4 and IPv6 (`IPV6=yes` is the
+  default in `/etc/default/ufw`). If `ss` showed SSH on another port, use
+  that number instead.
+- `comment` is a label shown by `ufw status`.
+- **`allow`, not `limit`.** `ufw limit` denies an address that "attempts to
+  initiate 6 or more connections within 30 seconds" (ufw(8)). That would
+  stop password guessing, but also you: `rsync` and `git` over SSH each open
+  a connection, and fetching a git repository per user (plan, D5) opens one
+  per user. Key-only SSH logins are the better protection against guessing
+  (plan, "Also worth doing").
+
+```bash
+ufw show added
+```
+- Lists the rules added so far, before anything is turned on (`added` is
+  one of `ufw show`'s reports, `ufw/frontend.py` line 65). It should
+  show `ufw allow 22/tcp comment 'SSH'` (or your port).
+
+```bash
+ufw enable
+```
+- Turns the firewall on now and at every boot. It warns `Command may
+  disrupt existing ssh connections.` (`ufw/frontend.py`, line 912, in the
+  same package) and asks whether to go on; answer `y`.
+
+```bash
+ufw status verbose
+```
+- Should say `Status: active`, `Default: deny (incoming), allow (outgoing)`,
+  and `22/tcp ALLOW IN Anywhere` and `22/tcp (v6) ALLOW IN Anywhere (v6)`.
+
+**[Kubuntu] Check it from a fresh connection,** in a new terminal, while
+both VPS sessions stay open:
+
+```bash
+ssh root@VPS_IP true && echo "ssh ok"
+```
+- Opens a new SSH connection, runs `true` (which does nothing and
+  succeeds) and prints `ssh ok`. That's the proof that new connections get
+  through, not just the ones already open.
+
+Then open the tunnel (§7) and <http://localhost:3000>: the app should work
+as before.
+
+```bash
+curl --max-time 5 http://VPS_IP:3000/
+```
+- Should still fail, as in §6: now refused by the firewall as well as by
+  the app listening on `127.0.0.1` only.
+
+**If the fresh connection fails,** go back to the second VPS session and
+run `ufw disable`, which turns the firewall off and keeps its rules for
+later; then look at what `ss` said about SSH's port. If you've lost every
+session, Hostinger's control panel may have a browser console for the VPS
+(I haven't checked).
+
+**Hostinger may also have a firewall of its own,** in its control panel,
+in front of the VPS (not checked). If it's configured, a port must be
+allowed in both. For step 3, 80 and 443 then need opening there too.
