@@ -142,21 +142,22 @@ async function readSubmission(email, id) {
 }
 
 /**
- * Every saved Submit for the current user, newest first (ids sort by time).
- * No folder yet means no submissions. A file that can't be read or parsed is
- * skipped with a warning rather than breaking the whole list.
+ * Every record in a user's submissions/, newest first (ids sort by time),
+ * and the files that couldn't be read or parsed, which are left out. No
+ * folder yet means no records. Used by listSubmissions() and the
+ * consistency check (step 10), which reports the unreadable ones.
  *
- * @param {string} email - Whose submissions to list.
- * @returns {Promise<SavedSubmission[]>} The records, newest first; empty if
- *   there are none.
+ * @param {string} email - Whose records to read.
+ * @returns {Promise<{ records: SavedSubmission[], unreadable: { id: string, message: string }[] }>}
+ *   The records, newest first, and each unreadable file's id and why.
  * @throws {Error} If email isn't valid, or the folder exists but can't be read.
  */
-async function listSubmissions(email) {
+async function readAllRecords(email) {
   let names;
   try {
     names = await fs.promises.readdir(submissionsDir(email));
   } catch (err) {
-    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return [];
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return { records: [], unreadable: [] };
     throw err;
   }
   const ids = names
@@ -167,13 +168,30 @@ async function listSubmissions(email) {
     .reverse();
 
   const records = [];
+  const unreadable = [];
   for (const id of ids) {
     try {
       records.push(await readSubmission(email, id));
     } catch (err) {
-      console.warn(`Skipping unreadable submission ${id}: ${/** @type {Error} */ (err).message}`);
+      unreadable.push({ id, message: /** @type {Error} */ (err).message });
     }
   }
+  return { records, unreadable };
+}
+
+/**
+ * Every saved Submit for the current user, newest first. A file that can't
+ * be read or parsed is skipped with a warning rather than breaking the
+ * whole list.
+ *
+ * @param {string} email - Whose submissions to list.
+ * @returns {Promise<SavedSubmission[]>} The records, newest first; empty if
+ *   there are none.
+ * @throws {Error} If email isn't valid, or the folder exists but can't be read.
+ */
+async function listSubmissions(email) {
+  const { records, unreadable } = await readAllRecords(email);
+  for (const { id, message } of unreadable) console.warn(`Skipping unreadable submission ${id}: ${message}`);
   return records;
 }
 
@@ -309,4 +327,4 @@ function listUsers() {
     .sort();
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers };
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers };

@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip) and 9 (the problem list in queue order) are done. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order) and 10 (the consistency check) are done. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -779,7 +779,39 @@ each checked to fail against a deliberately wrong version first.
    title with markup shown as text; `browser-check.js` identical to
    `master` but for the expected three (65 rows, their bubbles, the first
    row); 8 deliberately broken versions all caught.
-10. **`consistency.js`**, its `make` target and the log at server start.
+10. **Done 2026-11-03.** **`consistency.js`**, its `make` target and the
+    log at server start. `checkConsistency(sources, { verbose })` runs
+    D5's six checks for every user and returns findings `{ level, email,
+    file, where, message }`. Levels (detail 2): **error** for checks 1–2
+    (`parseQueueFiles`'s refusal, which stops checks 3–6 for that user)
+    and an invalid profile (which stops 4–5) or `renames.json`;
+    **warning** for checks 3, 4 and 6 and an unreadable record; **info**
+    for check 5, which reports only languages no longer *allowed* (detail
+    5). Backlog pairs with records, e.g. from before the queue existed,
+    are one summary per user, each with `VERBOSE=1` (detail 1). Check 6
+    is `expectedProgress(records)`: pass from the latest record (a Skip
+    fails), `passesInARow` the Accepted at the end (detail 6); it leaves
+    elements whose question is missing to check 3. `questions/renames.json`
+    is read if present and refused if invalid or looping (detail 4); it's
+    left out of the question list everywhere (`question-files.js`'s
+    `isQuestionFile`, also used by `GET /api/questions`, `loadProblem` and
+    `questions.test.js`). `make consistency-check` exits 1 only for an
+    error. At start the server logs the totals, a line per user and up to
+    10 errors and warnings each (detail 3). `questionInfos` moved to
+    `question-files.js`, and `users.js` gained `readAllRecords`. Checked:
+    `consistency.test.js` (14 tests); 10 deliberately broken versions, 9
+    caught (the 10th, a Skip not tested as one, can't behave differently:
+    a Skip's `status` is `null`, which `passFor` already fails); one of
+    them showed that dropping a deleted question's records made check 6
+    add a false second warning, so check 6 now skips those elements;
+    the 39 baseline requests identical to step 9; `make consistency-check`
+    and the start log over three prepared users (history from before the
+    queue, an invalid `order.json`, a renamed question, a changed pass and
+    12 deleted questions). **For step 11:** until a rename's references
+    are updated, step 5's fill adds a fresh pair under the new name to the
+    backlog (the old name in the queue doesn't count), so `make
+    rename-question` must drop that backlog copy when it renames the queue
+    element, or the pair would be in both files.
 11. **`make delete-question` and `make rename-question`**, with
     `questions/renames.json`.
 12. Later: recalculating from the records, courses, dependencies, and an

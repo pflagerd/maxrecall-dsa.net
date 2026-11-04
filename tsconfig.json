@@ -21,6 +21,9 @@
     "profile.test.js",
     "order.js",
     "order.test.js",
+    "question-files.js",
+    "consistency.js",
+    "consistency.test.js",
     "paths.js",
     "users.js",
     "users.test.js",
@@ -32,6 +35,7 @@
     "judge/runner.js",
     "judge/line-numbers-test.js",
     "judge/sandbox-selftest.js",
-    "scripts/doc-check.js"
+    "scripts/doc-check.js",
+    "scripts/consistency-check.js"
   ]
 }

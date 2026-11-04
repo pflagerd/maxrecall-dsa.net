@@ -9,6 +9,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { isQuestionFile } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -17,7 +18,7 @@ const QUESTIONS_DIR = path.join(__dirname, 'questions');
 // (RFC 3339, section 5.1).
 const CREATED_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
-const files = fs.readdirSync(QUESTIONS_DIR).filter((name) => name.endsWith('.json')).sort();
+const files = fs.readdirSync(QUESTIONS_DIR).filter(isQuestionFile).sort(); // not renames.json, the rename log
 
 test('there are question files to check', () => {
   assert.ok(files.length > 0);
