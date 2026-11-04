@@ -6,12 +6,15 @@
 // with an empty queue and every allowed pair in the backlog, it puts every
 // Submit and Skip record, oldest first, through recordSubmit(), the rule a
 // real Submit or Skip uses. The result is the queue the learner would have
-// had if spaced repetition had existed from their first Submit.
+// had if spaced repetition had existed from their first Submit. With a
+// chosen backlog (profile.json's backlog "chosen", step 13, detail 3), it
+// starts instead from the pairs the learner chose: those in the queue now,
+// in queue order, then the backlog, in its order.
 //
 // Pure functions only: make recalculate-queue (scripts/recalculate-queue.js)
 // reads and writes the files.
 
-const { SCHEMA_VERSION, allowedPairs, recordSubmit, passFor, canOpenPair } = require('./order');
+const { SCHEMA_VERSION, backlogPairs, recordSubmit, passFor, canOpenPair } = require('./order');
 const { currentName } = require('./consistency');
 
 /**
@@ -58,6 +61,30 @@ function seedFor(email) {
 }
 
 /**
+ * The backlog a replay starts from (detail 1; step 13, detail 3): for
+ * backlog "all", every allowed pair, as a new user's; for "chosen", the
+ * pairs chosen so far, which are every pair in the files now: the queue's,
+ * in queue order (the order they were chosen in isn't kept once they're in
+ * the queue), then the backlog's, in its order.
+ *
+ * @param {import('./order').QuestionInfo[]} questions - Every question.
+ * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
+ * @param {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} [current] -
+ *   The files now; needed only for a chosen backlog.
+ * @returns {import('./order').BacklogElement[]} The pairs.
+ * @throws {TypeError} For a chosen backlog without current: the choice
+ *   would be lost.
+ */
+function startingBacklog(questions, profile, current) {
+  if (profile.backlog !== 'chosen') return backlogPairs(questions, profile);
+  if (!current) throw new TypeError('a chosen backlog needs the files as they are now, to know what was chosen');
+  return [
+    ...current.order.queue.map((e) => ({ question: e.question, language: e.language })),
+    ...current.backlog.backlog.map((p) => ({ question: p.question, language: p.language })),
+  ];
+}
+
+/**
  * The queue and backlog the records make (step 12, first part; detail 1).
  * Records are taken oldest first; old names are followed through renames;
  * records of deleted questions are left out (D5). A record in a language
@@ -71,15 +98,20 @@ function seedFor(email) {
  * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
  * @param {Record<string, string>} renames - From parseRenames().
  * @param {() => number} random - For advance(), e.g. seededRandom(seedFor(email)).
+ * @param {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile }} [current] -
+ *   The files now: needed for a chosen backlog (startingBacklog()), and
+ *   not read otherwise.
  * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile, replayed: number, leftOut: number }}
  *   The files, how many records were replayed, and how many were left out
  *   (their question is gone).
+ * @throws {TypeError} From startingBacklog(), for a chosen backlog without
+ *   current.
  */
-function recalculate(records, questions, profile, renames, random) {
+function recalculate(records, questions, profile, renames, random, current) {
   const exists = new Set(questions.map((q) => q.slug));
   const canIntroduce = canOpenPair(profile, questions);
   let order = { schemaVersion: SCHEMA_VERSION, submitsSinceLastIntroduced: 0, queue: /** @type {import('./order').QueueElement[]} */ ([]) };
-  let backlog = { schemaVersion: SCHEMA_VERSION, backlog: allowedPairs(questions, profile) };
+  let backlog = { schemaVersion: SCHEMA_VERSION, backlog: startingBacklog(questions, profile, current) };
   const sorted = [...records].sort((a, b) => (a.submittedAt < b.submittedAt ? -1 : a.submittedAt > b.submittedAt ? 1 : 0));
   let replayed = 0;
   for (const r of sorted) {
@@ -93,4 +125,4 @@ function recalculate(records, questions, profile, renames, random) {
   return { order, backlog, replayed, leftOut: records.length - replayed };
 }
 
-module.exports = { seededRandom, seedFor, recalculate };
+module.exports = { seededRandom, seedFor, startingBacklog, recalculate };

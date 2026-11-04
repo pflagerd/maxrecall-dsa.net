@@ -22,7 +22,7 @@ const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
 const { QUESTIONS_DIR, isQuestionFile, questionInfos } = require('./question-files');
 const { checkConsistency, countLevels, formatFinding, describeCounts } = require('./consistency');
 const { readSources } = require('./scripts/consistency-check');
-const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, canOpenPair } = require('./order');
+const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, canOpenPair } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -1022,7 +1022,7 @@ function queueView(email) {
   const bySlug = new Map(questions.map((q) => [q.slug, q]));
   return {
     order: files.order,
-    backlog: fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog,
+    backlog: fillBacklog(files.order, files.backlog, backlogPairs(questions, profile)).backlog,
     canOpen: canOpenPair(profile, questions),
     // canOpenPair() accepts only pairs whose question is in questions.
     questionOf: (slug) => /** @type {QuestionListing} */ (bySlug.get(slug)),
@@ -1130,8 +1130,10 @@ function sendQueueError(res, err) {
  * Gives one user an order.json and a backlog.json holding every pair their
  * profile allows (step 5, decision 4; D6): with neither file, an empty
  * queue and a full backlog; otherwise the pairs in neither file are
- * appended to the backlog. A file is written only if it's new or has
- * changed.
+ * appended to the backlog. With a chosen backlog (profile.json's backlog
+ * "chosen", step 13) nothing is appended: a missing file is written empty.
+ * order.js's backlogPairs() is the rule. A file is written only if it's
+ * new or has changed.
  *
  * @param {string} email - The user's email.
  * @param {import('./order').QuestionInfo[]} questions - From questionInfos().
@@ -1144,7 +1146,7 @@ function prepareUserQueues(email, questions) {
   const orderText = readUserFile(email, 'order.json');
   const backlogText = readUserFile(email, 'backlog.json');
   const { order, backlog } = parseQueueFiles(orderText, backlogText);
-  const filled = fillBacklog(order, backlog, allowedPairs(questions, loadProfile(email)));
+  const filled = fillBacklog(order, backlog, backlogPairs(questions, loadProfile(email)));
   if (orderText === undefined) writeUserFile(email, 'order.json', order);
   if (backlogText === undefined || filled.added > 0) writeUserFile(email, 'backlog.json', filled.backlog);
   return `${order.queue.length} in order.json, ${filled.backlog.backlog.length} in backlog.json (${filled.added} added)`;

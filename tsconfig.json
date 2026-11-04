@@ -40,6 +40,7 @@
     "scripts/doc-check.js",
     "scripts/consistency-check.js",
     "scripts/question-admin.js",
-    "scripts/recalculate-queue.js"
+    "scripts/recalculate-queue.js",
+    "scripts/backlog.js"
   ]
 }

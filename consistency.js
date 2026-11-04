@@ -10,7 +10,7 @@
 // Pure functions only: reading the files is scripts/consistency-check.js's
 // job (readSources()), shared by `make consistency-check` and server start.
 
-const { parseQueueFiles, allowedPairs, passFor } = require('./order');
+const { parseQueueFiles, backlogPairs, passFor } = require('./order');
 const { parseProfile } = require('./profile');
 
 /**
@@ -200,9 +200,11 @@ function checkUser(user, questions, renames, verbose) {
   }
 
   if (profile) {
-    // Check 4: every pair the learner could do is in one of the files.
+    // Check 4: every pair the learner could do is in one of the files. Not
+    // for a chosen backlog (step 13, detail 2): there, a pair not chosen is
+    // meant to be in neither, and backlogPairs() is empty.
     const present = new Set(elements.map(({ e }) => key(e)));
-    for (const p of allowedPairs(questions, profile)) {
+    for (const p of backlogPairs(questions, profile)) {
       if (!present.has(key(p))) add('warning', 'backlog.json', '', `${p.question} in ${p.language} is in neither file; the next server start appends it to the backlog`);
     }
     // Check 5: languages the profile no longer allows (detail 5: not ones

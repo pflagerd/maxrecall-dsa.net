@@ -275,6 +275,23 @@ function allowedPairs(questions, profile) {
 }
 
 /**
+ * The pairs the server keeps in a learner's backlog by itself, for
+ * fillBacklog(): with the profile's backlog "all" (the default), every
+ * allowed pair (D6, allowedPairs()); with "chosen", none, since the learner
+ * (or a teacher) picks them with make backlog-add (step 13, detail 1). The
+ * one place this rule lives: server start, Next, the problem list, the
+ * consistency check's check 4 and the replay all use it.
+ *
+ * @param {QuestionInfo[]} questions - Every question.
+ * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
+ * @returns {BacklogElement[]} The pairs, in allowedPairs() order; empty for
+ *   a chosen backlog.
+ */
+function backlogPairs(questions, profile) {
+  return profile.backlog === 'chosen' ? [] : allowedPairs(questions, profile);
+}
+
+/**
  * The backlog with every allowed pair that's in neither file appended, in
  * allowedPairs() order (D6: missing pairs are added automatically).
  *
@@ -288,6 +305,108 @@ function fillBacklog(order, backlog, pairs) {
   const present = new Set([...order.queue, ...backlog.backlog].map(pairKey));
   const missing = pairs.filter((p) => !present.has(pairKey(p)));
   return { backlog: { ...backlog, backlog: [...backlog.backlog, ...missing] }, added: missing.length };
+}
+
+/**
+ * The pairs make backlog-add adds for these questions (step 13, detail 4):
+ * the questions in the order given, each in every language turned on in the
+ * profile that it has, in the learner's order (so only Python for a learner
+ * with only Python on).
+ *
+ * @param {string[]} slugs - Question names, in the order wanted.
+ * @param {QuestionInfo[]} questions - Every question.
+ * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
+ * @returns {BacklogElement[]} The pairs, in that order.
+ * @throws {Error} If a name is given twice, isn't a question, or the
+ *   question has none of the languages turned on (nothing is added then).
+ */
+function pairsToAdd(slugs, questions, profile) {
+  const bySlug = new Map(questions.map((q) => [q.slug, q]));
+  const twice = slugs.find((slug, i) => slugs.indexOf(slug) !== i);
+  if (twice !== undefined) throw new Error(`${twice} is named twice`);
+  return slugs.flatMap(
+    /**
+     * One question's pairs.
+     *
+     * @param {string} slug - The question's name.
+     * @returns {BacklogElement[]} Its pairs, in the learner's language order.
+     */
+    (slug) => {
+      const q = bySlug.get(slug);
+      if (!q) throw new Error(`${slug}: no such question (make backlog-show lists them)`);
+      const languages = profile.languages.filter((l) => q.languages.includes(l));
+      if (!languages.length) throw new Error(`${slug} has none of the languages turned on (${profile.languages.join(', ')})`);
+      return languages.map((language) => ({ question: slug, language }));
+    },
+  );
+}
+
+/**
+ * The backlog with pairs added (step 13, detail 4, make backlog-add), at
+ * the end or before position `at`. A pair already in the queue or the
+ * backlog isn't added again (a pair is in one place only, D5); it's listed
+ * in skipped instead, so moving one means removing it first.
+ *
+ * @param {OrderFile} order - The queue (not changed; only looked in).
+ * @param {BacklogFile} backlog - The backlog (not changed).
+ * @param {BacklogElement[]} pairs - From pairsToAdd(), in the order wanted.
+ * @param {number} [at] - The position the first added pair takes, counting
+ *   from 1 (1 is the front: the next to come in); absent means the end.
+ * @returns {{ backlog: BacklogFile, added: BacklogElement[], skipped: string[] }}
+ *   The new backlog (a copy), the pairs added, and the ones left out, e.g.
+ *   "two-sum in python: already in the queue".
+ * @throws {RangeError} If at isn't a whole number from 1 to one more than
+ *   the backlog's length.
+ */
+function addToBacklog(order, backlog, pairs, at) {
+  const length = backlog.backlog.length;
+  if (at !== undefined && !(Number.isInteger(at) && at >= 1 && at <= length + 1)) {
+    throw new RangeError(`AT must be a whole number from 1 to ${length + 1} (the backlog has ${length})`);
+  }
+  const inQueue = new Set(order.queue.map(pairKey));
+  const inBacklog = new Set(backlog.backlog.map(pairKey));
+  /** @type {string[]} */
+  const skipped = [];
+  const added = pairs.filter(
+    /**
+     * Whether a pair is new, noting it in skipped if not.
+     *
+     * @param {BacklogElement} p - The pair.
+     * @returns {boolean} True if it's in neither file.
+     */
+    (p) => {
+      const where = inQueue.has(pairKey(p)) ? 'the queue' : inBacklog.has(pairKey(p)) ? 'the backlog' : null;
+      if (where) skipped.push(`${p.question} in ${p.language}: already in ${where}`);
+      return where === null;
+    },
+  );
+  const list = [...backlog.backlog];
+  list.splice(at === undefined ? length : at - 1, 0, ...added.map((p) => ({ question: p.question, language: p.language })));
+  return { backlog: { ...backlog, backlog: list }, added, skipped };
+}
+
+/**
+ * The backlog without these questions, in every language (step 13, detail
+ * 4, make backlog-remove). Only the backlog changes: a question already in
+ * the queue stays there, and is listed in notRemoved.
+ *
+ * @param {OrderFile} order - The queue (not changed; only looked in).
+ * @param {BacklogFile} backlog - The backlog (not changed).
+ * @param {string[]} slugs - Question names. A deleted question's name works
+ *   too.
+ * @returns {{ backlog: BacklogFile, removed: BacklogElement[], notRemoved: string[] }}
+ *   The new backlog (a copy), the pairs taken out, and why some named
+ *   weren't, e.g. "two-sum in python: in the queue, so not removed".
+ */
+function removeFromBacklog(order, backlog, slugs) {
+  const names = new Set(slugs);
+  const removed = backlog.backlog.filter((p) => names.has(p.question));
+  /** @type {string[]} */
+  const notRemoved = order.queue.filter((e) => names.has(e.question)).map((e) => `${e.question} in ${e.language}: in the queue, so not removed`);
+  for (const slug of names) {
+    if (!removed.some((p) => p.question === slug) && !order.queue.some((e) => e.question === slug)) notRemoved.push(`${slug}: not in the backlog`);
+  }
+  return { backlog: { ...backlog, backlog: backlog.backlog.filter((p) => !names.has(p.question)) }, removed, notRemoved };
 }
 
 /**
@@ -523,4 +642,4 @@ function canOpenPair(profile, questions) {
   return (pair) => profile.languages.includes(pair.language) && available.has(`${pair.question}/${pair.language}`);
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };
