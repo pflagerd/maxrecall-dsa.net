@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -103,6 +103,17 @@ delete-question:
 
 rename-question:
 	node scripts/question-admin.js rename
+
+# Recalculating one learner's queue and backlog from their records
+# (docs/plans/spaced-repetition.md, step 12, first part): make
+# recalculate-queue EMAIL=owner@example.com. Replays every Submit and Skip,
+# oldest first, through the same rule a Submit uses, with a random number
+# generator seeded from the email, so DRY_RUN=1 shows exactly what will be
+# written. Keeps a copy of both files first (<name>.before-recalculate-<UTC
+# time>). Stop the server first. EMAIL and DRY_RUN reach the script through
+# its environment, as for rename-question.
+recalculate-queue:
+	node scripts/recalculate-queue.js
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

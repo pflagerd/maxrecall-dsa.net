@@ -8,6 +8,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
+const { seededRandom } = require('./recalculate');
 const { advance, stochasticRound } = require('./advance');
 
 /**
@@ -36,31 +37,8 @@ function sequence(...values) {
   );
 }
 
-/**
- * A small seeded random number generator (mulberry32), so the statistical
- * tests give the same numbers on every run and every machine. Source:
- * https://gist.github.com/tommyettinger/46a874533244883189143505d203312c
- *
- * @param {number} seed - The starting state: a whole number (only its low
- *   32 bits are used). The same seed always gives the same numbers.
- * @returns {() => number} A function that returns the next number each
- *   time it's called, from 0 up to, but not including, 1, like Math.random.
- */
-function seededRandom(seed) {
-  return (
-    /**
-     * The generator itself.
-     *
-     * @returns {number} The next number, from 0 up to, but not including, 1.
-     */
-    () => {
-      seed = (seed + 0x6d2b79f5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    }
-  );
-}
+// seededRandom (mulberry32) is recalculate.js's, so the statistical tests
+// give the same numbers on every run and every machine.
 
 test('k = 0 with the factor at exactly 1 moves 1 place', () => {
   // 0.5 → factor 1; 1.3^0 = 1, nothing to round.

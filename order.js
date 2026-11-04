@@ -505,4 +505,22 @@ function renameReferences(order, backlog, from, to) {
   return { order: { ...order, queue }, backlog: { ...backlog, backlog: kept }, renamed, dropped };
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences };
+/**
+ * Whether a pair can be opened, or brought in from the backlog, now (step
+ * 6, detail 3; step 7, detail 2): its language is turned on in the profile
+ * (D2) and its question is still there with that language (D5). One rule
+ * for both, so Next never names a pair that couldn't be brought in, or the
+ * other way round. Also what recalculate.js brings pairs in with. Moved
+ * here from server.js (2026-11-03).
+ *
+ * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
+ * @param {QuestionInfo[]} questions - Every question (question-files.js,
+ *   questionInfos()).
+ * @returns {(pair: BacklogElement) => boolean} The test.
+ */
+function canOpenPair(profile, questions) {
+  const available = new Set(questions.flatMap((q) => q.languages.map((l) => `${q.slug}/${l}`)));
+  return (pair) => profile.languages.includes(pair.language) && available.has(`${pair.question}/${pair.language}`);
+}
+
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };

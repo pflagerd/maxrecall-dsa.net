@@ -280,6 +280,28 @@ function writeUserFile(email, name, contents) {
 }
 
 /**
+ * Keeps a copy of one of a user's files beside it, before a command that
+ * rewrites it all (make recalculate-queue, spaced-repetition plan, step 12,
+ * detail 4): users/<email>/<name>.before-<label>. Nothing reads the copy;
+ * it's there to go back to.
+ *
+ * @param {string} email - The user's email.
+ * @param {string} name - One of USER_FILES.
+ * @param {string} label - What it's from and when, e.g.
+ *   "recalculate-20261104T042400Z": letters, digits and hyphens only.
+ * @returns {string | null} The copy's path, or null if there's no file to copy.
+ * @throws {Error} If email, name or label isn't valid, or the copy can't be made.
+ */
+function backupUserFile(email, name, label) {
+  if (!/^[A-Za-z0-9-]+$/.test(label)) throw new Error(`Invalid backup label ${JSON.stringify(label)}`);
+  const file = userFile(email, name);
+  if (!fs.existsSync(file)) return null;
+  const copy = `${file}.before-${label}`;
+  fs.copyFileSync(file, copy, fs.constants.COPYFILE_EXCL);
+  return copy;
+}
+
+/**
  * A user's profile.json, as text (profile.js; spaced-repetition plan, D2).
  *
  * @param {string} email - The user's email.
@@ -327,4 +349,4 @@ function listUsers() {
     .sort();
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers };
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, backupUserFile, listUsers };

@@ -24,6 +24,8 @@
     "question-files.js",
     "consistency.js",
     "consistency.test.js",
+    "recalculate.js",
+    "recalculate.test.js",
     "paths.js",
     "users.js",
     "users.test.js",
@@ -37,6 +39,7 @@
     "judge/sandbox-selftest.js",
     "scripts/doc-check.js",
     "scripts/consistency-check.js",
-    "scripts/question-admin.js"
+    "scripts/question-admin.js",
+    "scripts/recalculate-queue.js"
   ]
 }
