@@ -440,10 +440,10 @@ const codeByLanguage = {};
 /** @type {Record<string, ConsoleState>} */
 const consoleStateByLanguage = {};
 
-// Default language used to open problems, remembered across problems/reloads
-// via localStorage. Changing either language dropdown updates this default
-// (not just the editor-toolbar one) — picking a language is "what I want to
-// use from now on", not just a one-off for the current problem.
+// The default language used to open problems is the profile's (below), so
+// it's the same in every browser. Changing either language dropdown updates
+// it (not just the editor-toolbar one) — picking a language is "what I want
+// to use from now on", not just a one-off for the current problem.
 const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 /** Each language's name as shown. @type {Record<string, string>} */
 const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java', d: 'D' };
@@ -742,10 +742,10 @@ setInterval(renderTimer, 250);
 // --- The learner's profile (spaced-repetition plan, D2; step 4c) -------------
 // Which languages the learner has, their default, and what they may change
 // come from the server (GET /api/profile), and changes are saved there
-// (PATCH /api/profile/preferred). Before 2026-11-03 the default language and
-// the language menu's choices were kept in this browser's localStorage; they
-// are copied to the profile once (migrateLocalStorageChoices) and not used
-// after that.
+// (PATCH /api/profile/preferred). The profile is the only place they're kept.
+// (Before 2026-11-03 they were in this browser's localStorage, and from then
+// until 2026-11-04 they were copied into the profile once; the owner removed
+// that copy, so a browser's old values can't change the profile any more.)
 
 /**
  * The profile as GET /api/profile sends it (profile.js, effectiveProfile).
@@ -812,69 +812,8 @@ async function saveProfileChange(change) {
   return profile;
 }
 
-// Where these choices were kept before the profile (step 4c).
-const OLD_DEFAULT_LANGUAGE_KEY = 'maxrecall-dsa:default-language';
-const OLD_AVAILABLE_LANGUAGES_KEY = 'maxrecall-dsa:available-languages';
-
 /**
- * Copies the language choices this browser kept in localStorage into the
- * profile, once (owner's decision, 2026-11-03), then forgets them. Only
- * what the profile permits is sent: languages it allows, the menu's choices
- * if canChooseLanguages, the default if canSetDefaultLanguage and on. If
- * the server refuses them, they're forgotten anyway, so this isn't tried on
- * every page load; if it can't be reached, they're kept for next time.
- *
- * @returns {Promise<void>} Never rejects.
- */
-async function migrateLocalStorageChoices() {
-  /** @type {string | null} */
-  let savedDefault = null;
-  /** @type {string | null} */
-  let savedLanguages = null;
-  try {
-    savedDefault = localStorage.getItem(OLD_DEFAULT_LANGUAGE_KEY);
-    savedLanguages = localStorage.getItem(OLD_AVAILABLE_LANGUAGES_KEY);
-  } catch {
-    return; // storage unavailable: nothing to copy
-  }
-  if (savedDefault === null && savedLanguages === null) return;
-
-  /** @type {{ languages?: string[], defaultLanguage?: string }} */
-  const change = {};
-  let parsed = null;
-  try {
-    parsed = JSON.parse(savedLanguages || 'null');
-  } catch {
-    // Not a list: nothing to copy for the menu.
-  }
-  if (profile.canChooseLanguages && Array.isArray(parsed)) {
-    const languages = profile.allowedLanguages.filter((l) => parsed.includes(l));
-    if (languages.length) change.languages = languages;
-  }
-  const turnedOn = change.languages || profile.languages;
-  if (profile.canSetDefaultLanguage && savedDefault !== null && turnedOn.includes(savedDefault)) {
-    change.defaultLanguage = savedDefault;
-  }
-
-  if (Object.keys(change).length) {
-    try {
-      await saveProfileChange(change);
-    } catch (err) {
-      if (/** @type {Error & { status?: number }} */ (err).status === 0) return; // try again next time
-      console.warn(`Couldn't copy this browser's language choices to your profile: ${/** @type {Error} */ (err).message}`);
-    }
-  }
-  try {
-    localStorage.removeItem(OLD_DEFAULT_LANGUAGE_KEY);
-    localStorage.removeItem(OLD_AVAILABLE_LANGUAGES_KEY);
-  } catch {
-    // Storage unavailable: nothing to forget.
-  }
-}
-
-/**
- * Loads the profile, copies any old localStorage choices into it, and sets
- * the language menu and language-select from it. If it can't be loaded,
+ * Loads the profile, and sets the language menu and language-select from it. If it can't be loaded,
  * says why and carries on with everything allowed.
  *
  * @returns {Promise<void>} Never rejects.
@@ -882,7 +821,6 @@ async function migrateLocalStorageChoices() {
 async function loadProfile() {
   try {
     profile = await profileRequest();
-    await migrateLocalStorageChoices();
   } catch (err) {
     alert(`Your profile couldn't be loaded: ${/** @type {Error} */ (err).message}\n\nThe page shows every language, but the server will refuse Run and Submit until it's fixed.`);
   }
