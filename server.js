@@ -19,6 +19,9 @@ const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
+const { QUESTIONS_DIR, isQuestionFile, questionInfos } = require('./question-files');
+const { checkConsistency, countLevels, formatFinding, describeCounts } = require('./consistency');
+const { readSources } = require('./scripts/consistency-check');
 const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
@@ -119,7 +122,6 @@ const TRUSTED_PORT = process.env.TRUSTED_PORT ? Number(process.env.TRUSTED_PORT)
 if (TRUSTED_PORT !== null && !(Number.isInteger(TRUSTED_PORT) && TRUSTED_PORT > 0 && TRUSTED_PORT < 65536 && TRUSTED_PORT !== Number(PORT))) {
   throw new Error(`TRUSTED_PORT must be a port number different from PORT, got ${JSON.stringify(process.env.TRUSTED_PORT)}`);
 }
-const QUESTIONS_DIR = path.join(__dirname, 'questions');
 // The judge's five languages, kept in one place (profile.js).
 const SUPPORTED_LANGUAGES = LANGUAGES;
 
@@ -365,6 +367,7 @@ app.use(
  * @throws {SyntaxError} If the file isn't valid JSON.
  */
 function loadProblem(slug) {
+  if (!isQuestionFile(`${slug}.json`)) return null; // e.g. "renames", the rename log
   const file = resolveInside(QUESTIONS_DIR, `${slug}.json`);
   if (!file || !fs.existsSync(file)) return null;
   const bytes = fs.readFileSync(file);
@@ -383,7 +386,7 @@ function loadProblem(slug) {
 function listProblems() {
   return fs
     .readdirSync(QUESTIONS_DIR)
-    .filter((f) => f.endsWith('.json'))
+    .filter(isQuestionFile)
     .map(
     /**
      * Reads one question file's summary.
@@ -1121,47 +1124,7 @@ function sendQueueError(res, err) {
   return res.status(500).json({ error: err.message, code: err.code === 'INVALID_QUEUE' ? 'INVALID_QUEUE' : undefined });
 }
 
-/**
- * What order.js needs to know about a question, and what GET /api/next and
- * GET /api/queue show of it.
- *
- * @typedef {import('./order').QuestionInfo & Pick<Problem, 'title' | 'difficulty' | 'topics' | 'sources'>} QuestionListing
- */
-
-/**
- * What order.js needs to know about every question in questions/.
- *
- * @returns {QuestionListing[]} One per .json file: its file name without
- *   .json (D1), created, its starterCode's languages, and its title.
- * @throws {Error} If questions/ can't be read, or a file isn't valid JSON
- *   (the message then names the file).
- */
-function questionInfos() {
-  return fs
-    .readdirSync(QUESTIONS_DIR)
-    .filter((f) => f.endsWith('.json'))
-    .map(
-      /**
-       * Reads what's needed from one question file.
-       *
-       * @param {string} f - The file's name in questions/.
-       * @returns {QuestionListing} Its slug, created, languages, title,
-       *   difficulty, topics and sources.
-       * @throws {Error} "questions/<f>: ..." if it can't be read or parsed.
-       */
-      (f) => {
-        /** @type {Problem} */
-        let problem;
-        try {
-          problem = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8'));
-        } catch (err) {
-          throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
-        }
-        const { title, difficulty, topics, sources } = problem;
-        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title, difficulty, topics, sources };
-      },
-    );
-}
+/** @typedef {import('./question-files').QuestionListing} QuestionListing */
 
 /**
  * Gives one user an order.json and a backlog.json holding every pair their
@@ -1263,6 +1226,38 @@ function updateQueue(email, pair, pass) {
 }
 
 prepareQueues();
+
+/** How many errors and warnings the start log lists per user (step 10, detail 3). @type {number} */
+const CONSISTENCY_LOG_LIMIT = 10;
+
+/**
+ * Logs the consistency check once, at start, after the queues are filled
+ * (D5; step 10, detail 3): the totals, then a line per user with the counts, then its
+ * errors and warnings, at most CONSISTENCY_LOG_LIMIT of them; info is only
+ * counted. Never stops the server: the check only reports.
+ *
+ * @returns {Promise<void>} Never rejects: a failure is logged.
+ */
+async function logConsistency() {
+  try {
+    const sources = await readSources();
+    const findings = checkConsistency(sources);
+    const n = sources.users.length;
+    console.log(`Consistency: ${n} ${n === 1 ? 'user' : 'users'} checked: ${describeCounts(countLevels(findings))}`);
+    for (const f of findings.filter((x) => x.email === '')) console.log(`Consistency: ${formatFinding(f)}`);
+    for (const { email } of sources.users) {
+      const own = findings.filter((f) => f.email === email);
+      console.log(`Consistency: ${email}: ${own.length ? describeCounts(countLevels(own)) : 'nothing found'}`);
+      const listed = own.filter((f) => f.level !== 'info');
+      for (const f of listed.slice(0, CONSISTENCY_LOG_LIMIT)) console.log(`  ${formatFinding(f)}`);
+      if (listed.length > CONSISTENCY_LOG_LIMIT) console.log(`  …and ${listed.length - CONSISTENCY_LOG_LIMIT} more: run make consistency-check`);
+    }
+  } catch (err) {
+    console.error(`Consistency: not checked: ${/** @type {Error} */ (err).message}`);
+  }
+}
+
+logConsistency();
 
 // PORT may be a string from the environment, and HOST undefined (every
 // interface). Node's listen() accepts both, but Express's types allow only a

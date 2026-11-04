@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -76,6 +76,17 @@ typecheck: node_modules
 # Fails, listing each function as file:line, if any isn't documented.
 doc-check: node_modules
 	node scripts/doc-check.js
+
+# The consistency check (docs/plans/spaced-repetition.md, D5; step 10):
+# compares questions/ and questions/renames.json with every user's
+# profile.json, order.json, backlog.json and submission records, and lists
+# what disagrees. Only reads, so it's safe while the server runs (though a
+# Submit landing mid-check can show a pair as missing for a moment). Uses
+# MAXRECALL_USERS_DIR like the server. Fails (make's "Error 1") only for an
+# error, an invalid file; warnings often have harmless causes. VERBOSE=1
+# lists each backlog pair that has records, instead of one summary line.
+consistency-check:
+	node scripts/consistency-check.js $(if $(VERBOSE),--verbose)
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine
