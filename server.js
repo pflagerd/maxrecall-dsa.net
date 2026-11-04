@@ -19,7 +19,7 @@ const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
-const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit } = require('./order');
+const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -765,6 +765,49 @@ app.patch(
   },
 );
 
+// What to open next (spaced-repetition plan, step 7; D7): the front of the
+// queue that can be opened, else the backlog's (detail 3). Safe, as a GET
+// should be (RFC 9110, section 9.2.1): the backlog is filled in memory
+// only, as it would be at start (detail 4), and nothing is written.
+app.get(
+  '/api/next',
+  /**
+   * GET /api/next: { next: { question, language, title } }, or
+   * { next: null } if nothing can be opened (detail 1).
+   *
+   * @param {AppRequest} req - The request.
+   * @param {Response} res - The answer, or 500 if the profile, a queue file
+   *   or a question file is invalid.
+   * @returns {Response | void} Nothing that's used: the `return res...`
+   *   lines only stop early.
+   */
+  (req, res) => {
+    const email = /** @type {string} */ (req.userEmail); // signed in: the gate
+    let profile, files, questions;
+    try {
+      profile = loadProfile(email);
+    } catch (err) {
+      return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+    }
+    try {
+      files = loadQueueFiles(email);
+    } catch (err) {
+      return sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
+    }
+    try {
+      questions = questionInfos();
+    } catch (err) {
+      console.error(`Next not worked out: ${/** @type {Error} */ (err).message}`);
+      return res.status(500).json({ error: /** @type {Error} */ (err).message });
+    }
+    const backlog = fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog;
+    const next = nextPair(files.order, backlog, canOpenPair(profile, questions));
+    // canOpenPair() accepts only pairs whose question is in questions.
+    const title = next && /** @type {QuestionListing} */ (questions.find((q) => q.slug === next.question)).title;
+    res.json({ next: next && { ...next, title } });
+  },
+);
+
 // Any other /api/ URL is an error, not a page: without this, GET requests
 // would fall through to the index.html fallback below and get a 200 with
 // HTML (e.g. the old /api/problems URLs, renamed to /api/questions).
@@ -845,10 +888,17 @@ function sendQueueError(res, err) {
 }
 
 /**
+ * What order.js needs to know about a question, and its title, for
+ * GET /api/next.
+ *
+ * @typedef {import('./order').QuestionInfo & { title: string }} QuestionListing
+ */
+
+/**
  * What order.js needs to know about every question in questions/.
  *
- * @returns {import('./order').QuestionInfo[]} One per .json file: its file
- *   name without .json (D1), created, and its starterCode's languages.
+ * @returns {QuestionListing[]} One per .json file: its file name without
+ *   .json (D1), created, its starterCode's languages, and its title.
  * @throws {Error} If questions/ can't be read, or a file isn't valid JSON
  *   (the message then names the file).
  */
@@ -861,7 +911,7 @@ function questionInfos() {
        * Reads what's needed from one question file.
        *
        * @param {string} f - The file's name in questions/.
-       * @returns {import('./order').QuestionInfo} Its slug, created and languages.
+       * @returns {QuestionListing} Its slug, created, languages and title.
        * @throws {Error} "questions/<f>: ..." if it can't be read or parsed.
        */
       (f) => {
@@ -872,7 +922,7 @@ function questionInfos() {
         } catch (err) {
           throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
         }
-        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode) };
+        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title: problem.title };
       },
     );
 }
@@ -928,11 +978,26 @@ function prepareQueues() {
 }
 
 /**
+ * Whether a pair can be opened, or brought in from the backlog, now (step
+ * 6, detail 3; step 7, detail 2): its language is turned on in the profile
+ * (D2) and its question is still there with that language (D5). One rule
+ * for both, so Next never names a pair that couldn't be brought in, or the
+ * other way round.
+ *
+ * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
+ * @param {import('./order').QuestionInfo[]} questions - From questionInfos().
+ * @returns {(pair: import('./order').BacklogElement) => boolean} The test.
+ */
+function canOpenPair(profile, questions) {
+  const available = new Set(questions.flatMap((q) => q.languages.map((l) => `${q.slug}/${l}`)));
+  return (pair) => profile.languages.includes(pair.language) && available.has(`${pair.question}/${pair.language}`);
+}
+
+/**
  * Moves a pair through the user's queue after a saved Submit
  * (recordSubmit() in order.js; step 6). A user without both files yet is
- * first given them as at start (detail 6). Only pairs whose language is
- * turned on and whose question still has that language can come in from
- * the backlog (detail 3).
+ * first given them as at start (detail 6). Only pairs canOpenPair()
+ * accepts can come in from the backlog (detail 3).
  *
  * Synchronous on purpose: reading, changing and writing happen with no
  * await in between, so two Submits at once (two tabs) can't each read the
@@ -956,10 +1021,7 @@ function updateQueue(email, pair, pass) {
   }
   const { order, backlog } = loadQueueFiles(email);
   const profile = loadProfile(email);
-  const available = new Set(questions.flatMap((q) => q.languages.map((l) => `${q.slug}/${l}`)));
-  const result = recordSubmit(order, backlog, pair, pass, {
-    canIntroduce: (p) => profile.languages.includes(p.language) && available.has(`${p.question}/${p.language}`),
-  });
+  const result = recordSubmit(order, backlog, pair, pass, { canIntroduce: canOpenPair(profile, questions) });
   if (JSON.stringify(result.backlog) !== JSON.stringify(backlog)) writeUserFile(email, 'backlog.json', result.backlog);
   writeUserFile(email, 'order.json', result.order);
 }

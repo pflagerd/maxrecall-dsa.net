@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) and 6 (a saved Submit moves its pair and brings new ones in) are done. Nothing tells the page what's next yet (step 7). All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in) and 7 (Next) are done. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -698,8 +698,40 @@ each checked to fail against a deliberately wrong version first.
    changing nothing, the fifth Submit bringing a pair in, two Submits at
    once both counted, and a broken question file giving `queueError`,
    naming the file, with the record saved and the files unchanged).
-7. **Next**: `GET /api/next`, `?language=` in the page address, and
-   Submit turning into Next (with the one-second guard).
+7. **Done 2026-11-03.** **Next.** `nextPair(order, backlog, canOpen)` in
+   `order.js`: the first queue pair that can be opened, else the first
+   such backlog pair (detail 3), else null; pairs passed over stay put.
+   `GET /api/next` answers `{ next: { question, language, title } }` or
+   `{ next: null }` (detail 1). "Can be opened" is `canOpenPair()` in
+   `server.js`, the same test that decides what step 6 brings in:
+   language turned on, question still having it (detail 2). A missing or
+   out-of-date backlog is filled **in memory only** (detail 4), so the
+   GET stays safe; invalid files give `500`. On the page, a saved Submit
+   asks `GET /api/next` at once and the button becomes **Next**, its
+   tooltip naming the pair, opening exactly that pair as a full page
+   load of `problem.html?slug=…&language=…` (detail 5); it ignores
+   clicks for its first second. A saved Submit whose queue wasn't
+   updated still becomes Next, with a warning in the status line (detail
+   6). `?language=`: a language that isn't allowed, is turned off, or
+   the question lacks gets an alert and the usual language;
+   `?submission=` wins; switching language updates it (detail 7). With
+   nothing left, Next is disabled and says so (detail 8); after a Submit
+   that's only possible if the profile changed meanwhile, since the pair
+   just submitted can always be opened. Checked: `order.test.js` (now 38
+   tests); 4 deliberately broken versions of `nextPair` and 3 of the page
+   (no guard, Next in every language, address not updated) all caught;
+   the 39 baseline requests identical to step 6; 9 `GET /api/next` cases
+   against the real server (no files at all, the backlog's front, pairs
+   passed over, only the backlog left, asked twice, after a Submit,
+   invalid queue and profile, nothing left); `browser-check.js`'s 37
+   observations identical to `master` except Submit's tooltip; 12 page
+   cases in headless Chromium (Submit, then Next with its tooltip and
+   one-second guard, per language, Next opening its pair, a reload,
+   `?language=` used or refused four ways, `?submission=` winning, an
+   unsaved Submit, a queue not updated, nothing left, `GET /api/next`
+   failing). **Seen while checking:** with every language on, the
+   backlog goes question by question, so after Two Sum in Python, Next
+   is Two Sum in JavaScript (D6's order, as decided).
 8. **Skip**: `POST /api/questions/:slug/skip`, Skip records
    (`"skipped": "yes"`, `schemaVersion` 3) in `submissions/`, and the
    Skip button on the page.

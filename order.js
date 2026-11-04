@@ -373,4 +373,25 @@ function recordSubmit(order, backlog, pair, pass, { canIntroduce, random = Math.
   };
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit };
+/**
+ * The pair to open next (step 7; D7): the first in the queue that canOpen()
+ * accepts, else the first such in the backlog (a new user's queue is empty
+ * until their first Submit, which then moves it into the queue: step 6,
+ * detail 1), else none. Pairs passed over stay where they are. Changes
+ * nothing, so asking twice gives the same answer.
+ *
+ * @param {OrderFile} order - The queue.
+ * @param {BacklogFile} backlog - The backlog.
+ * @param {(pair: BacklogElement) => boolean} canOpen - Whether a pair can
+ *   be opened now: its language turned on (D2) and its question still
+ *   having that language (D5). The same test recordSubmit()'s canIntroduce
+ *   uses.
+ * @returns {BacklogElement | null} The pair (question and language only),
+ *   or null if nothing can be opened.
+ */
+function nextPair(order, backlog, canOpen) {
+  const found = order.queue.find(canOpen) ?? backlog.backlog.find(canOpen);
+  return found ? { question: found.question, language: found.language } : null;
+}
+
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair };
