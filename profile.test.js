@@ -15,6 +15,7 @@ const EVERYTHING = {
   canChooseLanguages: true,
   canSwitchLanguage: true,
   canSetDefaultLanguage: true,
+  backlog: 'all',
 };
 
 /**
@@ -68,6 +69,10 @@ const VALID = [
     { ...EVERYTHING, languages: ['java', 'cpp'], defaultLanguage: 'java' }],
   ['the allowed flags are honoured', { schemaVersion: 1, allowed: { canChooseLanguages: false, canSwitchLanguage: false, canSetDefaultLanguage: false } },
     { ...EVERYTHING, canChooseLanguages: false, canSwitchLanguage: false, canSetDefaultLanguage: false }],
+  ['backlog "all" is the same as leaving it out (step 13)', { schemaVersion: 1, backlog: 'all' }, EVERYTHING],
+  ['backlog "chosen": the server adds nothing to the backlog by itself (step 13)',
+    { schemaVersion: 1, allowed: { languages: ['python'] }, backlog: 'chosen' },
+    { ...EVERYTHING, allowedLanguages: ['python'], languages: ['python'], defaultLanguage: 'python', backlog: 'chosen' }],
 ];
 
 for (const [what, raw, expected] of VALID) {
@@ -92,6 +97,8 @@ const INVALID = [
   ['a flag that is not true or false', { schemaVersion: 1, allowed: { canSwitchLanguage: 'yes' } }, /canSwitchLanguage/],
   ['an unknown preferred language', { schemaVersion: 1, preferred: { languages: ['Python'] } }, /preferred\.languages/],
   ['an unknown default language', { schemaVersion: 1, preferred: { defaultLanguage: 'cobol' } }, /defaultLanguage/],
+  ['a backlog value this code does not know (a typo must not mean "all")', { schemaVersion: 1, backlog: 'choosen' }, /backlog must be one of "all", "chosen"/],
+  ['a backlog that is not text', { schemaVersion: 1, backlog: true }, /backlog must be one of/],
 ];
 
 for (const [what, raw, message] of INVALID) {
@@ -145,6 +152,12 @@ for (const [what, raw, change, code] of REFUSED) {
     throwsCode(() => applyPreferredChange(raw, change), code);
   });
 }
+
+test('a change keeps backlog as it was (step 13: it is set by hand, like allowed)', () => {
+  const after = applyPreferredChange({ schemaVersion: 1, backlog: 'chosen' }, { languages: ['python'] });
+  assert.equal(after.backlog, 'chosen');
+  assert.equal(effectiveProfile(after).backlog, 'chosen');
+});
 
 test('both changed at once: the default may be one of the newly chosen languages', () => {
   const after = applyPreferredChange(undefined, { languages: ['d', 'java'], defaultLanguage: 'java' });

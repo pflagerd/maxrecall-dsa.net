@@ -7,7 +7,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -346,4 +346,86 @@ test('rename: a backlog pair under the old name whose new name is in the queue, 
   assert.deepEqual(pairsIn(both), [[], ['new/python']]);
   assert.deepEqual(both.dropped, ['backlog.json: old in python, already in the backlog as new']);
   assertValid(inQueue); assertValid(both);
+});
+
+// Step 13: a chosen backlog, and make backlog-add / backlog-remove.
+
+/** A profile with a chosen backlog and only Python on (step 13). */
+const CHOSEN_PYTHON = effectiveProfile({ schemaVersion: 1, preferred: { languages: ['python'] }, backlog: 'chosen' });
+
+test('backlogPairs: every allowed pair for backlog "all", none for "chosen" (detail 1)', () => {
+  const all = effectiveProfile(undefined);
+  assert.deepEqual(backlogPairs(QUESTIONS, all), allowedPairs(QUESTIONS, all));
+  assert.deepEqual(backlogPairs(QUESTIONS, CHOSEN_PYTHON), []);
+  const { backlog, added } = fillBacklog(ORDER, BACKLOG, backlogPairs(QUESTIONS, CHOSEN_PYTHON));
+  assert.equal(added, 0, 'filling a chosen backlog adds nothing');
+  assert.deepEqual(backlog, BACKLOG);
+});
+
+test('pairsToAdd: the questions in the order given, each in the languages turned on, in the learner\'s order', () => {
+  assert.deepEqual(pairsToAdd(['later', 'a-tied'], QUESTIONS, CHOSEN_PYTHON).map((p) => `${p.question}/${p.language}`), ['later/python', 'a-tied/python']);
+  // a-tied's starterCode order is cpp, python, java; the learner's is python, cpp: the learner's wins.
+  const two = effectiveProfile({ schemaVersion: 1, preferred: { languages: ['python', 'cpp'] } });
+  assert.deepEqual(pairsToAdd(['b-tied', 'a-tied'], QUESTIONS, two).map((p) => `${p.question}/${p.language}`), ['b-tied/python', 'a-tied/python', 'a-tied/cpp']);
+});
+
+test('pairsToAdd refuses an unknown question, one named twice, and one with no language turned on', () => {
+  assert.throws(() => pairsToAdd(['later', 'nope'], QUESTIONS, CHOSEN_PYTHON), /nope: no such question/);
+  assert.throws(() => pairsToAdd(['later', 'later'], QUESTIONS, CHOSEN_PYTHON), /later is named twice/);
+  const javaOnly = effectiveProfile({ schemaVersion: 1, preferred: { languages: ['java'] } });
+  assert.throws(() => pairsToAdd(['b-tied'], QUESTIONS, javaOnly), /b-tied has none of the languages turned on \(java\)/);
+});
+
+test('addToBacklog appends at the end by default, and leaves the files it was given alone', () => {
+  const f = filesOf(['q/python'], ['a/python']);
+  const before = JSON.stringify(f);
+  const result = addToBacklog(f.order, f.backlog, [PY('b'), PY('c')]);
+  assert.deepEqual(pairsIn({ order: f.order, backlog: result.backlog })[1], ['a/python', 'b/python', 'c/python']);
+  assert.deepEqual(result.added, [PY('b'), PY('c')]);
+  assert.deepEqual(result.skipped, []);
+  assert.equal(JSON.stringify(f), before);
+  assertValid({ order: f.order, backlog: result.backlog });
+});
+
+test('addToBacklog with AT puts the first added pair at that position, counting from 1', () => {
+  const f = filesOf([], ['a/python', 'b/python']);
+  const show1 = (/** @type {number} */ at) => addToBacklog(f.order, f.backlog, [PY('x'), PY('y')], at).backlog.backlog.map((p) => p.question).join(' ');
+  assert.equal(show1(1), 'x y a b');
+  assert.equal(show1(2), 'a x y b');
+  assert.equal(show1(3), 'a b x y');
+});
+
+test('addToBacklog refuses an AT outside 1 to length + 1', () => {
+  const f = filesOf([], ['a/python', 'b/python']);
+  for (const at of [0, 4, 1.5, -1, NaN]) {
+    assert.throws(() => addToBacklog(f.order, f.backlog, [PY('x')], at), RangeError, `AT ${at}`);
+  }
+  assert.doesNotThrow(() => addToBacklog(filesOf([], []).order, filesOf([], []).backlog, [PY('x')], 1), 'AT 1 in an empty backlog');
+});
+
+test('addToBacklog skips a pair already in the queue or the backlog (one place only, D5)', () => {
+  const f = filesOf(['q/python'], ['a/python']);
+  const result = addToBacklog(f.order, f.backlog, [PY('q'), PY('a'), PY('n')]);
+  assert.deepEqual(result.backlog.backlog.map((p) => p.question), ['a', 'n']);
+  assert.deepEqual(result.added, [PY('n')]);
+  assert.deepEqual(result.skipped, ['q in python: already in the queue', 'a in python: already in the backlog']);
+  assertValid({ order: f.order, backlog: result.backlog });
+});
+
+test('removeFromBacklog takes a question out in every language, and leaves the queue alone', () => {
+  const f = filesOf(['q/python'], ['a/python', 'b/python', 'a/cpp', 'c/python']);
+  const before = JSON.stringify(f);
+  const result = removeFromBacklog(f.order, f.backlog, ['a', 'c']);
+  assert.deepEqual(result.backlog.backlog.map((p) => `${p.question}/${p.language}`), ['b/python']);
+  assert.deepEqual(result.removed.map((p) => `${p.question}/${p.language}`), ['a/python', 'a/cpp', 'c/python']);
+  assert.deepEqual(result.notRemoved, []);
+  assert.equal(JSON.stringify(f), before);
+});
+
+test('removeFromBacklog says why a name wasn\'t removed: in the queue, or not in the backlog', () => {
+  const f = filesOf(['q/python'], ['a/python']);
+  const result = removeFromBacklog(f.order, f.backlog, ['q', 'gone']);
+  assert.deepEqual(result.backlog, f.backlog);
+  assert.deepEqual(result.removed, []);
+  assert.deepEqual(result.notRemoved, ['q in python: in the queue, so not removed', 'gone: not in the backlog']);
 });

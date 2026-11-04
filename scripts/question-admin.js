@@ -224,4 +224,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { Refusal, refuseIfServerRunning };
+module.exports = { Refusal, refuseIfServerRunning, checkName };

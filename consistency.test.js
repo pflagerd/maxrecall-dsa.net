@@ -99,6 +99,14 @@ test('check 4: a pair the learner could do that is in neither file', () => {
     ['warning backlog.json: a in cpp is in neither file; the next server start appends it to the backlog']);
 });
 
+test('check 4 is not run for a chosen backlog: a pair not chosen is meant to be in neither file (step 13, detail 2)', () => {
+  const chosen = JSON.stringify({ ...JSON.parse(PROFILE), backlog: 'chosen' });
+  assert.deepEqual(check({ profileText: chosen, backlogText: JSON.stringify({ schemaVersion: 1, backlog: [] }) }), []);
+  assert.deepEqual(check({ profileText: chosen, records: [rec('a/python', '05', 'Accepted'), rec('b/python', '06', 'Accepted')] }),
+    ['warning backlog.json: 1 pair has records but is still in the backlog (e.g. submitted before the queue existed, before step 6): b in python. make consistency-check VERBOSE=1 lists each'],
+    'check 6 still runs');
+});
+
 test('check 5: a language no longer allowed is info; one merely turned off is nothing (detail 5)', () => {
   const narrower = JSON.stringify({ schemaVersion: 1, allowed: { languages: ['python'] } });
   assert.deepEqual(check({ profileText: narrower }), ['info backlog.json backlog[1]: a in cpp: the profile no longer allows cpp; kept on purpose (D2), and skipped']);
