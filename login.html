@@ -32,13 +32,18 @@
       <label>Email
         <input name="email" type="email" autocomplete="username" required />
       </label>
+      <!-- From the invite. Case matters (base64url), so no
+           capitalizing or spelling fixes on phones. -->
+      <label>Invite code
+        <input name="invite" type="text" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required />
+      </label>
       <label>Password
-        <input name="password" type="password" autocomplete="new-password" minlength="10" required />
+        <input name="password" type="password" autocomplete="new-password" minlength="12" required />
       </label>
       <label>Confirm password
-        <input name="confirm" type="password" autocomplete="new-password" minlength="10" required />
+        <input name="confirm" type="password" autocomplete="new-password" minlength="12" required />
       </label>
-      <p class="auth-hint">At least 10 characters.</p>
+      <p class="auth-hint">At least 12 characters.</p>
       <button type="submit">Register</button>
       <p class="auth-switch">Already registered? <a href="#login">Log in</a></p>
     </form>

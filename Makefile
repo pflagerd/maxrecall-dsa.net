@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue invite sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -114,6 +114,15 @@ rename-question:
 # its environment, as for rename-question.
 recalculate-queue:
 	node scripts/recalculate-queue.js
+
+# Inviting someone (docs/plans/limited-live.md, D2): make invite
+# EMAIL=learner@example.com prints a code that lets that email register,
+# once, within 7 days. Run it as the user who owns the sign-in data (on the
+# VPS, the maxrecall user, with MAXRECALL_AUTH_DIR as in the service file);
+# it refuses otherwise. The server can keep running. EMAIL reaches the
+# script through its environment, as for rename-question.
+invite:
+	node scripts/invite.js
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

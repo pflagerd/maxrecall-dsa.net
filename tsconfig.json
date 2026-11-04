@@ -30,6 +30,7 @@
     "users.js",
     "users.test.js",
     "auth.js",
+    "auth.test.js",
     "server.js",
     "judge/queue.js",
     "judge/cgroups.js",
@@ -40,6 +41,7 @@
     "scripts/doc-check.js",
     "scripts/consistency-check.js",
     "scripts/question-admin.js",
-    "scripts/recalculate-queue.js"
+    "scripts/recalculate-queue.js",
+    "scripts/invite.js"
   ]
 }

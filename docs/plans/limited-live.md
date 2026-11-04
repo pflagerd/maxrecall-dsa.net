@@ -1,8 +1,9 @@
 # Plan: limited live testing on the VPS
 
-Status: **in planning, 2026-11-04.** Nothing is built yet. Q1, Q2 and
-D1–D4 are answered and decided (below). D5 (the owner's idea of a git
-repository per user) and step 1's details are waiting for the owner. Linked from
+Status: **step 1 done, 2026-11-04** (invites and `trust proxy`). Q1, Q2
+and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
+repository per user) is open; it's needed by step 6. Nothing is exposed
+to the internet yet. Linked from
 `readme.html` → Decisions & plans.
 
 ## Goal
@@ -241,7 +242,8 @@ Each is small and can be checked before the next.
    `login.html`, `login-page.js`, a new `scripts/invite.js` and
    `make invite`, with tests. Deployable while the VPS is still
    loopback-only, so it can be tried through the tunnel's port 3000 first.
-   Details proposed 2026-11-04, waiting for the owner:
+   **Done 2026-11-04**, with these details (proposed that day; the owner
+   decided 6 and 7, the rest as proposed):
    1. **The invite file**: `auth/invites/<email>.json` with
       `schemaVersion`, `email`, `createdAt`, `expiresAt` and the code's
       SHA-256. A fast hash is enough because the code is random, the
@@ -255,24 +257,52 @@ Each is small and can be checked before the next.
       as `make rename-question` is run (`docs/deploy-vps.md` §8).
    5. **The form**: email, invite code, password, confirm. Every refusal
       gives the same message, as now; throttling stays per email.
-   6. **`MAXRECALL_PASSWORD` goes**: the owner can invite themselves, so
-      there's one way to register, and `/etc/maxrecall-dsa/test.env` is no
-      longer needed. Existing accounts are untouched.
-   7. **Minimum password length**: the owner chose 10 for their own
-      account (2026-10-30). With other people, NIST SP 800-63B rev. 4's 15
-      for a password used alone ([§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver))
-      is the recommendation, for new passwords only.
+   6. **`MAXRECALL_PASSWORD` goes** (owner: go ahead): the owner can
+      invite themselves, so there's one way to register, and
+      `/etc/maxrecall-dsa/test.env` is no longer needed; the unit file no
+      longer reads it. Existing accounts are untouched. The server logs a
+      line at startup if the variable is still set.
+   7. **Minimum password length: at least 12** (owner's decision), for new
+      passwords only, up from 10 (2026-10-30). I had recommended 15, NIST
+      SP 800-63B rev. 4's minimum for a password used alone
+      ([§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver));
+      12 is knowingly below it. Counted in characters (code points), so an
+      emoji counts once.
    8. **Password reset**: by hand for now: delete
       `auth/accounts/<email>.json`, then invite again.
    9. **`app.set('trust proxy', 'loopback')`**, so `req.secure` and
       `req.ip` come from nginx's `X-Forwarded-Proto` and `X-Forwarded-For`,
       believed only from 127.0.0.1
       ([Express behind proxies](https://expressjs.com/en/guide/behind-proxies.html)).
-      nginx must then replace, not append to, any `X-Forwarded-For` a
-      visitor sends (step 3).
-   10. **A brand-new user**: check what `GET /api/queue`, `GET /api/next`
-       and the problem list show before their first Submit, and fix what
-       needs it.
+      **Corrected 2026-11-04:** I had written that nginx must replace, not
+      append to, any `X-Forwarded-For` a visitor sends. Reading Express 4's
+      dependencies showed it needn't: `forwarded`'s `parse()` reads the
+      header from the right, and `proxy-addr`'s `alladdrs()` stops at the
+      first untrusted address, so `req.ip` is nginx's entry for the visitor,
+      whatever the visitor put to its left. Either nginx setting is safe.
+   10. **A brand-new user**: checked, nothing to fix. Before their first
+       Submit, with no `users/<email>/` folder, `GET /api/profile` gives
+       every language allowed, `GET /api/queue` lists every pair in the
+       backlog, and `GET /api/next` gives `two-sum` in JavaScript. Nothing
+       is written until the first Submit (`updateQueue`).
+
+   **How it was checked (cloud, 2026-11-04):** `make test` 177 (10 new in
+   `auth.test.js`); each of 4 deliberately broken versions of `auth.js`
+   (expiry ignored, any code accepted, length in UTF-16 units, the code
+   stored) failed at least one. `make typecheck` and `make doc-check` pass.
+   The server, on spare ports with throwaway folders: `make invite`, then
+   registering over HTTP (refused the second time, and without `invite`);
+   a login from 127.0.0.1 with `X-Forwarded-Proto: https` got a `Secure`
+   cookie, the same from the container's other address didn't; the
+   Register form in headless Chromium (an 11-character password stopped by
+   the browser, then registered and signed in); `make invite` refused with
+   no `EMAIL`, a non-email, and a folder owned by another user (writing
+   nothing).
+
+   **Found while building:** deleting an account leaves its sessions
+   working (`sessionEmail` doesn't check the account), so a reset by hand
+   should also delete that email's files in `auth/sessions/`. Listed in
+   the readme's Known gaps.
 2. **VPS: firewall.** `ufw` allowing only SSH, 80 and 443
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
@@ -314,3 +344,5 @@ the same change.
 | 2026-11-04 | Correction (owner asked why the app shouldn't do HTTPS itself, as `maxrecall.net` does): D1 option C's "the unit's `IPAddressDeny=any` would block it reaching Let's Encrypt" was wrong, since certbot runs outside the unit. The real conflict is the other way: the filter covers incoming traffic too, so serving the internet directly means dropping the loopback-only containment. Option C's row rewritten. |
 | 2026-11-04 | D1–D4 decided (owner): as recommended. nginx + certbot; one invite code per person; Basic auth and rate limiting at nginx while testing is limited; go ahead with invited testers the owner trusts. |
 | 2026-11-04 | D5 (owner's idea): a git repository per user folder, asking how git handles names like `daniel.pflager@gmail.com`. Checked: fine; the `safe.directory` ownership check is what needs handling. Details waiting. Step 1's ten details proposed. |
+| 2026-11-04 | Step 1 details (owner): 6, drop `MAXRECALL_PASSWORD`, yes; 7, at least 12 characters for new passwords; the rest as proposed. |
+| 2026-11-04 | Step 1 done. Correction: detail 9's "nginx must replace `X-Forwarded-For`" was wrong; appending is also safe with Express's `trust proxy`. |

@@ -4,7 +4,7 @@
 // The two forms, with the controls they have by name (login.html). Every
 // lookup below finds an element login.html has, hence the casts.
 /** @typedef {HTMLFormElement & { email: HTMLInputElement, password: HTMLInputElement }} LoginForm */
-/** @typedef {LoginForm & { confirm: HTMLInputElement }} RegisterForm */
+/** @typedef {LoginForm & { invite: HTMLInputElement, confirm: HTMLInputElement }} RegisterForm */
 
 const loginForm = /** @type {LoginForm} */ (document.getElementById('login-form'));
 const registerForm = /** @type {RegisterForm} */ (document.getElementById('register-form'));
@@ -44,7 +44,8 @@ function showMode() {
  * @param {string} url - /api/auth/login or /api/auth/register.
  * @param {HTMLFormElement} form - The form sent, whose button is disabled
  *   meanwhile.
- * @param {{ email: string, password: string }} body - What to send, as JSON.
+ * @param {{ email: string, password: string, invite?: string }} body - What
+ *   to send, as JSON: the invite code too when registering.
  * @returns {Promise<void>} Never rejects: failures are shown on the page.
  */
 async function signIn(url, form, body) {
@@ -93,7 +94,8 @@ loginForm.addEventListener(
 registerForm.addEventListener(
   'submit',
   /**
-   * Registers with the form's email and password, if both passwords match.
+   * Registers with the form's email, invite code and password, if both
+   * passwords match.
    *
    * @param {SubmitEvent} e - The form's submit, kept from reloading the page.
    * @returns {void}
@@ -104,7 +106,12 @@ registerForm.addEventListener(
       errorEl.textContent = "The passwords don't match.";
       return;
     }
-    signIn('/api/auth/register', registerForm, { email: registerForm.email.value, password: registerForm.password.value });
+    signIn('/api/auth/register', registerForm, {
+      email: registerForm.email.value,
+      // Pasted codes often bring a space or line break along.
+      invite: registerForm.invite.value.trim(),
+      password: registerForm.password.value,
+    });
   },
 );
 

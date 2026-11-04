@@ -84,8 +84,8 @@ make deploy-server
   (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin`, plus `/sbin:/bin`)
   for all of this, so toolchains in root's home folder can't interfere.
   That's the `PATH` the service gets, which systemd.exec(5) documents.
-- **Not done for you:** the optional password file (§4), which is a secret
-  you choose. The SSH tunnel (§7) is on Kubuntu.
+- **Not done for you:** invites (§4), which are for people you choose.
+  The SSH tunnel (§7) is on Kubuntu.
 
 Tested 2026-11-02 in a cloud session, which has no systemd, so `systemctl`
 and `journalctl` were stand-ins that started the server as the unit file
@@ -142,9 +142,10 @@ sessions get DMD from d-apt (`docs/d-compiler.md`).
 
 Added 2026-11-02 (sandboxing step 2, `docs/plans/sandboxing.md`). The
 server checks at startup that bubblewrap works. If it doesn't, the server
-**refuses Run and Submit** (HTTP 503) until it's fixed. Submissions don't run
-inside bubblewrap yet; that's step 3. **I couldn't test this section**: the
-cloud sessions have no AppArmor. The server's startup log (step 5 below)
+**refuses Run and Submit** (HTTP 503) until it's fixed. Since step 3 every
+submission is compiled and run inside bubblewrap. The cloud sessions have no
+AppArmor, so this section was first tested on this VPS, on 2026-11-02: the
+real error and the fix are below. The server's startup log (step 5 below)
 says whether it worked.
 
 ```bash
@@ -333,22 +334,36 @@ folders. The folder must exist before the service starts, because systemd's
 `ReadWritePaths` refuses a missing path. Accounts and sessions go next to it,
 in `/srv/maxrecall/data/auth`, which the server creates itself.
 
-**Optional: a password, to register on port 3000.** You don't need this to
-use the app through the tunnel. Skip it unless you want to try the login page.
+**Optional: invites, to register on port 3000.** You don't need one to use
+the app through the tunnel. Registering needs an invite code (since
+2026-11-04; `docs/plans/limited-live.md`, step 1), one per person, including
+you if you want an account for the login page:
 ```bash
-sudo install -d -m 700 /etc/maxrecall-dsa
-sudo install -m 600 /dev/null /etc/maxrecall-dsa/test.env
-sudo vi /etc/maxrecall-dsa/test.env
+cd /srv/maxrecall/maxrecall-dsa.net
+sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=learner@example.com
 ```
-- `install -d -m 700` creates the folder, readable by root only.
-- `install -m 600 /dev/null …` creates an empty file, readable by root only.
-- In vi, add one line: `MAXRECALL_PASSWORD=` followed by at least 10
-  characters. The server refuses to start if it's shorter.
+- `sudo -u maxrecall` runs it as the service's user, so the server can read
+  the invite file (owner-only, mode 600). Run as root, it refuses, saying
+  whose folder it is.
+- `env MAXRECALL_AUTH_DIR=…` points it at the service's sign-in folder (the
+  unit file sets the same). Without it, the invite would go into the
+  checkout's own `auth/`, which the service never reads. The first line it
+  prints names the folder, so check it.
+- `EMAIL=` is who to invite. It prints a code that works once, for that
+  email, for 7 days. Send it to them; it isn't stored, only its hash.
+- The server needn't be stopped.
 
-See [install(1)](https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html).
-The service reads this file as root before switching to the `maxrecall` user
-(`EnvironmentFile=` in the service file), so the app's user never needs to
-read it directly.
+They then open the login page, choose **Register**, and enter the email, the
+code and a password of their own (at least 12 characters).
+
+**Updating from a version before invites:** `/etc/maxrecall-dsa/test.env`
+(`MAXRECALL_PASSWORD`) is no longer used, and the unit file no longer reads
+it. Delete it:
+```bash
+sudo rm -r /etc/maxrecall-dsa
+```
+- `rm -r` removes the folder and the file in it. Existing accounts are
+  untouched: logging in checks `auth/accounts/`, not this file.
 
 ## 5. Install and start the service [VPS]
 
@@ -398,7 +413,7 @@ journalctl -u maxrecall-dsa.test.service -n 20
 Shows the service's last 20 log lines (`-u` selects the unit, `-n` sets how
 many lines). The latest start should show four lines:
 `Server listening on 127.0.0.1:3000 only, … (submissions in /srv/maxrecall/data/users)`,
-`Sign-in data in /srv/maxrecall/data/auth; registration …`,
+`Sign-in data in /srv/maxrecall/data/auth; registration by invite only …`,
 `Sandbox: bubblewrap 0.9.0 works (self-test passed); …`, and
 `Trusted listener on 127.0.0.1:3001 only: every request there is …`.
 
@@ -492,7 +507,7 @@ e.g. `-L 3005:127.0.0.1:3001`, then open <http://localhost:3005>.
 
 **To try the login page as well,** also forward the normal port by adding
 `-L 3006:127.0.0.1:3000` to the same command, then open
-<http://localhost:3006>. Registering there needs the optional password from
+<http://localhost:3006>. Registering there needs an invite code from
 step 4. Browsers keep cookies per host name, not per port, so all these
 `localhost` addresses share one sign-in cookie. That's harmless here: the
 trusted port ignores it.
