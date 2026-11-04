@@ -23,7 +23,7 @@ const { QUESTIONS_DIR, isQuestionFile, questionInfos } = require('./question-fil
 const { checkConsistency, countLevels, formatFinding, describeCounts } = require('./consistency');
 const { readSources } = require('./scripts/consistency-check');
 const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, canOpenPair } = require('./order');
-const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
+const { AUTH_DIR, SESSION_LIFETIME_MS, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
  * Express's request, plus what this server adds to it: who the request is
@@ -105,6 +105,19 @@ const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessio
  */
 
 const app = express();
+// Behind a reverse proxy on this machine (nginx, docs/plans/limited-live.md,
+// step 3), believe its X-Forwarded-Proto and X-Forwarded-For, so req.secure
+// (and so the session cookie's Secure flag) and req.ip describe the
+// visitor, not nginx. Only from a loopback address (127.0.0.1, ::1): from
+// anywhere else the headers are ignored, so a visitor can't fake them by
+// connecting directly. req.ip is the nearest address that isn't loopback,
+// read from the right of X-Forwarded-For (proxy-addr's alladdrs(), with
+// forwarded's parse() reading the header backwards), so a fake address a
+// visitor puts in the header is never reached: nginx's own entry for the
+// visitor is to its right. The trusted listener (TRUSTED_PORT)
+// shares this app, but nothing proxies to it, and it ignores the cookie.
+// https://expressjs.com/en/guide/behind-proxies.html
+app.set('trust proxy', 'loopback');
 const PORT = process.env.PORT || 3000;
 // Which network address to listen on. Unset means every interface (the
 // Node default), so other devices on a home network can connect.
@@ -275,13 +288,18 @@ async function signIn(req, res, attempt, refusedStatus) {
 app.post(
   '/api/auth/register',
   /**
-   * POST /api/auth/register: signIn() with register (400 for a refusal).
+   * POST /api/auth/register: signIn() with register and the invite code
+   * (400 for a refusal, or if invite isn't a string).
    *
-   * @param {import('express').Request} req - Body { email, password }.
-   * @param {Response} res - Answered by signIn().
-   * @returns {Promise<Response | void>} Nothing that's used.
+   * @param {import('express').Request} req - Body { email, invite, password }.
+   * @param {Response} res - Answered by signIn(), or 400 here.
+   * @returns {Promise<Response | void> | Response} Nothing that's used.
    */
-  (req, res) => signIn(req, res, register, 400),
+  (req, res) => {
+    const { invite } = req.body || {};
+    if (typeof invite !== 'string') return res.status(400).json({ error: 'email, invite and password are required' });
+    return signIn(req, res, (email, password) => register(email, invite, password), 400);
+  },
 );
 app.post(
   '/api/auth/login',
@@ -1259,7 +1277,12 @@ app.listen(
   () => {
     const where = HOST ? `${HOST}:${PORT} only` : `port ${PORT} on every interface`;
     console.log(`Server listening on ${where}, http://localhost:${PORT} (submissions in ${USERS_DIR})`);
-    console.log(`Sign-in data in ${AUTH_DIR}; registration ${registrationOpen() ? `open for ${OWNER_EMAIL} only` : 'closed (MAXRECALL_PASSWORD not set)'}`);
+    console.log(`Sign-in data in ${AUTH_DIR}; registration by invite only (make invite EMAIL=...)`);
+    // Registering needed it until 2026-11-04 (docs/plans/limited-live.md,
+    // step 1, detail 6). Said here so a leftover setting isn't a mystery.
+    if (process.env.MAXRECALL_PASSWORD) {
+      console.log('MAXRECALL_PASSWORD is set but no longer used: registering needs an invite now. Remove it (on the VPS, /etc/maxrecall-dsa/test.env).');
+    }
     console.log(`Sandbox: ${describeSandbox()}`);
     console.log(`Judge queue: at most ${MAX_RUNNING} judgings at once, ${MAX_WAITING} more waiting; beyond that Run and Submit get 503`);
   },

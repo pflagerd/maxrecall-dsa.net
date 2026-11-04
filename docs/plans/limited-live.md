@@ -1,0 +1,383 @@
+# Plan: limited live testing on the VPS
+
+Status: **step 1 done, 2026-11-04** (invites and `trust proxy`). Q1, Q2
+and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
+repository per user) is open; it's needed by step 6. Nothing is exposed
+to the internet yet. Linked from
+`readme.html` → Decisions & plans.
+
+## Goal
+
+The owner's words (2026-11-04): get the VPS "ready for limited live
+testing … live, albeit for a very limited target audience", keeping SSH
+access as it is.
+
+"Limited" is taken to mean: a handful of people the owner invites, each
+with their own account and progress, reaching the app at
+`https://DOMAIN` from an ordinary browser. Not open sign-up. `DOMAIN` is
+not chosen yet (Q1).
+
+## Where things stand (facts from the code and docs)
+
+- **The server listens only on 127.0.0.1.** Port 3000 needs sign-in;
+  port 3001 is the trusted port (everyone there is the owner), reached
+  only through the SSH tunnel. Source: `deploy/maxrecall-dsa.test.service`
+  (`HOST=127.0.0.1`), `server.js` (`TRUSTED_PORT`, `trustedServer`).
+  Nothing is on 80 or 443 yet, as far as this repo knows.
+- **Only the owner can register.** `register()` accepts only
+  `OWNER_EMAIL`, with `MAXRECALL_PASSWORD` as the password, and that
+  password becomes the account's password. Source: `auth.js`, `register()`.
+  So letting anyone else in is an app change, not only a server change.
+- **A new user's data is created when they need it.** `updateQueue()` in
+  `server.js` creates `order.json` and `backlog.json` on a user's first
+  saved Submit; `prepareQueues()` at start covers users who already have a
+  folder. I haven't checked what `GET /api/queue` and `GET /api/next` show
+  a brand-new user before their first Submit. That's to check in step 1.
+- **The judge has one queue for everyone**: at most 2 judgings at once, a
+  few more waiting, then 503. Source: `server.js` startup log, `judge/queue.js`;
+  measured on the VPS 2026-11-03 (readme, Decisions). One busy user can
+  make others wait.
+- **The cookie's `Secure` flag follows `req.secure`.** Behind a reverse
+  proxy that terminates HTTPS, Node sees plain HTTP, so `req.secure` is
+  false and the cookie goes out without `Secure` unless Express's
+  `trust proxy` is set. Already listed in readme, Known gaps. Source:
+  `server.js` (`res.cookie(… secure: req.secure)`);
+  [Express behind proxies](https://expressjs.com/en/guide/behind-proxies.html).
+- **The trusted listener shares the same Express `app`** (`server.js`,
+  `trustedServer` calls `app(req, res)`), so a `trust proxy` setting
+  applies to both. That's harmless for 3001, which nothing proxies to.
+- **Every login attempt costs a 128 MiB scrypt hash, even for an email with
+  no account** (on purpose, so timing doesn't reveal accounts). Source:
+  `auth.js`, `login()` and `SCRYPT_PARAMS`. Node runs `crypto.scrypt` on
+  libuv's thread pool ([Node crypto docs](https://nodejs.org/api/crypto.html#cryptoscryptpassword-salt-keylen-options-callback)),
+  4 threads by default ([`UV_THREADPOOL_SIZE`](https://nodejs.org/api/cli.html#uv_threadpool_sizesize)).
+  So I expect strangers' login floods to cap at about 512 MiB and keep 4
+  threads busy, which would also slow file reads that use the same pool.
+  That's my reasoning from the docs, not measured. Throttling is per email,
+  so a flood with a different email each time isn't throttled.
+- **The sandbox's open items** (readme, Known gaps): the shared kernel
+  (#22) is the only security one, and it's inherent to namespace
+  sandboxes. #23, #24 and #26 are about quality. The readme says these are
+  "the remaining work before others are let in".
+- **Hidden test cases are public**, in `questions/*.json` in a public repo
+  (`docs/plans/multi-user-step-1.md`).
+- **Sessions are stored as SHA-256 hashes** of the token (`auth.js`,
+  Sessions), so a backup of `auth/` holds no usable session tokens. It does
+  hold password hashes.
+
+## Questions for the owner
+
+- **Q1. DNS. Answered 2026-11-04:** `maxrecall-dsa.net` doesn't point at
+  the VPS yet, and the name isn't settled; it will probably be
+  `maxrecall-code.net` or similar. Written `DOMAIN` below until it is.
+  - Nothing in the code uses a domain name. Every `maxrecall-dsa.net` in
+    the repo is the repo's or the checkout's folder name
+    (`/srv/maxrecall/maxrecall-dsa.net`), which can stay as it is. The name
+    is needed only in step 3 (the nginx config and certbot).
+  - **Choose it before step 3.** Changing it later signs everyone out: the
+    session cookie has no `Domain` attribute (`server.js`, `setSessionCookie`),
+    so browsers keep it for that one host name only
+    ([RFC 6265 §4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3)).
+    It also needs a new certificate, and HSTS keeps browsers on HTTPS for
+    the old name until it expires
+    ([RFC 6797 §6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1)).
+    Steps 1 and 2 don't need it.
+  - Before step 3: register it, add an A record (and AAAA, if the VPS has
+    IPv6) with the VPS's address, and wait until `dig +short DOMAIN A`
+    on Kubuntu prints that address. certbot's check comes from Let's
+    Encrypt's servers over the internet, so it fails until DNS answers.
+- **Q2. The old MaxRecall. Answered 2026-11-04:** `pflagerd/maxrecall.net`
+  runs on a different VPS. Ports 80 and 443 on this one are free for
+  nginx, and the two sites don't share a web server.
+
+## Decisions
+
+### D1. What terminates HTTPS
+
+| Option | For | Against |
+|---|---|---|
+| **A. nginx + certbot** | nginx is in Ubuntu 24.04's **main** archive, so Canonical issues its security updates ([nginx 1.24.0, noble](https://packages.ubuntu.com/noble/nginx)). Built-in rate limiting ([limit_req](https://nginx.org/en/docs/http/ngx_http_limit_req_module.html)) and Basic auth ([auth_basic](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)), both used below. certbot edits the nginx config and renews by timer ([certbot docs](https://eff-certbot.readthedocs.io/en/stable/using.html#nginx)). | More configuration to understand. certbot is in **universe** ([certbot 2.9.0, noble](https://packages.ubuntu.com/noble/certbot)), but it only runs at renewal time and isn't in the path of requests. |
+| **B. Caddy** | Gets and renews certificates by itself, and redirects HTTP to HTTPS, with a 3-line config. | In **universe** ([caddy 2.6.2, noble](https://packages.ubuntu.com/noble/caddy)), so not Canonical security-supported, and 2.6.2 is from 2022. Rate limiting isn't in the standard build; it needs a plugin. |
+| **C. Node does TLS itself** (as `maxrecall.net` does: `https.createServer` on 443 reading `/etc/letsencrypt/live/…`, `setcap` on the `node` binary, certbot hooks that stop and start the service) | No extra program. No `trust proxy` needed: `req.secure` is simply true. Node's TLS is OpenSSL, with Node's security releases, and a renewed certificate can be loaded without a restart ([`server.setSecureContext()`](https://nodejs.org/api/tls.html#serversetsecurecontextoptions)). | **It ends the service's loopback-only containment.** `IPAddressAllow=`/`IPAddressDeny=` filter "both ingress and egress traffic" ([systemd.resource-control(5)](https://manpages.ubuntu.com/manpages/noble/en/man5/systemd.resource-control.5.html)), so serving the internet means allowing any address, and the server (or anything that escaped a sandbox) could then reach out. **Port 443:** `maxrecall.net`'s `setcap` on the binary can't work here, because the unit's `NoNewPrivileges=yes` stops a program gaining file capabilities ([no_new_privs](https://docs.kernel.org/userspace-api/no_new_privs.html)); `AmbientCapabilities=CAP_NET_BIND_SERVICE` would, but ambient capabilities pass on to child programs ([capabilities(7)](https://man7.org/linux/man-pages/man7/capabilities.7.html)), here bwrap and the compilers, which would need testing. **The key:** certbot keeps it readable by root only (my understanding), so a deploy hook must copy it for `maxrecall` and tell Node to reload, and it then sits in the same process that runs the judge. **Renewal:** certbot's standalone mode, as `maxrecall.net` uses, needs port 80, hence its stop/start hooks and a short outage at each renewal (`--webroot` avoids that). Rate limiting and D3's gate become app code. |
+
+**Recommendation: A.** The program facing the internet should be the
+one with Canonical security support, the same reasoning that ruled out
+firejail in `docs/plans/sandboxing.md` (option C there). Both A and B
+are open source.
+
+**Decided (owner, 2026-11-04): A, nginx + certbot**, after asking why
+the app shouldn't do HTTPS itself as `maxrecall.net` does (option C's row
+answers that, corrected the same day).
+
+### D2. Who can register
+
+Today the typed registration password becomes the account's password, so
+just widening the email check would give every invitee the same password.
+
+| Option | What it is | Trade-off |
+|---|---|---|
+| **A. Email allowlist + shared password** | A root-only list of emails; the form gets a separate "registration password" field next to the person's own new password. | Smallest change. Anyone who learns the shared password can register as any invitee who hasn't yet. |
+| **B. One invite code per person** | `make invite EMAIL=…` prints a random single-use code, stored hashed in `auth/invites/`, expiring after (say) 7 days. The form asks for email, code and a new password. | A bit more code (a file per invite, one new field). A leaked code works for one email, once. Re-inviting also works as a password reset, which doesn't exist today. |
+| **C. The owner creates accounts** | `make add-user EMAIL=…` sets a password the owner sends. No self-registration. | The owner knows everyone's first password, and there's no way to change it yet. |
+
+**Recommendation: B.** It replaces the shared `MAXRECALL_PASSWORD`
+registration with something per person, and gives a password reset for
+free. The owner's own account carries on as it is.
+
+**Decided (owner, 2026-11-04): B, one invite code per person.** Its
+details are step 1's, below.
+
+### D3. An outer gate while testing is limited
+
+Without one, anyone on the internet reaches the login API (and its 128 MiB
+scrypt per attempt) and every page the app serves before sign-in.
+
+| Option | What it is | Trade-off |
+|---|---|---|
+| **A. Basic auth at nginx, plus rate limiting** | One shared username and password at nginx for the whole site (over HTTPS only), given to testers with their invite. Plus `limit_req` on `/api/auth/`. | Testers sign in twice (browsers remember the Basic one). Strangers reach nothing of the app. Easy to remove later. |
+| **B. Rate limiting only** | `limit_req` on `/api/auth/` (by IP), nothing else. | One sign-in. The app's pages and login are public. |
+| **C. Neither** | | The scrypt cost above, unlimited. |
+
+**Recommendation: A** for this phase, dropping Basic auth when the app's
+own defences (D2, per-IP throttling) are trusted.
+
+**Decided (owner, 2026-11-04): A, Basic auth and rate limiting at nginx.**
+
+### D4. Is the judge ready for other people?
+
+The readme says the remaining sandbox items are "the remaining work before
+others are let in". Of those, only #22 (the shared kernel) is about
+security, and no namespace sandbox can close it. Hidden test cases being
+public matters only if testers would look.
+
+**Recommendation: go ahead with invited testers the owner trusts**, and
+record that decision in the readme. Keep the kernel patched: Ubuntu
+installs security updates automatically through `unattended-upgrades`,
+but a new kernel only runs after a reboot. That's my understanding of
+[Ubuntu's automatic updates](https://documentation.ubuntu.com/server/how-to/software/automatic-updates/),
+to check on the VPS with `cat /etc/apt/apt.conf.d/20auto-upgrades` and
+`ls /var/run/reboot-required`.
+
+**Decided (owner, 2026-11-04): go ahead with invited testers the owner
+trusts.** Recorded in the readme's Known gaps.
+
+### D5. Other people's data
+
+`/srv/maxrecall/data` would hold testers' emails, code, timings and
+password hashes.
+
+**The owner's idea (2026-11-04): each user's folder,
+`users/<email>/`, a git repository of its own.** Not decided yet.
+
+What was checked, 2026-11-04, with git 2.43.0 (the version in Ubuntu
+24.04, and the cloud session's), in a scratch folder:
+
+- **Folder names like `daniel.pflager@gmail.com` are fine.** `git init`,
+  commit and clone (by path and by `file://`) all worked. On Linux a file
+  name can hold any byte but `/` and NUL, and git doesn't care what the
+  repository's own folder is called. `@` matters to git only in revision
+  syntax (`@{upstream}`) and in branch names
+  ([git-check-ref-format](https://git-scm.com/docs/git-check-ref-format)),
+  not in paths.
+- **Fetching over SSH works with the `@` in the path.** With a stand-in
+  `ssh` that recorded its arguments, both
+  `root@VPS_IP:/srv/maxrecall/data/users/daniel.pflager@gmail.com` and the
+  `ssh://` form became host `root@VPS_IP` and the command
+  `git-upload-pack '/srv/maxrecall/data/users/daniel.pflager@gmail.com'`:
+  only the part before the `:` (or before the first `/` after `ssh://`)
+  is read as user and host.
+- **Ownership gets in the way.** The repositories would belong to
+  `maxrecall`. Root running git in one, a fetch included, failed with
+  `fatal: detected dubious ownership in repository` (git's `safe.directory`
+  check, [git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory);
+  not read from here, the site is blocked). One `safe.directory` entry per
+  exact path fixed it; `…/users/*` did **not** in 2.43. So either root's
+  `~/.gitconfig` lists every user (or `*`, which turns the check off), or
+  the fetch runs git as `maxrecall`, e.g.
+  `--upload-pack='sudo -u maxrecall git-upload-pack'`.
+- **The app wouldn't trip over `.git`.** It lists `users/` keeping only
+  folders named like an email (`users.js`, `listUsers`) and reads
+  `submissions/` (`users.js`, `listSubmissions`); nothing reads a user's
+  folder as a whole.
+- **Two kinds of file shouldn't be committed:** `writeUserFile` writes
+  `<file>.tmp-<pid>` and renames it (`users.js`), so each repository needs
+  a `.gitignore` with `*.tmp-*`; and `make recalculate-queue` leaves
+  `<file>.before-<label>` copies (`backupUserFile`), which history would
+  make unnecessary.
+
+Still to decide if this is the way:
+
+- **Who commits, and when.** (a) The server, after each saved Submit
+  (exact history, but git becomes part of the request and can fail it);
+  or (b) a systemd timer as `maxrecall`, every N minutes, committing any
+  changes (recommended: the server is untouched). A commit can catch
+  `backlog.json` written and `order.json` not yet; `updateQueue` in
+  `server.js` writes them in that order so that state is the safe one,
+  and the next start repairs it.
+- **Where the copy lives.** A repository on the VPS isn't a backup by
+  itself. Kubuntu would fetch every user's repository over SSH (a loop
+  over `ls /srv/maxrecall/data/users`). They must never be pushed to
+  GitHub: the app's repository is public.
+- **`auth/` stays out of git** (recommended): it holds password hashes and
+  invites, and git history keeps whatever was ever committed. Copy it with
+  `rsync` instead. Sessions are stored only as SHA-256 hashes, so a copy
+  holds no usable sign-in.
+- **Deleting a tester's data** is then deleting their folder on the VPS
+  and their copy on Kubuntu, a plus of one repository per user over one
+  for everyone.
+
+The alternative is the earlier recommendation: `rsync` of the whole
+`/srv/maxrecall/data/` to Kubuntu (as `docs/deploy-vps.md` §9 does for
+`users/`), with git, if wanted, only on the Kubuntu side.
+
+**Telling testers.** Recommendation: a short note with the invite saying
+what's stored and that the owner can read it. I'm not giving legal
+advice; whether anything more is needed depends on where testers live.
+
+## What spaced-repetition step 13 changes here (2026-11-04)
+
+Step 13 (a chosen backlog, pull request #51) was merged to `master` while
+step 1 was being built, and merged into this branch the same day. Three
+consequences for live testing:
+
+- **Changing anyone's backlog stops the site for everyone.**
+  `make backlog-add` and `backlog-remove` refuse while a server answers
+  (a Submit rewrites `backlog.json` too), so each change is stop, change,
+  start (`docs/deploy-vps.md` §10). With testers, nginx shows them an error
+  for those seconds. Fine for a handful; if it becomes routine, the server
+  could make the change itself, under the same no-`await` rule that keeps
+  `updateQueue` safe. Not planned yet.
+- **What a new tester starts with is a choice (Q3, below).** With no
+  `profile.json` a tester gets `"backlog": "all"`: every question in all
+  five languages waiting in the backlog. The owner has just started
+  themselves on a chosen backlog (Python, Hello World only, §10).
+- **D5:** §10 moves a user's folder to `/srv/maxrecall/data/archive/`,
+  outside `users/` (the server would count a folder named like an email as
+  a user). A git repository per user moves with its folder, so the two fit;
+  backups should include `archive/` too. It exists on the VPS since the
+  owner's §10 reset (readme, Decisions, "Checked on the VPS", step 13).
+
+- **Q3. How should a new tester start?** (a) As the code does now, every
+  question in every language; (b) set up by hand before the invite goes
+  out, as §10 does for the owner (a `profile.json`, then `make
+  backlog-add` with the server stopped); (c) `make invite` writes a
+  starting `profile.json` and backlog as well. Recommendation: **(b)** for
+  the first few testers, since the tools exist; (c) once it's tedious.
+  **The owner is dealing with Q3 in another session** (2026-11-04); see
+  `docs/plans/spaced-repetition.md` and the readme for what it decides.
+
+## Steps (once the decisions are made)
+
+Each is small and can be checked before the next.
+
+1. **App: invites (D2) and `trust proxy`.** In `auth.js`, `server.js`,
+   `login.html`, `login-page.js`, a new `scripts/invite.js` and
+   `make invite`, with tests. Deployable while the VPS is still
+   loopback-only, so it can be tried through the tunnel's port 3000 first.
+   **Done 2026-11-04**, with these details (proposed that day; the owner
+   decided 6 and 7, the rest as proposed):
+   1. **The invite file**: `auth/invites/<email>.json` with
+      `schemaVersion`, `email`, `createdAt`, `expiresAt` and the code's
+      SHA-256. A fast hash is enough because the code is random, the
+      same reasoning as session tokens (`auth.js`, Sessions). A new invite
+      for the same email replaces the old one.
+   2. **The code**: 16 random bytes (128 bits) in base64url, 22
+      characters, to copy and paste.
+   3. **It expires after 7 days**, and is deleted when used.
+   4. **`make invite EMAIL=…`** prints the code. On the VPS:
+      `sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=…`,
+      as `make rename-question` is run (`docs/deploy-vps.md` §8).
+   5. **The form**: email, invite code, password, confirm. Every refusal
+      gives the same message, as now; throttling stays per email.
+   6. **`MAXRECALL_PASSWORD` goes** (owner: go ahead): the owner can
+      invite themselves, so there's one way to register, and
+      `/etc/maxrecall-dsa/test.env` is no longer needed; the unit file no
+      longer reads it. Existing accounts are untouched. The server logs a
+      line at startup if the variable is still set.
+   7. **Minimum password length: at least 12** (owner's decision), for new
+      passwords only, up from 10 (2026-10-30). I had recommended 15, NIST
+      SP 800-63B rev. 4's minimum for a password used alone
+      ([§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver));
+      12 is knowingly below it. Counted in characters (code points), so an
+      emoji counts once.
+   8. **Password reset**: by hand for now: delete
+      `auth/accounts/<email>.json`, then invite again.
+   9. **`app.set('trust proxy', 'loopback')`**, so `req.secure` and
+      `req.ip` come from nginx's `X-Forwarded-Proto` and `X-Forwarded-For`,
+      believed only from 127.0.0.1
+      ([Express behind proxies](https://expressjs.com/en/guide/behind-proxies.html)).
+      **Corrected 2026-11-04:** I had written that nginx must replace, not
+      append to, any `X-Forwarded-For` a visitor sends. Reading Express 4's
+      dependencies showed it needn't: `forwarded`'s `parse()` reads the
+      header from the right, and `proxy-addr`'s `alladdrs()` stops at the
+      first untrusted address, so `req.ip` is nginx's entry for the visitor,
+      whatever the visitor put to its left. Either nginx setting is safe.
+   10. **A brand-new user**: checked, nothing to fix. Before their first
+       Submit, with no `users/<email>/` folder, `GET /api/profile` gives
+       every language allowed, `GET /api/queue` lists every pair in the
+       backlog, and `GET /api/next` gives `two-sum` in JavaScript. Nothing
+       is written until the first Submit (`updateQueue`).
+
+   **How it was checked (cloud, 2026-11-04):** `make test` 177 (10 new in
+   `auth.test.js`); each of 4 deliberately broken versions of `auth.js`
+   (expiry ignored, any code accepted, length in UTF-16 units, the code
+   stored) failed at least one. `make typecheck` and `make doc-check` pass.
+   The server, on spare ports with throwaway folders: `make invite`, then
+   registering over HTTP (refused the second time, and without `invite`);
+   a login from 127.0.0.1 with `X-Forwarded-Proto: https` got a `Secure`
+   cookie, the same from the container's other address didn't; the
+   Register form in headless Chromium (an 11-character password stopped by
+   the browser, then registered and signed in); `make invite` refused with
+   no `EMAIL`, a non-email, and a folder owned by another user (writing
+   nothing).
+
+   **Found while building:** deleting an account leaves its sessions
+   working (`sessionEmail` doesn't check the account), so a reset by hand
+   should also delete that email's files in `auth/sessions/`. Listed in
+   the readme's Known gaps.
+2. **VPS: firewall.** `ufw` allowing only SSH, 80 and 443
+   ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
+   SSH is allowed **before** enabling, with a second SSH session left open
+   in case of a lockout. Hostinger's panel may have a firewall of its own
+   (not checked).
+3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
+   `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
+   `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
+   nginx, HSTS ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)), and
+   D3's gate. Then `certbot --nginx -d DOMAIN` (Q1).
+4. **Check from Kubuntu.** The redirect; the certificate; the cookie has
+   `Secure` ([RFC 6265 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5));
+   ports 3000 and 3001 still unreachable from outside (deploy-vps.md §6);
+   the trusted marker never appears through the public address.
+5. **A first invite**, to a second email of the owner's, in a private
+   window, before anyone else.
+6. **Backups and the note to testers (D5)**, then invites.
+
+`docs/deploy-vps.md` and the readme's Environments section say "SSH tunnel
+only, nothing exposed". Step 3 makes that untrue, so they're updated in
+the same change.
+
+## Also worth doing, not blocking
+
+- SSH: key-only login (`PasswordAuthentication no` in `sshd_config`), if
+  it isn't already. SSH is already public, so this isn't new exposure.
+- Per-user fairness in the judge queue, if testers end up waiting on each
+  other.
+- Per-IP login throttling in the app (needs step 1's `trust proxy` for a
+  correct `req.ip`).
+
+## Decision log
+
+| Date | Decision |
+|---|---|
+| 2026-11-04 | Plan written; waiting for the owner on Q1–Q2 and D1–D5. |
+| 2026-11-04 | Q1 (owner): the domain doesn't point at the VPS yet, and its name isn't settled, probably `maxrecall-code.net` or similar. Needed before step 3 only. |
+| 2026-11-04 | Q2 (owner): the old MaxRecall runs on a different VPS, so ports 80 and 443 here are free. |
+| 2026-11-04 | Correction (owner asked why the app shouldn't do HTTPS itself, as `maxrecall.net` does): D1 option C's "the unit's `IPAddressDeny=any` would block it reaching Let's Encrypt" was wrong, since certbot runs outside the unit. The real conflict is the other way: the filter covers incoming traffic too, so serving the internet directly means dropping the loopback-only containment. Option C's row rewritten. |
+| 2026-11-04 | D1–D4 decided (owner): as recommended. nginx + certbot; one invite code per person; Basic auth and rate limiting at nginx while testing is limited; go ahead with invited testers the owner trusts. |
+| 2026-11-04 | D5 (owner's idea): a git repository per user folder, asking how git handles names like `daniel.pflager@gmail.com`. Checked: fine; the `safe.directory` ownership check is what needs handling. Details waiting. Step 1's ten details proposed. |
+| 2026-11-04 | Step 1 details (owner): 6, drop `MAXRECALL_PASSWORD`, yes; 7, at least 12 characters for new passwords; the rest as proposed. |
+| 2026-11-04 | Step 1 done. Correction: detail 9's "nginx must replace `X-Forwarded-For`" was wrong; appending is also safe with Express's `trust proxy`. |
+| 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |
+| 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
+| 2026-11-04 | Q3 (owner): to be dealt with in another session. Step 1 goes to `master` through a pull request. |

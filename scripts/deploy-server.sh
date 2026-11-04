@@ -13,8 +13,8 @@
 # asks before changing anything, because it puts a "trusted" port on this
 # machine where anyone local is the owner without signing in, which belongs
 # on the VPS behind SSH, not on a desktop. DEPLOY_CONFIRM=yes skips the
-# question. The optional password file (/etc/maxrecall-dsa/test.env, §4) is
-# a secret you choose, so it stays manual.
+# question. Invites (make invite, §4) stay manual: they're for people you
+# choose.
 #
 # It stops with an error if anything fails, including a "Sandbox:
 # UNAVAILABLE" line in the service's log, or the ports listening on more
