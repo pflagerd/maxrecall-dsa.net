@@ -302,7 +302,14 @@ function buildSeccompFilter() {
   // The compiler's first error line says what's wrong ("fatal error:
   // seccomp.h: No such file or directory"); its last is often just
   // "compilation terminated.".
-  const errorLine = (/** @type {string | undefined} */ text) => {
+  /**
+   * The line of a compiler's output that says what went wrong.
+   *
+   * @param {string | undefined} text - Its standard error.
+   * @returns {string} The first line mentioning an error, else the last
+   *   line, else "".
+   */
+  const errorLine = (text) => {
     const lines = (text || '').trim().split('\n').filter(Boolean);
     return lines.find((line) => /error/i.test(line)) || lines.slice(-1)[0] || '';
   };

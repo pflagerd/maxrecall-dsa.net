@@ -362,9 +362,18 @@ async function sessionEmail(token) {
  */
 async function endSession(token) {
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return;
-  await fs.promises.unlink(sessionFile(token)).catch((/** @type {NodeJS.ErrnoException} */ err) => {
-    if (err.code !== 'ENOENT') throw err;
-  });
+  await fs.promises.unlink(sessionFile(token)).catch(
+    /**
+     * Ignores a session file that's already gone; anything else is passed on.
+     *
+     * @param {NodeJS.ErrnoException} err - Why unlink() failed.
+     * @returns {void}
+     * @throws {NodeJS.ErrnoException} err itself, unless it's ENOENT.
+     */
+    (err) => {
+      if (err.code !== 'ENOENT') throw err;
+    },
+  );
 }
 
 module.exports = {

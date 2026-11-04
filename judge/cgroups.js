@@ -133,7 +133,13 @@ function createSubmissionCgroup(parentDir) {
     // killer ended); peakMb from memory.peak (Linux 5.19+). 0 if unreadable.
     /** @returns {{ limitHits: number, oomKills: number, peakMb: number }} */
     memory() {
-      const read = (/** @type {string} */ file) => {
+      /**
+       * One of the cgroup's files, as text.
+       *
+       * @param {string} file - Its name, e.g. "memory.events".
+       * @returns {string} Its contents, or "" if it can't be read.
+       */
+      const read = (file) => {
         try {
           return fs.readFileSync(path.join(dir, file), 'utf8');
         } catch {
@@ -141,10 +147,18 @@ function createSubmissionCgroup(parentDir) {
         }
       };
       /** memory.events' counters, by name. @type {Record<string, number>} */
-      const events = Object.fromEntries(read('memory.events').split('\n').filter(Boolean).map((line) => {
-        const [name, value] = line.split(' ');
-        return [name, Number(value)];
-      }));
+      const events = Object.fromEntries(read('memory.events').split('\n').filter(Boolean).map(
+        /**
+         * Turns one line of memory.events, e.g. "oom_kill 1", into a [name, count] entry.
+         *
+         * @param {string} line - The line.
+         * @returns {[string, number]} The counter's name and value.
+         */
+        (line) => {
+          const [name, value] = line.split(' ');
+          return [name, Number(value)];
+        },
+      ));
       return {
         limitHits: events.max || 0,
         oomKills: events.oom_kill || 0,

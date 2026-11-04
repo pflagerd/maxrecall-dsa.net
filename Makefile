@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -67,6 +67,15 @@ test: toolchain-deps
 typecheck: node_modules
 	./node_modules/.bin/tsc -p tsconfig.json
 	./node_modules/.bin/tsc -p tsconfig.browser.json
+
+# Checks that every function in the files the two tsconfig files list has a
+# JSDoc block documenting its signature: a @param for each parameter and a
+# @returns (CLAUDE.md, "Documenting code"). make typecheck checks that the
+# types written are right; this checks that they're written at all. Uses
+# TypeScript 6.0.3's parser (the "typescript6" development dependency).
+# Fails, listing each function as file:line, if any isn't documented.
+doc-check: node_modules
+	node scripts/doc-check.js
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

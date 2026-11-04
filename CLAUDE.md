@@ -62,8 +62,10 @@ Teaching them what you're doing comes first. Speed comes second.
   like. Put the block directly before the function, inside the call (e.g.
   between a route's path and its handler): above the whole statement,
   TypeScript ignores it. Every inline function with a `{ ... }` body gets
-  one; a single-expression arrow (`(tc) => !tc.hidden`) or an empty no-op
-  (`.catch(() => {})`) doesn't (owner, 2026-11-03).
+  one; a single-expression arrow (`(tc) => !tc.hidden`), an empty no-op
+  (`.catch(() => {})`), or a test body (the function passed straight to
+  `test(...)` in a `*.test.js` file, whose name documents it) doesn't
+  (owner, 2026-11-03).
 - Words (owner): a function's *signature* is its parameters' and return
   value's types; a `@typedef` for a record or object is a *type*, not a
   "shape".
@@ -72,7 +74,11 @@ Teaching them what you're doing comes first. Speed comes second.
   with anything else. `{unknown}` only for a value that really can be
   anything (owner, 2026-11-03).
 - A documented file is listed in `tsconfig.json` (Node) or
-  `tsconfig.browser.json` (browser), and `make typecheck` must pass. Where comments alone can't satisfy the checker, use a JSDoc
+  `tsconfig.browser.json` (browser), and `make typecheck` and
+  `make doc-check` must pass: the first checks that the types written are
+  right, the second that every function's signature is written (a block,
+  a `@param` for each parameter, a `@returns`). Where comments alone can't
+  satisfy the checker, use a JSDoc
   cast (`/** @type {T} */ (expr)`) with a comment saying why, rather than
   changing behaviour. See `docs/plans/documentation-standard.md`.
 

@@ -176,7 +176,14 @@ function stageHelpers() {
     fs.mkdirSync(dir, { recursive: true });
     fs.chmodSync(dir, 0o755);
   }
-  const copy = (/** @type {string} */ from, /** @type {string} */ to) => {
+  /**
+   * Copies one helper file, readable by everyone.
+   *
+   * @param {string} from - The file in the checkout.
+   * @param {string} to - Where it goes in HELPER_DIR.
+   * @returns {void}
+   */
+  const copy = (from, to) => {
     fs.copyFileSync(from, to);
     fs.chmodSync(to, 0o644);
   };
@@ -335,11 +342,21 @@ sys.stdout.write('\\n${RESULT_MARKER}\\n' + json.dumps(__judge_results, default=
 function buildCppSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
-    .map((type, i) => {
-      const extractor = CPP_PARAM_EXTRACTORS[type];
-      if (!extractor) throw new Error(`Unsupported C++ param type: ${type}`);
-      return `${extractor}(args[${i}])`;
-    })
+    .map(
+    /**
+     * The C++ expression that reads one argument from the test case's JSON.
+     *
+     * @param {string} type - The parameter's C++ type, from the question's signature.
+     * @param {number} i - Its position.
+     * @returns {string} The expression.
+     * @throws {Error} If the judge can't read that type.
+     */
+    (type, i) => {
+        const extractor = CPP_PARAM_EXTRACTORS[type];
+        if (!extractor) throw new Error(`Unsupported C++ param type: ${type}`);
+        return `${extractor}(args[${i}])`;
+      },
+  )
     .join(', ');
 
   return `${CPP_JSON_HELPER}
@@ -403,11 +420,21 @@ int main() {
 function buildJavaSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
-    .map((type, i) => {
-      const extractor = JAVA_PARAM_EXTRACTORS[type];
-      if (!extractor) throw new Error(`Unsupported Java param type: ${type}`);
-      return `__judge_args.get(${i}).${extractor}()`;
-    })
+    .map(
+    /**
+     * The Java expression that reads one argument from the test case's JSON.
+     *
+     * @param {string} type - The parameter's Java type, from the question's signature.
+     * @param {number} i - Its position.
+     * @returns {string} The expression.
+     * @throws {Error} If the judge can't read that type.
+     */
+    (type, i) => {
+        const extractor = JAVA_PARAM_EXTRACTORS[type];
+        if (!extractor) throw new Error(`Unsupported Java param type: ${type}`);
+        return `__judge_args.get(${i}).${extractor}()`;
+      },
+  )
     .join(', ');
   const returns = signature.returns || 'void';
 
@@ -483,11 +510,21 @@ ${signature.customSerializer || ''}
 function buildDSource(functionName, signature) {
   const params = signature.params || [];
   const argExprs = params
-    .map((type, i) => {
-      const extractor = D_PARAM_EXTRACTORS[type];
-      if (!extractor) throw new Error(`Unsupported D param type: ${type}`);
-      return `${extractor}(__judge_args[${i}])`;
-    })
+    .map(
+    /**
+     * The D expression that reads one argument from the test case's JSON.
+     *
+     * @param {string} type - The parameter's D type, from the question's signature.
+     * @param {number} i - Its position.
+     * @returns {string} The expression.
+     * @throws {Error} If the judge can't read that type.
+     */
+    (type, i) => {
+        const extractor = D_PARAM_EXTRACTORS[type];
+        if (!extractor) throw new Error(`Unsupported D param type: ${type}`);
+        return `${extractor}(__judge_args[${i}])`;
+      },
+  )
     .join(', ');
 
   return `${D_STANDARD_IMPORTS.map((m) => `import ${m};`).join('\n')}
@@ -568,12 +605,21 @@ void main() {
  * @returns {TestResult[]} Every case failed, the first with the error.
  */
 function buildFailureResults(testCases, errorText, getInput = (tc) => tc.args) {
-  return testCases.map((tc, index) => {
-    if (index !== 0) return { index, hidden: tc.hidden, passed: false };
-    return tc.hidden
-      ? { index, hidden: true, passed: false, error: errorText }
-      : { index, hidden: false, passed: false, input: getInput(tc), error: errorText };
-  });
+  return testCases.map(
+    /**
+     * One test case's failed result: the first carries the error.
+     *
+     * @param {TestCase} tc - The test case.
+     * @param {number} index - Its position.
+     * @returns {TestResult} It, failed.
+     */
+    (tc, index) => {
+      if (index !== 0) return { index, hidden: tc.hidden, passed: false };
+      return tc.hidden
+        ? { index, hidden: true, passed: false, error: errorText }
+        : { index, hidden: false, passed: false, input: getInput(tc), error: errorText };
+    },
+  );
 }
 
 /**
@@ -848,33 +894,70 @@ function compileSubmission(language, workDir, cg = null, judgeMode = 'function')
   if (!compile) return Promise.resolve(null);
   const proc = sandboxedArgs(compile.argv, workDir, { writableWork: true, addressSpaceBytes: compile.addressSpaceBytes, cg });
   const before = cg ? cg.memory() : null;
-  return new Promise((resolve) => {
-    const child = startProcess(proc, {
-      env: SUBMISSION_ENV,
-      cwd: proc.cwd,
-      timeout: compile.timeoutMs,
-      killSignal: 'SIGKILL',
-    });
+  return new Promise(
+    /**
+     * Starts the compiler and resolves when it has ended.
+     *
+     * @param {(outcome: CompileOutcome) => void} resolve - Called once, with how it went.
+     * @returns {void}
+     */
+    (resolve) => {
+      const child = startProcess(proc, {
+        env: SUBMISSION_ENV,
+        cwd: proc.cwd,
+        timeout: compile.timeoutMs,
+        killSignal: 'SIGKILL',
+      });
 
-    let stderr = '';
-    let timedOut = false;
+      let stderr = '';
+      let timedOut = false;
 
-    // The streams are pipes (startProcess's default), so they exist.
-    /** @type {import('stream').Readable} */ (child.stderr).on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, stderr: String(err.message || err), timedOut, memoryExceeded: false, memoryLimitHit: false });
-    });
-    child.on('close', (code, signal) => {
-      const after = cg ? cg.memory() : null;
-      // With a cgroup (the Boolean(cg) first), before and after were both read.
-      const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
-      const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
-      if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE)) timedOut = true;
-      resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded, memoryLimitHit });
-    });
-  });
+      // The streams are pipes (startProcess's default), so they exist.
+      /** @type {import('stream').Readable} */ (child.stderr).on(
+        'data',
+        /**
+         * Keeps the compiler's messages, up to MAX_CAPTURED_OUTPUT.
+         *
+         * @param {string} chunk - The next piece of its standard error.
+         * @returns {void}
+         */
+        (chunk) => {
+          if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+        },
+      );
+      child.on(
+        'error',
+        /**
+         * The compiler couldn't be started.
+         *
+         * @param {Error} err - Why.
+         * @returns {void}
+         */
+        (err) => {
+          resolve({ success: false, stderr: String(err.message || err), timedOut, memoryExceeded: false, memoryLimitHit: false });
+        },
+      );
+      child.on(
+        'close',
+        /**
+         * The compiler has ended: works out whether it succeeded, timed out or
+         * ran out of memory.
+         *
+         * @param {number | null} code - Its exit code; null if killed by a signal.
+         * @param {NodeJS.Signals | null} signal - The signal that killed it, if any.
+         * @returns {void}
+         */
+        (code, signal) => {
+          const after = cg ? cg.memory() : null;
+          // With a cgroup (the Boolean(cg) first), before and after were both read.
+          const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
+          const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
+          if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM' || code === CPU_LIMIT_EXIT_CODE)) timedOut = true;
+          resolve({ success: code === 0 && !timedOut && !memoryExceeded, stderr, timedOut, memoryExceeded, memoryLimitHit });
+        },
+      );
+    },
+  );
 }
 
 // Runs one submission process: inside the sandbox when it works, with its
@@ -903,42 +986,88 @@ function compileSubmission(language, workDir, cg = null, judgeMode = 'function')
 function spawnJudged(argv, stdinPayload, workDir, timeoutMs = TIMEOUT_MS, cg = null) {
   const proc = sandboxedArgs(argv, workDir, { cg });
   const before = cg ? cg.memory() : null;
-  return new Promise((resolve) => {
-    const child = startProcess(proc, {
-      env: SUBMISSION_ENV,
-      cwd: proc.cwd,
-      timeout: timeoutMs,
-      killSignal: 'SIGKILL',
-    });
+  return new Promise(
+    /**
+     * Starts the submission and resolves when it has ended.
+     *
+     * @param {(outcome: RunOutcome) => void} resolve - Called once, with how it went.
+     * @returns {void}
+     */
+    (resolve) => {
+      const child = startProcess(proc, {
+        env: SUBMISSION_ENV,
+        cwd: proc.cwd,
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
+      });
 
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
 
-    // The streams are pipes (startProcess's default), so they exist.
-    /** @type {import('stream').Readable} */ (child.stdout).on('data', (chunk) => {
-      if (stdout.length < MAX_CAPTURED_OUTPUT) stdout += chunk;
-    });
-    /** @type {import('stream').Readable} */ (child.stderr).on('data', (chunk) => {
-      if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
-    });
+      // The streams are pipes (startProcess's default), so they exist.
+      /** @type {import('stream').Readable} */ (child.stdout).on(
+        'data',
+        /**
+         * Keeps the submission's standard output, up to MAX_CAPTURED_OUTPUT.
+         *
+         * @param {string} chunk - The next piece.
+         * @returns {void}
+         */
+        (chunk) => {
+          if (stdout.length < MAX_CAPTURED_OUTPUT) stdout += chunk;
+        },
+      );
+      /** @type {import('stream').Readable} */ (child.stderr).on(
+        'data',
+        /**
+         * Keeps the submission's standard error, up to MAX_CAPTURED_OUTPUT.
+         *
+         * @param {string} chunk - The next piece.
+         * @returns {void}
+         */
+        (chunk) => {
+          if (stderr.length < MAX_CAPTURED_OUTPUT) stderr += chunk;
+        },
+      );
 
-    child.on('error', (err) => {
-      resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null, memoryExceeded: false, memoryLimitHit: false });
-    });
+      child.on(
+        'error',
+        /**
+         * The submission couldn't be started.
+         *
+         * @param {Error} err - Why.
+         * @returns {void}
+         */
+        (err) => {
+          resolve({ stdout, stderr: String(err.message || err), timedOut, exitCode: null, memoryExceeded: false, memoryLimitHit: false });
+        },
+      );
 
-    child.on('close', (code, signal) => {
-      const after = cg ? cg.memory() : null;
-      // With a cgroup (the Boolean(cg) first), before and after were both read.
-      const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
-      const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
-      if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM')) timedOut = true;
-      resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded, memoryLimitHit });
-    });
+      child.on(
+        'close',
+        /**
+         * The submission has ended: works out whether it timed out or ran out of
+         * memory.
+         *
+         * @param {number | null} code - Its exit code; null if killed by a signal.
+         * @param {NodeJS.Signals | null} signal - The signal that killed it, if any.
+         * @returns {void}
+         */
+        (code, signal) => {
+          const after = cg ? cg.memory() : null;
+          // With a cgroup (the Boolean(cg) first), before and after were both read.
+          const memoryExceeded = Boolean(cg) && /** @type {MemoryCounters} */ (after).oomKills > /** @type {MemoryCounters} */ (before).oomKills;
+          const memoryLimitHit = Boolean(cg) && /** @type {MemoryCounters} */ (after).limitHits > /** @type {MemoryCounters} */ (before).limitHits;
+          if (!memoryExceeded && (signal === 'SIGKILL' || signal === 'SIGTERM')) timedOut = true;
+          resolve({ stdout, stderr, timedOut, exitCode: code, memoryExceeded, memoryLimitHit });
+        },
+      );
 
-    /** @type {import('stream').Writable} */ (child.stdin).write(stdinPayload);
-    /** @type {import('stream').Writable} */ (child.stdin).end();
-  });
+      /** @type {import('stream').Writable} */ (child.stdin).write(stdinPayload);
+      /** @type {import('stream').Writable} */ (child.stdin).end();
+    },
+  );
 }
 
 // Runs `code` (in `language`) against `testCases` for `functionName`, under
@@ -1056,20 +1185,29 @@ async function runFunctionSubmission({ language, code, functionName, testCases, 
 
     let passedCount = 0;
     let hadError = false;
-    const results = testCases.map((tc, index) => {
-      const entry = parsed[index] || { error: 'No result produced for this test case.' };
-      if (entry.error) {
-        hadError = true;
+    const results = testCases.map(
+      /**
+       * One test case's result, from what the harness reported for it.
+       *
+       * @param {TestCase} tc - The test case.
+       * @param {number} index - Its position, and its entry's in the harness's results.
+       * @returns {TestResult} Passed or not, with details for a visible case.
+       */
+      (tc, index) => {
+        const entry = parsed[index] || { error: 'No result produced for this test case.' };
+        if (entry.error) {
+          hadError = true;
+          return tc.hidden
+            ? { index, hidden: true, passed: false }
+            : { index, hidden: false, passed: false, input: tc.args, expected: tc.expected, error: entry.error };
+        }
+        const passed = deepEqual(entry.actual, tc.expected);
+        if (passed) passedCount += 1;
         return tc.hidden
-          ? { index, hidden: true, passed: false }
-          : { index, hidden: false, passed: false, input: tc.args, expected: tc.expected, error: entry.error };
-      }
-      const passed = deepEqual(entry.actual, tc.expected);
-      if (passed) passedCount += 1;
-      return tc.hidden
-        ? { index, hidden: true, passed }
-        : { index, hidden: false, passed, input: tc.args, expected: tc.expected, actual: entry.actual };
-    });
+          ? { index, hidden: true, passed }
+          : { index, hidden: false, passed, input: tc.args, expected: tc.expected, actual: entry.actual };
+      },
+    );
 
     let status;
     if (passedCount === testCases.length) status = 'Accepted';
