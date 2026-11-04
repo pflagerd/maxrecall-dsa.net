@@ -50,16 +50,41 @@ async function loadProblems() {
     // Bubbles are added as elements, not in the HTML string above, so
     // names from question files can't inject markup.
     const labels = await labelsPromise;
-    rowsEl.querySelectorAll('.problem-bubbles .bubbles').forEach((el, i) => {
-      renderBubbles(el, problems[i], labels);
-    });
+    rowsEl.querySelectorAll('.problem-bubbles .bubbles').forEach(
+      /**
+       * Draws one row's source and topic bubbles.
+       *
+       * @param {Element} el - The row's .bubbles element.
+       * @param {number} i - The row's position, the same as its problem's.
+       * @returns {void}
+       */
+      (el, i) => {
+        renderBubbles(el, problems[i], labels);
+      },
+    );
 
-    rowsEl.querySelectorAll('.problem-row').forEach((row) => {
-      row.addEventListener('click', () => {
-        // Every row was written with data-slug, above.
-        window.location.href = `/problem.html?slug=${encodeURIComponent(/** @type {string} */ (/** @type {HTMLElement} */ (row).dataset.slug))}`;
-      });
-    });
+    rowsEl.querySelectorAll('.problem-row').forEach(
+      /**
+       * Makes clicking a row open its question.
+       *
+       * @param {Element} row - A .problem-row.
+       * @returns {void}
+       */
+      (row) => {
+        row.addEventListener(
+          'click',
+          /**
+           * Opens the row's question.
+           *
+           * @returns {void}
+           */
+          () => {
+            // Every row was written with data-slug, above.
+            window.location.href = `/problem.html?slug=${encodeURIComponent(/** @type {string} */ (/** @type {HTMLElement} */ (row).dataset.slug))}`;
+          },
+        );
+      },
+    );
   } catch (err) {
     rowsEl.innerHTML = `<tr><td colspan="3">Failed to load problems: ${/** @type {Error} */ (err).message}</td></tr>`;
   }

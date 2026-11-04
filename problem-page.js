@@ -120,50 +120,69 @@ function savePaneWidth() {
   if (Number.isFinite(width) && width > 0) setDescriptionPaneWidth(width);
 })();
 
-resetSplitBtn.addEventListener('click', () => {
-  const bounds = getPaneWidthBounds();
-  setDescriptionPaneWidth(bounds.span * DEFAULT_PANE_FRACTION, bounds);
-  savePaneWidth();
-});
-
-paneResizer.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  paneResizer.setPointerCapture(e.pointerId);
-  paneResizer.classList.add('dragging');
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-
-  const bounds = getPaneWidthBounds();
-
+resetSplitBtn.addEventListener(
+  'click',
   /**
-   * Follows the pointer while dragging.
+   * Puts the description/editor split back to its default (the golden
+   * ratio), and remembers that.
    *
-   * @param {PointerEvent} moveEvent - The pointer's move.
    * @returns {void}
    */
-  function onMove(moveEvent) {
-    setDescriptionPaneWidth(moveEvent.clientX - bounds.paneLeft, bounds);
-  }
-
-  /**
-   * Ends the drag and remembers the width.
-   *
-   * @param {PointerEvent} upEvent - The pointer's release.
-   * @returns {void}
-   */
-  function onUp(upEvent) {
-    paneResizer.releasePointerCapture(upEvent.pointerId);
-    paneResizer.classList.remove('dragging');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    paneResizer.removeEventListener('pointermove', onMove);
-    paneResizer.removeEventListener('pointerup', onUp);
+  () => {
+    const bounds = getPaneWidthBounds();
+    setDescriptionPaneWidth(bounds.span * DEFAULT_PANE_FRACTION, bounds);
     savePaneWidth();
-  }
+  },
+);
 
-  paneResizer.addEventListener('pointermove', onMove);
-  paneResizer.addEventListener('pointerup', onUp);
-});
+paneResizer.addEventListener(
+  'pointerdown',
+  /**
+   * Starts dragging the description/editor split: follows the pointer
+   * until it's released, then remembers the width.
+   *
+   * @param {PointerEvent} e - The press on the resizer bar.
+   * @returns {void}
+   */
+  (e) => {
+    e.preventDefault();
+    paneResizer.setPointerCapture(e.pointerId);
+    paneResizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const bounds = getPaneWidthBounds();
+
+    /**
+     * Follows the pointer while dragging.
+     *
+     * @param {PointerEvent} moveEvent - The pointer's move.
+     * @returns {void}
+     */
+    function onMove(moveEvent) {
+      setDescriptionPaneWidth(moveEvent.clientX - bounds.paneLeft, bounds);
+    }
+
+    /**
+     * Ends the drag and remembers the width.
+     *
+     * @param {PointerEvent} upEvent - The pointer's release.
+     * @returns {void}
+     */
+    function onUp(upEvent) {
+      paneResizer.releasePointerCapture(upEvent.pointerId);
+      paneResizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      paneResizer.removeEventListener('pointermove', onMove);
+      paneResizer.removeEventListener('pointerup', onUp);
+      savePaneWidth();
+    }
+
+    paneResizer.addEventListener('pointermove', onMove);
+    paneResizer.addEventListener('pointerup', onUp);
+  },
+);
 
 // Drag-to-resize the editor/console split, same approach as the pane
 // resizer above but on the vertical axis. #editor-host defaults to flex: 1
@@ -173,55 +192,65 @@ paneResizer.addEventListener('pointerdown', (e) => {
 const MIN_EDITOR_HEIGHT = 180; // matches #editor-host's CSS min-height
 const MIN_CONSOLE_HEIGHT = 80;
 
-rowResizer.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  rowResizer.setPointerCapture(e.pointerId);
-  rowResizer.classList.add('dragging');
-  document.body.style.cursor = 'row-resize';
-  document.body.style.userSelect = 'none';
-
-  const editorTop = editorHostEl.getBoundingClientRect().top;
-  const consoleBottom = consolePanelEl.getBoundingClientRect().bottom;
-  const span = consoleBottom - editorTop;
-  // row-resizer height + the fixed-height console-toolbar between them,
-  // measured rather than hardcoded for the same reason as the pane resizer.
-  const fixedOverhead = span - editorHostEl.getBoundingClientRect().height - consolePanelEl.getBoundingClientRect().height;
-  const maxEditorHeight = span - fixedOverhead - MIN_CONSOLE_HEIGHT;
-
-  // Once a drag happens, .console-panel switches from its CSS max-height
-  // cap to filling whatever #editor-host doesn't take.
-  consolePanelEl.style.flex = '1 1 auto';
-  consolePanelEl.style.maxHeight = 'none';
-
+rowResizer.addEventListener(
+  'pointerdown',
   /**
-   * Follows the pointer while dragging.
+   * Starts dragging the editor/console split: follows the pointer until
+   * it's released.
    *
-   * @param {PointerEvent} moveEvent - The pointer's move.
+   * @param {PointerEvent} e - The press on the resizer bar.
    * @returns {void}
    */
-  function onMove(moveEvent) {
-    const newEditorHeight = Math.max(MIN_EDITOR_HEIGHT, Math.min(moveEvent.clientY - editorTop, maxEditorHeight));
-    editorHostEl.style.flex = `0 0 ${newEditorHeight}px`;
-  }
+  (e) => {
+    e.preventDefault();
+    rowResizer.setPointerCapture(e.pointerId);
+    rowResizer.classList.add('dragging');
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
 
-  /**
-   * Ends the drag.
-   *
-   * @param {PointerEvent} upEvent - The pointer's release.
-   * @returns {void}
-   */
-  function onUp(upEvent) {
-    rowResizer.releasePointerCapture(upEvent.pointerId);
-    rowResizer.classList.remove('dragging');
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-    rowResizer.removeEventListener('pointermove', onMove);
-    rowResizer.removeEventListener('pointerup', onUp);
-  }
+    const editorTop = editorHostEl.getBoundingClientRect().top;
+    const consoleBottom = consolePanelEl.getBoundingClientRect().bottom;
+    const span = consoleBottom - editorTop;
+    // row-resizer height + the fixed-height console-toolbar between them,
+    // measured rather than hardcoded for the same reason as the pane resizer.
+    const fixedOverhead = span - editorHostEl.getBoundingClientRect().height - consolePanelEl.getBoundingClientRect().height;
+    const maxEditorHeight = span - fixedOverhead - MIN_CONSOLE_HEIGHT;
 
-  rowResizer.addEventListener('pointermove', onMove);
-  rowResizer.addEventListener('pointerup', onUp);
-});
+    // Once a drag happens, .console-panel switches from its CSS max-height
+    // cap to filling whatever #editor-host doesn't take.
+    consolePanelEl.style.flex = '1 1 auto';
+    consolePanelEl.style.maxHeight = 'none';
+
+    /**
+     * Follows the pointer while dragging.
+     *
+     * @param {PointerEvent} moveEvent - The pointer's move.
+     * @returns {void}
+     */
+    function onMove(moveEvent) {
+      const newEditorHeight = Math.max(MIN_EDITOR_HEIGHT, Math.min(moveEvent.clientY - editorTop, maxEditorHeight));
+      editorHostEl.style.flex = `0 0 ${newEditorHeight}px`;
+    }
+
+    /**
+     * Ends the drag.
+     *
+     * @param {PointerEvent} upEvent - The pointer's release.
+     * @returns {void}
+     */
+    function onUp(upEvent) {
+      rowResizer.releasePointerCapture(upEvent.pointerId);
+      rowResizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      rowResizer.removeEventListener('pointermove', onMove);
+      rowResizer.removeEventListener('pointerup', onUp);
+    }
+
+    rowResizer.addEventListener('pointermove', onMove);
+    rowResizer.addEventListener('pointerup', onUp);
+  },
+);
 
 // Icon paths swapped on the same button depending on fullscreen state.
 const EXPAND_ICON_PATHS = '<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>';
@@ -242,13 +271,21 @@ function updateFullscreenButton() {
 }
 
 if (fullscreenBtn && document.documentElement.requestFullscreen) {
-  fullscreenBtn.addEventListener('click', () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  });
+  fullscreenBtn.addEventListener(
+    'click',
+    /**
+     * Enters full screen, or leaves it.
+     *
+     * @returns {void}
+     */
+    () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    },
+  );
   // Keeps the icon in sync if fullscreen is exited another way (Escape, browser UI).
   document.addEventListener('fullscreenchange', updateFullscreenButton);
   updateFullscreenButton();
@@ -280,20 +317,44 @@ function setupTabGroup(tabsContainerSelector, panels, defaultTab) {
    * @returns {void}
    */
   function setActive(tabName) {
-    tabs.forEach((tab) => {
-      const isActive = tab.dataset.tab === tabName;
-      tab.classList.toggle('active', isActive);
-      tab.setAttribute('aria-selected', String(isActive));
-    });
-    Object.entries(panels).forEach(([name, panel]) => {
-      panel.hidden = name !== tabName;
-    });
+    tabs.forEach(
+      /**
+       * Marks one tab button active or not.
+       *
+       * @param {HTMLElement} tab - A .tab-button in the group.
+       * @returns {void}
+       */
+      (tab) => {
+        const isActive = tab.dataset.tab === tabName;
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+      },
+    );
+    Object.entries(panels).forEach(
+      /**
+       * Shows one panel if it's the active tab's, hides it otherwise.
+       *
+       * @param {[string, HTMLElement]} entry - The panel's tab name, and the panel.
+       * @returns {void}
+       */
+      ([name, panel]) => {
+        panel.hidden = name !== tabName;
+      },
+    );
   }
 
-  tabs.forEach((tab) => {
-    // Every .tab-button has a data-tab (problem.html).
-    tab.addEventListener('click', () => setActive(/** @type {string} */ (tab.dataset.tab)));
-  });
+  tabs.forEach(
+    /**
+     * Makes clicking a tab button show its panel.
+     *
+     * @param {HTMLElement} tab - A .tab-button in the group.
+     * @returns {void}
+     */
+    (tab) => {
+      // Every .tab-button has a data-tab (problem.html).
+      tab.addEventListener('click', () => setActive(/** @type {string} */ (tab.dataset.tab)));
+    },
+  );
   setActive(defaultTab);
   return setActive;
 }
@@ -306,11 +367,20 @@ const setDescriptionTab = setupTabGroup('.description-tabs', descriptionTabPanel
 // cross-references another description-pane tab. Delegated on the pane
 // itself — not attached per-render — since both tabs' content gets
 // replaced wholesale on every language switch.
-descriptionPaneEl.addEventListener('click', (e) => {
-  // A click's target is an element; a .tab-ref-link has a data-tab.
-  const link = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.tab-ref-link'));
-  if (link) setDescriptionTab(/** @type {string} */ (link.dataset.tab));
-});
+descriptionPaneEl.addEventListener(
+  'click',
+  /**
+   * Follows a link to another description tab (a .tab-ref-link).
+   *
+   * @param {MouseEvent} e - Any click in the description pane.
+   * @returns {void}
+   */
+  (e) => {
+    // A click's target is an element; a .tab-ref-link has a data-tab.
+    const link = /** @type {HTMLElement | null} */ (/** @type {Element} */ (e.target).closest('.tab-ref-link'));
+    if (link) setDescriptionTab(/** @type {string} */ (link.dataset.tab));
+  },
+);
 
 /**
  * One example in a question's description.
@@ -489,11 +559,20 @@ function renderTimer() {
   timerBtn.setAttribute('aria-label', timerBtn.title);
 }
 
-timerBtn.addEventListener('click', () => {
-  timerHidden = !timerHidden;
-  setStoredTimerHidden(timerHidden);
-  renderTimer();
-});
+timerBtn.addEventListener(
+  'click',
+  /**
+   * Hides or shows the timer's digits, and remembers that. The clock
+   * counts either way.
+   *
+   * @returns {void}
+   */
+  () => {
+    timerHidden = !timerHidden;
+    setStoredTimerHidden(timerHidden);
+    renderTimer();
+  },
+);
 document.addEventListener('visibilitychange', updateClocks);
 // A quarter second, so the display never skips a second.
 setInterval(renderTimer, 250);
@@ -656,12 +735,21 @@ async function loadProfile() {
  * @returns {void}
  */
 function applyProfileToControls() {
-  languageCheckboxes.forEach((cb) => {
-    const lang = /** @type {string} */ (cb.dataset.lang); // every checkbox has data-lang
-    // Each checkbox is in its row, a .language-filter-row (problem.html).
-    /** @type {HTMLElement} */ (cb.closest('.language-filter-row')).hidden = !profile.allowedLanguages.includes(lang);
-    cb.checked = profile.languages.includes(lang);
-  });
+  languageCheckboxes.forEach(
+    /**
+     * Shows or hides one language's menu row, and ticks its checkbox if the
+     * language is turned on.
+     *
+     * @param {HTMLInputElement} cb - A language's checkbox.
+     * @returns {void}
+     */
+    (cb) => {
+      const lang = /** @type {string} */ (cb.dataset.lang); // every checkbox has data-lang
+      // Each checkbox is in its row, a .language-filter-row (problem.html).
+      /** @type {HTMLElement} */ (cb.closest('.language-filter-row')).hidden = !profile.allowedLanguages.includes(lang);
+      cb.checked = profile.languages.includes(lang);
+    },
+  );
   updateCheckboxDisabledStates();
   renderLanguageSelectOptions(new Set(profile.languages));
   languageSelect.disabled = !profile.canSwitchLanguage;
@@ -718,10 +806,18 @@ function pickInitialLanguage(problem) {
 /** @returns {void} */
 function updateCheckboxDisabledStates() {
   const checkedCount = languageCheckboxes.filter((cb) => cb.checked).length;
-  languageCheckboxes.forEach((cb) => {
-    cb.disabled = !profile.canChooseLanguages || (checkedCount === 1 && cb.checked);
-    cb.title = profile.canChooseLanguages ? '' : 'Choosing languages is turned off for you.';
-  });
+  languageCheckboxes.forEach(
+    /**
+     * Enables or disables one checkbox.
+     *
+     * @param {HTMLInputElement} cb - A language's checkbox.
+     * @returns {void}
+     */
+    (cb) => {
+      cb.disabled = !profile.canChooseLanguages || (checkedCount === 1 && cb.checked);
+      cb.title = profile.canChooseLanguages ? '' : 'Choosing languages is turned off for you.';
+    },
+  );
 }
 
 /**
@@ -738,9 +834,17 @@ function closeLanguageFilterMenu() {
 // the checkboxes, which only control availability.
 /** @returns {void} */
 function updateDefaultLanguageHighlight() {
-  languageFilterNames.forEach((el) => {
-    el.classList.toggle('is-default', el.dataset.lang === profile.defaultLanguage);
-  });
+  languageFilterNames.forEach(
+    /**
+     * Marks one language's name if it's the default.
+     *
+     * @param {HTMLElement} el - A .language-filter-name.
+     * @returns {void}
+     */
+    (el) => {
+      el.classList.toggle('is-default', el.dataset.lang === profile.defaultLanguage);
+    },
+  );
 }
 
 languageFilterBtn.addEventListener(
@@ -791,83 +895,99 @@ document.addEventListener(
   },
 );
 
-languageCheckboxes.forEach((checkbox) => {
-  checkbox.addEventListener(
-    'change',
-    /**
-     * Turns a language on or off, and saves that to the profile. Reverts
-     * the checkbox if it can't be saved.
-     *
-     * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
-     */
-    async () => {
-      const lang = /** @type {string} */ (checkbox.dataset.lang); // every checkbox has data-lang
+languageCheckboxes.forEach(
+  /**
+   * Wires up one language's checkbox.
+   *
+   * @param {HTMLInputElement} checkbox - A language's checkbox.
+   * @returns {void}
+   */
+  (checkbox) => {
+    checkbox.addEventListener(
+      'change',
+      /**
+       * Turns a language on or off, and saves that to the profile. Reverts
+       * the checkbox if it can't be saved.
+       *
+       * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
+       */
+      async () => {
+        const lang = /** @type {string} */ (checkbox.dataset.lang); // every checkbox has data-lang
 
-      // Unchecking the language currently active in the editor: switch to
-      // another available language this problem supports first, or revert
-      // the checkbox if there's no such language to fall back to.
-      if (!checkbox.checked && problem && lang === currentLanguage) {
-        // problem was checked just above; the checker can't see that inside this callback.
-        const fallback = KNOWN_LANGUAGES.find((l) =>
-          l !== lang
-          && /** @type {PublicProblem} */ (problem).starterCode[l]
-          && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
-        );
-        if (!fallback || !(await switchLanguage(fallback))) {
-          checkbox.checked = true;
-          return;
+        // Unchecking the language currently active in the editor: switch to
+        // another available language this problem supports first, or revert
+        // the checkbox if there's no such language to fall back to.
+        if (!checkbox.checked && problem && lang === currentLanguage) {
+          // problem was checked just above; the checker can't see that inside this callback.
+          const fallback = KNOWN_LANGUAGES.find((l) =>
+            l !== lang
+            && /** @type {PublicProblem} */ (problem).starterCode[l]
+            && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
+          );
+          if (!fallback || !(await switchLanguage(fallback))) {
+            checkbox.checked = true;
+            return;
+          }
         }
-      }
 
-      // The learner's order is kept (it orders new pairs, D2 decision 2); a
-      // language turned on goes last.
-      const languages = checkbox.checked ? [...profile.languages, lang] : profile.languages.filter((l) => l !== lang);
-      try {
-        await saveProfileChange({ languages });
-      } catch (err) {
-        checkbox.checked = !checkbox.checked;
-        alert(`Couldn't save that: ${/** @type {Error} */ (err).message}`);
-      }
-      applyProfileToControls();
-    },
-  );
-});
+        // The learner's order is kept (it orders new pairs, D2 decision 2); a
+        // language turned on goes last.
+        const languages = checkbox.checked ? [...profile.languages, lang] : profile.languages.filter((l) => l !== lang);
+        try {
+          await saveProfileChange({ languages });
+        } catch (err) {
+          checkbox.checked = !checkbox.checked;
+          alert(`Couldn't save that: ${/** @type {Error} */ (err).message}`);
+        }
+        applyProfileToControls();
+      },
+    );
+  },
+);
 
 // Clicking a language's name sets it as the default and switches the editor
 // to it (independent of its checkbox — clicking the checkbox only toggles
 // availability, never the default). Setting a language as default also
 // turns it on, since a default that isn't selectable in language-select
 // wouldn't make sense. Each part happens only if the profile permits it.
-languageFilterNames.forEach((nameEl) => {
-  nameEl.addEventListener(
-    'click',
-    /**
-     * Turns the language on if needed, then switches to it (which also
-     * saves it as the default), as far as the profile permits.
-     *
-     * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
-     */
-    async () => {
-      const lang = /** @type {string} */ (nameEl.dataset.lang); // every name has data-lang (problem.html)
-      if (!profile.languages.includes(lang)) {
-        if (!profile.canChooseLanguages) {
-          alert(`${LANGUAGE_LABELS[lang]} is turned off, and choosing languages is turned off for you.`);
-          return;
+languageFilterNames.forEach(
+  /**
+   * Wires up one language's name in the menu.
+   *
+   * @param {HTMLElement} nameEl - A .language-filter-name.
+   * @returns {void}
+   */
+  (nameEl) => {
+    nameEl.addEventListener(
+      'click',
+      /**
+       * Turns the language on if needed, then switches to it (which also
+       * saves it as the default), as far as the profile permits.
+       *
+       * @returns {Promise<void>} Never rejects: a failure is shown in an alert.
+       */
+      async () => {
+        const lang = /** @type {string} */ (nameEl.dataset.lang); // every name has data-lang (problem.html)
+        if (!profile.languages.includes(lang)) {
+          if (!profile.canChooseLanguages) {
+            alert(`${LANGUAGE_LABELS[lang]} is turned off, and choosing languages is turned off for you.`);
+            return;
+          }
+          try {
+            await saveProfileChange({ languages: [...profile.languages, lang] });
+          } catch (err) {
+            alert(`Couldn't turn ${LANGUAGE_LABELS[lang]} on: ${/** @type {Error} */ (err).message}`);
+            return;
+          }
+          applyProfileToControls();
         }
-        try {
-          await saveProfileChange({ languages: [...profile.languages, lang] });
-        } catch (err) {
-          alert(`Couldn't turn ${LANGUAGE_LABELS[lang]} on: ${/** @type {Error} */ (err).message}`);
-          return;
-        }
-        applyProfileToControls();
-      }
-      if (profile.canSwitchLanguage) await switchLanguage(lang);
-      else await saveDefaultLanguage(lang);
-      closeLanguageFilterMenu();
-    },
-  );
-});
+        if (profile.canSwitchLanguage) await switchLanguage(lang);
+        else await saveDefaultLanguage(lang);
+        closeLanguageFilterMenu();
+      },
+    );
+  },
+);
 
 // Browser-chrome shortcuts CodeMirror doesn't bind itself (Tab, Ctrl-Z/Y,
 // Ctrl-A are already in its default keymap and need no help). Bound to a
@@ -893,12 +1013,22 @@ const INDENT_WIDTH = 4;
  * @returns {string} The same code with those tabs turned into spaces.
  */
 function normalizeIndentation(text) {
-  return text.replace(/^[ \t]+/gm, (lead) => {
-    if (!lead.includes('\t')) return lead;
-    let column = 0;
-    for (const ch of lead) column = ch === '\t' ? (Math.floor(column / INDENT_WIDTH) + 1) * INDENT_WIDTH : column + 1;
-    return ' '.repeat(column);
-  });
+  return text.replace(
+    /^[ \t]+/gm,
+    /**
+     * Replaces one line's leading whitespace.
+     *
+     * @param {string} lead - The spaces and tabs at the start of a line.
+     * @returns {string} lead with each tab turned into spaces up to the next
+     *   indentation stop; unchanged if it has no tab.
+     */
+    (lead) => {
+      if (!lead.includes('\t')) return lead;
+      let column = 0;
+      for (const ch of lead) column = ch === '\t' ? (Math.floor(column / INDENT_WIDTH) + 1) * INDENT_WIDTH : column + 1;
+      return ' '.repeat(column);
+    },
+  );
 }
 
 // After any edit that isn't our own (typing, paste, drag-and-drop, undo),
@@ -915,15 +1045,23 @@ function normalizeIndentation(text) {
 function normalizeChangedLines(cm, change) {
   if (change.origin === 'setValue' || change.origin === 'normalize-indentation') return;
   const last = change.from.line + change.text.length - 1;
-  cm.operation(() => {
-    for (let line = change.from.line; line <= last && line < cm.lineCount(); line++) {
-      const text = cm.getLine(line);
-      // ^[ \t]* always matches, if only the empty string.
-      const lead = /** @type {RegExpMatchArray} */ (text.match(/^[ \t]*/))[0];
-      if (!lead.includes('\t')) continue;
-      cm.replaceRange(normalizeIndentation(lead), { line, ch: 0 }, { line, ch: lead.length }, 'normalize-indentation');
-    }
-  });
+  cm.operation(
+    /**
+     * Normalizes the changed lines, as one CodeMirror operation (one undo
+     * step, one redraw).
+     *
+     * @returns {void}
+     */
+    () => {
+      for (let line = change.from.line; line <= last && line < cm.lineCount(); line++) {
+        const text = cm.getLine(line);
+        // ^[ \t]* always matches, if only the empty string.
+        const lead = /** @type {RegExpMatchArray} */ (text.match(/^[ \t]*/))[0];
+        if (!lead.includes('\t')) continue;
+        cm.replaceRange(normalizeIndentation(lead), { line, ch: 0 }, { line, ch: lead.length }, 'normalize-indentation');
+      }
+    },
+  );
 }
 
 /** Key bindings added to CodeMirror's defaults. @type {CodeMirror.KeyMap} */

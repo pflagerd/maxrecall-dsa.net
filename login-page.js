@@ -76,26 +76,52 @@ async function signIn(url, form, body) {
   }
 }
 
-loginForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  signIn('/api/auth/login', loginForm, { email: loginForm.email.value, password: loginForm.password.value });
-});
+loginForm.addEventListener(
+  'submit',
+  /**
+   * Logs in with the form's email and password.
+   *
+   * @param {SubmitEvent} e - The form's submit, kept from reloading the page.
+   * @returns {void}
+   */
+  (e) => {
+    e.preventDefault();
+    signIn('/api/auth/login', loginForm, { email: loginForm.email.value, password: loginForm.password.value });
+  },
+);
 
-registerForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  if (registerForm.password.value !== registerForm.confirm.value) {
-    errorEl.textContent = "The passwords don't match.";
-    return;
-  }
-  signIn('/api/auth/register', registerForm, { email: registerForm.email.value, password: registerForm.password.value });
-});
+registerForm.addEventListener(
+  'submit',
+  /**
+   * Registers with the form's email and password, if both passwords match.
+   *
+   * @param {SubmitEvent} e - The form's submit, kept from reloading the page.
+   * @returns {void}
+   */
+  (e) => {
+    e.preventDefault();
+    if (registerForm.password.value !== registerForm.confirm.value) {
+      errorEl.textContent = "The passwords don't match.";
+      return;
+    }
+    signIn('/api/auth/register', registerForm, { email: registerForm.email.value, password: registerForm.password.value });
+  },
+);
 
 window.addEventListener('hashchange', showMode);
 showMode();
 
 // Already signed in? Then there's nothing to do here.
 fetch('/api/auth/me')
-  .then((res) => {
-    if (res.ok) window.location.replace(nextPath());
-  })
+  .then(
+    /**
+     * Leaves the login page if the browser is already signed in.
+     *
+     * @param {Response} res - GET /api/auth/me's answer: ok if signed in.
+     * @returns {void}
+     */
+    (res) => {
+      if (res.ok) window.location.replace(nextPath());
+    },
+  )
   .catch(() => {}); // Server unreachable: the forms will say so when used.

@@ -54,9 +54,22 @@ From the owner's review of pull request #27, and since 2026-11-03 in
   statement, and TypeScript ignores it for the function (checked: a
   deliberately wrong `@param` type above the statement gave no error;
   directly before the function, it did). Done for `server.js` in the
-  `jsdoc-route-handlers` pull request. Short array callbacks such as
-  `.filter((tc) => !tc.hidden)`, and the front end's and judge's inline
-  callbacks: waiting for the owner.
+  `jsdoc-route-handlers` pull request (#38).
+- **Which inline functions** (owner, 2026-11-03, option (b)): every one
+  with a `{ ... }` body, but not a single-expression arrow such as
+  `.filter((tc) => !tc.hidden)`, which says what it does in its one
+  expression and is typed by what it's called on. Empty no-ops such as
+  `.catch(() => {})` count as single expressions (`() => undefined` with
+  braces). Front end: 23 in `problem-page.js`, `login-page.js`,
+  `problems-list.js` and `account.js`, in the `jsdoc-inline-frontend`
+  pull request; found by a scanner using TypeScript's parser (every arrow
+  or function expression with a block body and no JSDoc block directly
+  before it), and placed by a script that splits each call's arguments
+  one per line and indents the function's body. Checked: four blocks
+  broken on purpose are caught (including a destructured parameter,
+  `([name, panel])`); with comments removed the code is identical to
+  `master`'s; the browser check's 37 observations are identical. The
+  Node files' 56 (29 of them test bodies) are next.
 
 ## Pull request 1: `jsdoc-server` (2026-11-03)
 
