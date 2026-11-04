@@ -117,6 +117,25 @@ code {
   font-weight: 600;
 }
 
+/* The problem list in queue order (spaced-repetition plan, step 9). */
+.next-line {
+  margin-bottom: 1rem;
+}
+
+.next-line:empty {
+  display: none;
+}
+
+.queue-position {
+  color: #94a3b8;
+  text-align: right;
+}
+
+.result-new {
+  color: var(--accent);
+  font-style: italic;
+}
+
 
 .badge {
   display: inline-block;

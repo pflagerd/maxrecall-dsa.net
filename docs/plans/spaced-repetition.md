@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next) and 8 (Skip) are done. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip) and 9 (the problem list in queue order) are done. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -762,7 +762,23 @@ each checked to fail against a deliberately wrong version first.
    to `master`; 8 deliberately broken versions all caught. **Found while
    checking:** Skip wasn't disabled while judging, because nothing
    redrew the buttons when a Submit started; fixed in `execute`.
-9. **The problem list** in queue order, then the backlog, marked "new".
+9. **Done 2026-11-03.** **The problem list** in queue order, then the
+   backlog. `listPairs(order, backlog, canOpen)` in `order.js`; `GET
+   /api/queue` answers `{ pairs }` (detail 3), from `queueView`, the same
+   in-memory view `GET /api/next` now uses, so the list's first is always
+   what Next names. One row per pair (detail 1), only pairs that can be
+   opened (detail 2), with columns #, Title, Language, Last result ("✓
+   ×3", "✗", "—", *new*), sources and topics, and difficulty (detail 4);
+   a Next button above opens row 1 (detail 5); a row opens its pair with
+   `?language=` (detail 6); if the queue can't be listed, a message and
+   the old alphabetical list (detail 7). Rows are built with
+   `textContent`, not `innerHTML`, so a question's text can't inject
+   markup. Checked: `order.test.js` (now 41 tests); 6 `GET /api/queue`
+   cases against the real server, each with the first line equal to
+   `GET /api/next`'s; 7 list cases in headless Chromium, including a
+   title with markup shown as text; `browser-check.js` identical to
+   `master` but for the expected three (65 rows, their bubbles, the first
+   row); 8 deliberately broken versions all caught.
 10. **`consistency.js`**, its `make` target and the log at server start.
 11. **`make delete-question` and `make rename-question`**, with
     `questions/renames.json`.
