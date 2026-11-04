@@ -190,35 +190,44 @@ async function loadSubmission(email, id) {
   }
 }
 
+// The files a user's folder holds besides submissions/ (the spaced-
+// repetition plan, D1, D2 and D6). Only these names reach a path.
+const USER_FILES = ['profile.json', 'order.json', 'backlog.json'];
+
 /**
- * Where a user's profile is: users/<email>/profile.json (profile.js, and
- * the spaced-repetition plan's D2). The email is checked here, whatever the
- * caller did, before it becomes part of a path.
+ * Where one of a user's files is: users/<email>/<name>. The email and the
+ * name are checked here, whatever the caller did, before they become part
+ * of a path.
  *
  * @param {string} email - The user's email.
+ * @param {string} name - One of USER_FILES.
  * @returns {string} The file's absolute path (it may not exist).
- * @throws {Error} "Invalid user" if email doesn't match EMAIL_PATTERN.
+ * @throws {Error} "Invalid user" if email doesn't match EMAIL_PATTERN;
+ *   "Unknown user file" if name isn't one of USER_FILES.
  */
-function profileFile(email) {
-  const file = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email, 'profile.json');
+function userFile(email, name) {
+  if (!USER_FILES.includes(name)) throw new Error(`Unknown user file ${JSON.stringify(name)}`);
+  const file = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email, name);
   if (!file) throw new Error('Invalid user');
   return file;
 }
 
 /**
- * A user's profile.json, as text. Synchronous on purpose, like
- * writeProfileFile: a change reads, changes and writes the file with no
- * await in between, so two changes at once can't overwrite each other's
- * (a lost update; spaced-repetition plan, D1).
+ * One of a user's files, as text. Synchronous on purpose, like
+ * writeUserFile: a change reads, changes and writes the file with no await
+ * in between, so two changes at once can't overwrite each other's (a lost
+ * update; spaced-repetition plan, D1).
  *
  * @param {string} email - The user's email.
+ * @param {string} name - One of USER_FILES.
  * @returns {string | undefined} The file's contents, or undefined if
- *   there's no file (which means everything is allowed).
- * @throws {Error} If email isn't valid, or the file exists but can't be read.
+ *   there's no file.
+ * @throws {Error} If email or name isn't valid, or the file exists but
+ *   can't be read.
  */
-function readProfileFile(email) {
+function readUserFile(email, name) {
   try {
-    return fs.readFileSync(profileFile(email), 'utf8');
+    return fs.readFileSync(userFile(email, name), 'utf8');
   } catch (err) {
     if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return undefined;
     throw err;
@@ -226,10 +235,39 @@ function readProfileFile(email) {
 }
 
 /**
- * Writes a user's profile.json safely: to a temporary file, then rename()d
+ * Writes one of a user's files safely: to a temporary file, then rename()d
  * over the old one, so a crash never leaves half a file. rename() replaces
  * the file, which is the point here (unlike saveSubmission's link(), which
- * mustn't). Synchronous, as readProfileFile explains.
+ * mustn't). Synchronous, as readUserFile explains.
+ *
+ * @param {string} email - The user's email.
+ * @param {string} name - One of USER_FILES.
+ * @param {object} contents - The whole new file, as an object.
+ * @returns {void}
+ * @throws {Error} If email or name isn't valid, or the file can't be written.
+ */
+function writeUserFile(email, name, contents) {
+  const file = userFile(email, name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(contents, null, 2)}\n`);
+  fs.renameSync(tmp, file);
+}
+
+/**
+ * A user's profile.json, as text (profile.js; spaced-repetition plan, D2).
+ *
+ * @param {string} email - The user's email.
+ * @returns {string | undefined} The file's contents, or undefined if
+ *   there's no file (which means everything is allowed).
+ * @throws {Error} If email isn't valid, or the file exists but can't be read.
+ */
+function readProfileFile(email) {
+  return readUserFile(email, 'profile.json');
+}
+
+/**
+ * Writes a user's profile.json safely (writeUserFile).
  *
  * @param {string} email - The user's email.
  * @param {object} contents - The whole new file, as an object.
@@ -237,11 +275,31 @@ function readProfileFile(email) {
  * @throws {Error} If email isn't valid, or the file can't be written.
  */
 function writeProfileFile(email, contents) {
-  const file = profileFile(email);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, `${JSON.stringify(contents, null, 2)}\n`);
-  fs.renameSync(tmp, file);
+  writeUserFile(email, 'profile.json', contents);
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile };
+/**
+ * Every user with a folder in USERS_DIR: a folder whose name is a valid
+ * email and that holds submissions/ or profile.json (step 5, decision 5).
+ * Anything else there, such as a stray file or a folder named otherwise,
+ * is left out.
+ *
+ * @returns {string[]} The emails, sorted; empty if USERS_DIR doesn't exist.
+ * @throws {Error} If USERS_DIR exists but can't be read.
+ */
+function listUsers() {
+  let entries;
+  try {
+    entries = fs.readdirSync(USERS_DIR, { withFileTypes: true });
+  } catch (err) {
+    if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ENOENT') return [];
+    throw err;
+  }
+  return entries
+    .filter((e) => e.isDirectory() && EMAIL_PATTERN.test(e.name))
+    .map((e) => e.name)
+    .filter((email) => fs.existsSync(path.join(USERS_DIR, email, 'submissions')) || fs.existsSync(path.join(USERS_DIR, email, 'profile.json')))
+    .sort();
+}
+
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers };
