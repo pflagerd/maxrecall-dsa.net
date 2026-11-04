@@ -36,6 +36,7 @@
     "judge/line-numbers-test.js",
     "judge/sandbox-selftest.js",
     "scripts/doc-check.js",
-    "scripts/consistency-check.js"
+    "scripts/consistency-check.js",
+    "scripts/question-admin.js"
   ]
 }

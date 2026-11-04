@@ -424,4 +424,85 @@ function listPairs(order, backlog, canOpen) {
   ];
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs };
+/**
+ * The files without any reference to a deleted question (D5; step 11,
+ * make delete-question). Its records are kept (they're history); only the
+ * queue and backlog lose it.
+ *
+ * @param {OrderFile} order - The queue (not changed).
+ * @param {BacklogFile} backlog - The backlog (not changed).
+ * @param {string} slug - The deleted question's name.
+ * @returns {{ order: OrderFile, backlog: BacklogFile, removed: string[] }}
+ *   New copies, and what was removed, e.g. "order.json: two-sum in python".
+ */
+function removeReferences(order, backlog, slug) {
+  const removed = [
+    ...order.queue.filter((e) => e.question === slug).map((e) => `order.json: ${e.question} in ${e.language}`),
+    ...backlog.backlog.filter((p) => p.question === slug).map((p) => `backlog.json: ${p.question} in ${p.language}`),
+  ];
+  return {
+    order: { ...order, queue: order.queue.filter((e) => e.question !== slug) },
+    backlog: { ...backlog, backlog: backlog.backlog.filter((p) => p.question !== slug) },
+    removed,
+  };
+}
+
+/**
+ * The files with every reference to a renamed question changed to its new
+ * name (D5; step 11, make rename-question), so its progress is kept. A
+ * pair can then be there twice; the copy dropped is:
+ *
+ * - in the queue under both names (the new one submitted after a git pull
+ *   and before this ran): the old-name element, since the new one's place
+ *   reflects the latest Submit (detail 3);
+ * - in the backlog under the new name while the queue has it (step 5's
+ *   fill added it, the old name not counting: step 10's note): the
+ *   backlog copy, so the queue's progress is kept;
+ * - in the backlog under both names: the later one.
+ *
+ * @param {OrderFile} order - The queue (not changed).
+ * @param {BacklogFile} backlog - The backlog (not changed).
+ * @param {string} from - The old name.
+ * @param {string} to - The new name.
+ * @returns {{ order: OrderFile, backlog: BacklogFile, renamed: string[], dropped: string[] }}
+ *   New copies; what was renamed, and what was dropped and why.
+ */
+function renameReferences(order, backlog, from, to) {
+  /** @type {string[]} */
+  const renamed = [];
+  /** @type {string[]} */
+  const dropped = [];
+  const toInQueue = new Set(order.queue.filter((e) => e.question === to).map((e) => e.language));
+  /** @type {QueueElement[]} */
+  const queue = [];
+  for (const e of order.queue) {
+    if (e.question !== from) {
+      queue.push(e);
+    } else if (toInQueue.has(e.language)) {
+      dropped.push(`order.json: ${from} in ${e.language}, already in the queue as ${to}`);
+    } else {
+      queue.push({ ...e, question: to });
+      renamed.push(`order.json: ${from} in ${e.language}`);
+    }
+  }
+  const inQueue = new Set(queue.map(pairKey));
+  const seen = new Set();
+  /** @type {BacklogElement[]} */
+  const kept = [];
+  for (const p of backlog.backlog) {
+    const pair = p.question === from ? { question: to, language: p.language } : p;
+    const k = pairKey(pair);
+    if (inQueue.has(k) && (p.question === from || p.question === to)) {
+      dropped.push(`backlog.json: ${p.question} in ${p.language}, in the queue as ${to}`);
+    } else if (seen.has(k)) {
+      dropped.push(`backlog.json: ${p.question} in ${p.language}, already in the backlog as ${to}`);
+    } else {
+      kept.push(pair);
+      seen.add(k);
+      if (p.question === from) renamed.push(`backlog.json: ${from} in ${p.language}`);
+    }
+  }
+  return { order: { ...order, queue }, backlog: { ...backlog, backlog: kept }, renamed, dropped };
+}
+
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences };

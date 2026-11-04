@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order) and 10 (the consistency check) are done. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) and 11 (deleting and renaming questions) are done: every step but the later step 12. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -812,7 +812,30 @@ each checked to fail against a deliberately wrong version first.
     backlog (the old name in the queue doesn't count), so `make
     rename-question` must drop that backlog copy when it renames the queue
     element, or the pair would be in both files.
-11. **`make delete-question` and `make rename-question`**, with
-    `questions/renames.json`.
+11. **Done 2026-11-03.** **`make delete-question SLUG=…` and `make
+    rename-question FROM=… TO=…`**, with `questions/renames.json`.
+    `scripts/question-admin.js` checks everything before changing
+    anything: valid names (lowercase letters, digits, single hyphens),
+    `TO` not existing, `FROM` existing or recorded as renamed to `TO`, not
+    deleting an old name (detail 5); no server answering on
+    `127.0.0.1:$PORT` or `$TRUSTED_PORT` (detail 1); every user's queue
+    files valid. Then the git change, staged but not committed (detail
+    6), skipped when a `git pull` already made it; then each user's
+    files, `backlog.json` first. `DRY_RUN=1` changes nothing (detail 2).
+    The rules are pure (detail 7): `removeReferences` and
+    `renameReferences` in `order.js`, and `updateRenames` in
+    `consistency.js`, which keeps every value a current name and drops
+    the old entry when renaming back (detail 4). A pair that ends up
+    twice keeps the queue's copy over the backlog's (step 10's note),
+    and in the queue under both names the new-name element (detail 3).
+    The names reach the script through the environment, not the recipe,
+    so a name can't run as shell code. `docs/deploy-vps.md` §8 says what
+    to run on the VPS after a pull that renames or deletes. Checked:
+    `order.test.js` (now 46 tests) and `consistency.test.js` (15); 9
+    deliberately broken versions all caught; 8 cases in a `git clone`
+    over temporary users (a name with shell code refused and not run, a
+    dry run, four refusals, a rename staged as `R` with the slug, rename
+    log and progress right and step 10's check then clean, the VPS case
+    dropping the start-up fill's backlog copy, renaming back, delete).
 12. Later: recalculating from the records, courses, dependencies, and an
     introduction rule that depends on how well the learner is doing.

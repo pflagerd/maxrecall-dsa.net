@@ -6,7 +6,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { checkConsistency, expectedProgress, parseRenames, currentName, countLevels, formatFinding, describeCounts } = require('./consistency');
+const { checkConsistency, expectedProgress, parseRenames, updateRenames, currentName, countLevels, formatFinding, describeCounts } = require('./consistency');
 
 const QUESTIONS = [
   { slug: 'a', created: '2026-01-01T00:00:00Z', languages: ['python', 'cpp'] },
@@ -164,4 +164,16 @@ test('counts and their words', () => {
   assert.deepEqual(countLevels(found), { error: 1, warning: 1, info: 0 });
   assert.equal(describeCounts(countLevels(found)), '1 error, 1 warning, 0 info');
   assert.equal(describeCounts({ error: 2, warning: 0, info: 3 }), '2 errors, 0 warnings, 3 info');
+});
+
+test('updateRenames keeps every value a current name, and never writes a loop (step 11, detail 4)', () => {
+  assert.deepEqual(updateRenames({}, 'a', 'b'), { a: 'b' });
+  assert.deepEqual(updateRenames({ a: 'b' }, 'b', 'c'), { a: 'c', b: 'c' }, 'a led to b, so now to c');
+  assert.deepEqual(updateRenames({ a: 'b', x: 'b' }, 'b', 'a'), { x: 'a', b: 'a' }, 'renamed back: a is current again');
+  const given = { a: 'b' };
+  updateRenames(given, 'b', 'c');
+  assert.deepEqual(given, { a: 'b' }, 'the log given is left alone');
+  for (const [r, from, to] of [[{}, 'a', 'b'], [{ a: 'b' }, 'b', 'c'], [{ a: 'b', c: 'b' }, 'b', 'a'], [{ a: 'b' }, 'b', 'a']]) {
+    assert.doesNotThrow(() => parseRenames(JSON.stringify(updateRenames(/** @type {Record<string, string>} */ (r), /** @type {string} */ (from), /** @type {string} */ (to)))));
+  }
 });

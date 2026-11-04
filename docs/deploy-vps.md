@@ -516,6 +516,33 @@ code.
 If `deploy/maxrecall-dsa.test.service` itself changed, copy it again (step 5) and
 run `sudo systemctl daemon-reload` before restarting.
 
+**If the pull renamed or deleted a question** (its commit says "Rename
+question …" or "Delete question …"; `git diff --stat ORIG_HEAD` shows it),
+the users' files on the VPS still name the old question: `git pull` changes
+the checkout, not `/srv/maxrecall/data/users`. Update them with the server
+stopped, before the restart above (spaced-repetition plan, step 11):
+
+```bash
+sudo systemctl stop maxrecall-dsa.test.service
+```
+Stops the server: the command refuses while one answers, since both rewrite
+`order.json`.
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users DRY_RUN=1 make rename-question FROM=old-name TO=new-name
+```
+- `sudo -u maxrecall`: as the service's user, so the files keep their owner.
+- `env MAXRECALL_USERS_DIR=…`: the users folder the service uses (its unit
+  file sets the same).
+- `DRY_RUN=1`: prints what would change, and changes nothing. Run it again
+  without `DRY_RUN=1` to do it.
+- `FROM` and `TO`: the old and new names. The file was already renamed by the
+  pull, so it says "already renamed (e.g. by git pull): only the references".
+
+For a deleted question, `make delete-question SLUG=its-name` the same way.
+Then `sudo systemctl start maxrecall-dsa.test.service`, and check the
+`Consistency:` lines with `journalctl` (step 5).
+
 **Updating to a version with the sandbox check (2026-11-02 or later)** for the
 first time: do §1a before restarting, or Run and Submit will be refused.
 Check the `Sandbox:` line with `journalctl` (step 5).
