@@ -1,7 +1,8 @@
 # Plan: limited live testing on the VPS
 
-Status: **in planning, 2026-11-04.** Nothing is built yet. Q1 and Q2 are
-answered (below); D1–D5 are waiting for the owner. Linked from
+Status: **in planning, 2026-11-04.** Nothing is built yet. Q1, Q2 and
+D1–D4 are answered and decided (below). D5 (the owner's idea of a git
+repository per user) and step 1's details are waiting for the owner. Linked from
 `readme.html` → Decisions & plans.
 
 ## Goal
@@ -103,6 +104,10 @@ one with Canonical security support, the same reasoning that ruled out
 firejail in `docs/plans/sandboxing.md` (option C there). Both A and B
 are open source.
 
+**Decided (owner, 2026-11-04): A, nginx + certbot**, after asking why
+the app shouldn't do HTTPS itself as `maxrecall.net` does (option C's row
+answers that, corrected the same day).
+
 ### D2. Who can register
 
 Today the typed registration password becomes the account's password, so
@@ -118,6 +123,9 @@ just widening the email check would give every invitee the same password.
 registration with something per person, and gives a password reset for
 free. The owner's own account carries on as it is.
 
+**Decided (owner, 2026-11-04): B, one invite code per person.** Its
+details are step 1's, below.
+
 ### D3. An outer gate while testing is limited
 
 Without one, anyone on the internet reaches the login API (and its 128 MiB
@@ -131,6 +139,8 @@ scrypt per attempt) and every page the app serves before sign-in.
 
 **Recommendation: A** for this phase, dropping Basic auth when the app's
 own defences (D2, per-IP throttling) are trusted.
+
+**Decided (owner, 2026-11-04): A, Basic auth and rate limiting at nginx.**
 
 ### D4. Is the judge ready for other people?
 
@@ -147,29 +157,122 @@ but a new kernel only runs after a reboot. That's my understanding of
 to check on the VPS with `cat /etc/apt/apt.conf.d/20auto-upgrades` and
 `ls /var/run/reboot-required`.
 
+**Decided (owner, 2026-11-04): go ahead with invited testers the owner
+trusts.** Recorded in the readme's Known gaps.
+
 ### D5. Other people's data
 
 `/srv/maxrecall/data` would hold testers' emails, code, timings and
-password hashes. Two things to decide:
+password hashes.
 
-- **Backups.** Recommendation: copy `/srv/maxrecall/data/` (users and
-  auth) to Kubuntu with `rsync`, as `docs/deploy-vps.md` §9 already does
-  for `users/`, kept out of git (`users/` and `auth/` are gitignored).
-- **Telling testers.** Recommendation: a short note with the invite saying
-  what's stored and that the owner can read it. I'm not giving legal
-  advice; whether anything more is needed depends on where testers live.
+**The owner's idea (2026-11-04): each user's folder,
+`users/<email>/`, a git repository of its own.** Not decided yet.
+
+What was checked, 2026-11-04, with git 2.43.0 (the version in Ubuntu
+24.04, and the cloud session's), in a scratch folder:
+
+- **Folder names like `daniel.pflager@gmail.com` are fine.** `git init`,
+  commit and clone (by path and by `file://`) all worked. On Linux a file
+  name can hold any byte but `/` and NUL, and git doesn't care what the
+  repository's own folder is called. `@` matters to git only in revision
+  syntax (`@{upstream}`) and in branch names
+  ([git-check-ref-format](https://git-scm.com/docs/git-check-ref-format)),
+  not in paths.
+- **Fetching over SSH works with the `@` in the path.** With a stand-in
+  `ssh` that recorded its arguments, both
+  `root@VPS_IP:/srv/maxrecall/data/users/daniel.pflager@gmail.com` and the
+  `ssh://` form became host `root@VPS_IP` and the command
+  `git-upload-pack '/srv/maxrecall/data/users/daniel.pflager@gmail.com'`:
+  only the part before the `:` (or before the first `/` after `ssh://`)
+  is read as user and host.
+- **Ownership gets in the way.** The repositories would belong to
+  `maxrecall`. Root running git in one, a fetch included, failed with
+  `fatal: detected dubious ownership in repository` (git's `safe.directory`
+  check, [git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory);
+  not read from here, the site is blocked). One `safe.directory` entry per
+  exact path fixed it; `…/users/*` did **not** in 2.43. So either root's
+  `~/.gitconfig` lists every user (or `*`, which turns the check off), or
+  the fetch runs git as `maxrecall`, e.g.
+  `--upload-pack='sudo -u maxrecall git-upload-pack'`.
+- **The app wouldn't trip over `.git`.** It lists `users/` keeping only
+  folders named like an email (`users.js`, `listUsers`) and reads
+  `submissions/` (`users.js`, `listSubmissions`); nothing reads a user's
+  folder as a whole.
+- **Two kinds of file shouldn't be committed:** `writeUserFile` writes
+  `<file>.tmp-<pid>` and renames it (`users.js`), so each repository needs
+  a `.gitignore` with `*.tmp-*`; and `make recalculate-queue` leaves
+  `<file>.before-<label>` copies (`backupUserFile`), which history would
+  make unnecessary.
+
+Still to decide if this is the way:
+
+- **Who commits, and when.** (a) The server, after each saved Submit
+  (exact history, but git becomes part of the request and can fail it);
+  or (b) a systemd timer as `maxrecall`, every N minutes, committing any
+  changes (recommended: the server is untouched). A commit can catch
+  `backlog.json` written and `order.json` not yet; `updateQueue` in
+  `server.js` writes them in that order so that state is the safe one,
+  and the next start repairs it.
+- **Where the copy lives.** A repository on the VPS isn't a backup by
+  itself. Kubuntu would fetch every user's repository over SSH (a loop
+  over `ls /srv/maxrecall/data/users`). They must never be pushed to
+  GitHub: the app's repository is public.
+- **`auth/` stays out of git** (recommended): it holds password hashes and
+  invites, and git history keeps whatever was ever committed. Copy it with
+  `rsync` instead. Sessions are stored only as SHA-256 hashes, so a copy
+  holds no usable sign-in.
+- **Deleting a tester's data** is then deleting their folder on the VPS
+  and their copy on Kubuntu, a plus of one repository per user over one
+  for everyone.
+
+The alternative is the earlier recommendation: `rsync` of the whole
+`/srv/maxrecall/data/` to Kubuntu (as `docs/deploy-vps.md` §9 does for
+`users/`), with git, if wanted, only on the Kubuntu side.
+
+**Telling testers.** Recommendation: a short note with the invite saying
+what's stored and that the owner can read it. I'm not giving legal
+advice; whether anything more is needed depends on where testers live.
 
 ## Steps (once the decisions are made)
 
 Each is small and can be checked before the next.
 
 1. **App: invites (D2) and `trust proxy`.** In `auth.js`, `server.js`,
-   `login.html`, `login-page.js`, with tests. `app.set('trust proxy',
-   'loopback')` so `req.secure` and `req.ip` come from nginx's
-   `X-Forwarded-Proto` and `X-Forwarded-For`, and only when the request
-   came from 127.0.0.1. Check what a brand-new user sees before their
-   first Submit. Deployable while the VPS is still loopback-only, so it can
-   be tried through the tunnel's port 3000 first.
+   `login.html`, `login-page.js`, a new `scripts/invite.js` and
+   `make invite`, with tests. Deployable while the VPS is still
+   loopback-only, so it can be tried through the tunnel's port 3000 first.
+   Details proposed 2026-11-04, waiting for the owner:
+   1. **The invite file**: `auth/invites/<email>.json` with
+      `schemaVersion`, `email`, `createdAt`, `expiresAt` and the code's
+      SHA-256. A fast hash is enough because the code is random, the
+      same reasoning as session tokens (`auth.js`, Sessions). A new invite
+      for the same email replaces the old one.
+   2. **The code**: 16 random bytes (128 bits) in base64url, 22
+      characters, to copy and paste.
+   3. **It expires after 7 days**, and is deleted when used.
+   4. **`make invite EMAIL=…`** prints the code. On the VPS:
+      `sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=…`,
+      as `make rename-question` is run (`docs/deploy-vps.md` §8).
+   5. **The form**: email, invite code, password, confirm. Every refusal
+      gives the same message, as now; throttling stays per email.
+   6. **`MAXRECALL_PASSWORD` goes**: the owner can invite themselves, so
+      there's one way to register, and `/etc/maxrecall-dsa/test.env` is no
+      longer needed. Existing accounts are untouched.
+   7. **Minimum password length**: the owner chose 10 for their own
+      account (2026-10-30). With other people, NIST SP 800-63B rev. 4's 15
+      for a password used alone ([§3.1.1.2](https://pages.nist.gov/800-63-4/sp800-63b.html#passwordver))
+      is the recommendation, for new passwords only.
+   8. **Password reset**: by hand for now: delete
+      `auth/accounts/<email>.json`, then invite again.
+   9. **`app.set('trust proxy', 'loopback')`**, so `req.secure` and
+      `req.ip` come from nginx's `X-Forwarded-Proto` and `X-Forwarded-For`,
+      believed only from 127.0.0.1
+      ([Express behind proxies](https://expressjs.com/en/guide/behind-proxies.html)).
+      nginx must then replace, not append to, any `X-Forwarded-For` a
+      visitor sends (step 3).
+   10. **A brand-new user**: check what `GET /api/queue`, `GET /api/next`
+       and the problem list show before their first Submit, and fix what
+       needs it.
 2. **VPS: firewall.** `ufw` allowing only SSH, 80 and 443
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
@@ -209,3 +312,5 @@ the same change.
 | 2026-11-04 | Q1 (owner): the domain doesn't point at the VPS yet, and its name isn't settled, probably `maxrecall-code.net` or similar. Needed before step 3 only. |
 | 2026-11-04 | Q2 (owner): the old MaxRecall runs on a different VPS, so ports 80 and 443 here are free. |
 | 2026-11-04 | Correction (owner asked why the app shouldn't do HTTPS itself, as `maxrecall.net` does): D1 option C's "the unit's `IPAddressDeny=any` would block it reaching Let's Encrypt" was wrong, since certbot runs outside the unit. The real conflict is the other way: the filter covers incoming traffic too, so serving the internet directly means dropping the loopback-only containment. Option C's row rewritten. |
+| 2026-11-04 | D1–D4 decided (owner): as recommended. nginx + certbot; one invite code per person; Basic auth and rate limiting at nginx while testing is limited; go ahead with invited testers the owner trusts. |
+| 2026-11-04 | D5 (owner's idea): a git repository per user folder, asking how git handles names like `daniel.pflager@gmail.com`. Checked: fine; the `safe.directory` ownership check is what needs handling. Details waiting. Step 1's ten details proposed. |
