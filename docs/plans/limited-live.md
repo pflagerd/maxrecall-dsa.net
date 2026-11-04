@@ -254,7 +254,8 @@ consequences for live testing:
 - **D5:** §10 moves a user's folder to `/srv/maxrecall/data/archive/`,
   outside `users/` (the server would count a folder named like an email as
   a user). A git repository per user moves with its folder, so the two fit;
-  backups should include `archive/` too.
+  backups should include `archive/` too. It exists on the VPS since the
+  owner's §10 reset (readme, Decisions, "Checked on the VPS", step 13).
 
 - **Q3. How should a new tester start?** (a) As the code does now, every
   question in every language; (b) set up by hand before the invite goes
@@ -377,3 +378,4 @@ the same change.
 | 2026-11-04 | Step 1 details (owner): 6, drop `MAXRECALL_PASSWORD`, yes; 7, at least 12 characters for new passwords; the rest as proposed. |
 | 2026-11-04 | Step 1 done. Correction: detail 9's "nginx must replace `X-Forwarded-For`" was wrong; appending is also safe with Express's `trust proxy`. |
 | 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |
+| 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
