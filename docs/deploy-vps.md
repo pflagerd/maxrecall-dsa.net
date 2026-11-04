@@ -694,3 +694,119 @@ the end), start it. `make backlog-remove … SLUGS="…"` takes them out of
 the backlog again. What you add comes into your queue at your **next Submit
 or Skip**, not at once: with only Hello World in the queue, Next is Hello
 World once more, and the new ones come in after that Submit.
+
+## 11. Setting up a new tester before inviting them [VPS, then Kubuntu]
+
+Added 2026-11-04 (the owner's answer to Q3 in `docs/plans/limited-live.md`:
+option (b), each tester set up by hand, as §10 set up the owner). Without
+this, a tester gets no `profile.json`, so `"backlog": "all"`: every
+question in all five languages waiting for them. With it, they start with
+the languages and questions you choose.
+
+**Before anyone else, try it on a second email address of your own**
+(limited-live step 5): testers can't reach the VPS until limited-live
+steps 2–4 (firewall, nginx, certificate) are done, but you can, through
+the tunnel to port 3000 (§7). It needs invites, so the VPS must have
+limited-live step 1 (pull request #52, 2026-11-04) or later: §8, or "The
+quick way".
+
+In the commands below, replace `tester@example.com` with their email,
+**in lower case**: the server lower-cases the email when they register
+(`auth.js`, `normalizeEmail`) and saves their work in the folder with that
+name, so a folder named `Tester@Example.com` would never be used. Run them
+as root on the VPS.
+
+**1. Their folder and profile.** The server needn't be stopped for this
+part.
+
+```bash
+sudo -u maxrecall mkdir /srv/maxrecall/data/users/tester@example.com
+```
+- As the service's user, so the folder is its own. If it says "File
+  exists", that email has been set up (or has used the app) before:
+  `make backlog-show` below shows what's there.
+
+```bash
+sudo -u maxrecall vi /srv/maxrecall/data/users/tester@example.com/profile.json
+```
+For Python only:
+```json
+{
+  "schemaVersion": 1,
+  "allowed": { "languages": ["python"] },
+  "backlog": "chosen"
+}
+```
+- `allowed.languages`, not `preferred` as in §10: the tester can't turn
+  on another language, or turn Python off. With a chosen backlog this
+  matters: if every chosen question's language were turned off, Next
+  would have nothing to give them. Name several languages to allow
+  several (`["python", "java"]`); the first is their default.
+- `"backlog": "chosen"`: the server adds nothing to their backlog by
+  itself.
+- The other `allowed` settings (`canChooseLanguages`, `canSwitchLanguage`,
+  `canSetDefaultLanguage`) default to true; see readme.html, "Where data
+  lives".
+
+**2. Their questions, with the server stopped** (a Submit rewrites
+`backlog.json` too, so `make backlog-add` refuses while one answers):
+
+```bash
+cd /srv/maxrecall/maxrecall-dsa.net
+```
+
+```bash
+systemctl stop maxrecall-dsa.test.service
+```
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=tester@example.com SLUGS="hello-world two-sum" DRY_RUN=1
+```
+- `SLUGS`: their questions, in the order they'll get them, each in every
+  language their profile allows (only Python here). `make backlog-show
+  EMAIL=…` lists every question. Add several now: what's added later only
+  comes in at their next Submit or Skip (§10, "Adding questions later").
+- If `Backlog after (…)` is right, run it again without `DRY_RUN=1`.
+
+```bash
+systemctl start maxrecall-dsa.test.service
+```
+
+```bash
+journalctl -u maxrecall-dsa.test.service -n 30 --no-pager | grep -E 'Queues|Consistency'
+```
+- A line `Queues: tester@example.com: 0 in order.json, 2 in backlog.json
+  (0 added)`, and `nothing found` for them.
+
+**3. The invite.** The server keeps running.
+
+```bash
+sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=tester@example.com
+```
+- `MAXRECALL_AUTH_DIR` (sign-in data), not `MAXRECALL_USERS_DIR`
+  (learning data): §4 explains each part. It prints a code that works
+  once, for this email, for 7 days. Send them the code and the address,
+  and tell them to register with exactly this email.
+- If the code runs out, run it again: a new invite replaces the old one.
+  Their folder and backlog don't change.
+
+**4. Check it as them [Kubuntu].** For your own second email: open the
+tunnel with port 3000 forwarded as well (§7,
+`ssh -N -L 3000:127.0.0.1:3001 -L 3006:127.0.0.1:3000 root@VPS_IP`), then
+open <http://localhost:3006/login.html#register> in a **private window**.
+Browsers keep cookies per host name, not per port, so in a normal window
+the new sign-in would replace yours (§7). Register with the email, the
+code and a password of at least 12 characters. The header should show the
+tester's email (no trusted marker), and the list their chosen questions in
+Python, marked **new**. The language menu shows only Python.
+
+**What this doesn't do:**
+- A chosen backlog limits what Next and the list offer, not what can be
+  opened: a tester who types another question's address
+  (`problem.html?slug=…`) can do it, and a Submit then puts it in their
+  queue. Their profile still limits the languages (403 for the others).
+- Each change to a backlog stops the site for everyone for a few seconds
+  (limited-live plan, "What spaced-repetition step 13 changes here").
+- A setup that's never used stays: the folder counts as a user at every
+  start and in `make consistency-check`. To remove it, stop the server and
+  move the folder to `/srv/maxrecall/data/archive/`, as in §10.

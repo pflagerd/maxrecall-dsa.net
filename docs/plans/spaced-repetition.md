@@ -920,3 +920,18 @@ each checked to fail against a deliberately wrong version first.
     `localStorage`, being per device (option 2, moving them to the
     server, and option 3, dropping them, were turned down); the old keys
     are left in any browser that has them, unread (no cleanup code).
+    **Q3 of `docs/plans/limited-live.md`, how a new tester starts
+    (owner, 2026-11-04): option (b)**, each one set up by hand before the
+    invite goes out, as §10 set up the owner: a folder named by their email
+    in lower case, a `profile.json` (`allowed.languages`, so they can't
+    turn their chosen questions' language off, and `"backlog":
+    "chosen"`), `make backlog-add` with the server stopped, then `make
+    invite`. The procedure is `docs/deploy-vps.md` §11, tried first on a
+    second email of the owner's (limited-live step 5). Checked in the cloud
+    against a real server: the start line `2 in backlog.json (0 added)`;
+    an invite; registering as `Tester@Example.COM` signs in as, and saves
+    into, `tester@example.com`; only Python offered, turning it off or Java
+    on refused (400), Java's Run 403; the chosen questions in order; a
+    question that wasn't chosen, opened by its address, still accepted
+    and put in the queue (noted in §11). Option (c), `make invite` writing
+    the starting files, if this gets tedious.
