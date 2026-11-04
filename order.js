@@ -15,6 +15,8 @@
 // Pure functions only: reading and writing the files is users.js's job.
 
 const { LANGUAGES } = require('./profile');
+const { advance } = require('./advance');
+const { introduceCount } = require('./introduce');
 
 /** The order.json and backlog.json format this file reads and writes. @type {number} */
 const SCHEMA_VERSION = 1;
@@ -283,9 +285,92 @@ function allowedPairs(questions, profile) {
  *   copy; the one given isn't changed), and how many pairs were added.
  */
 function fillBacklog(order, backlog, pairs) {
-  const present = new Set([...order.queue, ...backlog.backlog].map((p) => `${p.question}/${p.language}`));
-  const missing = pairs.filter((p) => !present.has(`${p.question}/${p.language}`));
+  const present = new Set([...order.queue, ...backlog.backlog].map(pairKey));
+  const missing = pairs.filter((p) => !present.has(pairKey(p)));
   return { backlog: { ...backlog, backlog: [...backlog.backlog, ...missing] }, added: missing.length };
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog };
+/**
+ * Whether a Submit passed (D3): only Accepted, all tests passing, is a pass.
+ * Every other verdict, Time Limit Exceeded included, is a fail. The one
+ * place this rule lives.
+ *
+ * @param {string} status - The judge's verdict, e.g. "Accepted" or
+ *   "Wrong Answer".
+ * @returns {'yes' | 'no'} order.json's pass value.
+ */
+function passFor(status) {
+  return status === 'Accepted' ? 'yes' : 'no';
+}
+
+/**
+ * The key a pair is compared by.
+ *
+ * @param {BacklogElement} pair - A pair, from either file.
+ * @returns {string} "question/language".
+ */
+function pairKey(pair) {
+  return `${pair.question}/${pair.language}`;
+}
+
+/**
+ * The queue and backlog after one saved Submit (step 6; D3, D4, D6, D8):
+ *
+ * 1. The pair is taken from where it is in the queue; from the backlog, or
+ *    from neither file (a question added since the server started), it
+ *    starts at the front of the queue.
+ * 2. pass is set, and passesInARow goes up by 1 on a pass or back to 0.
+ * 3. It moves advance(passesInARow) places: that many other pairs end up
+ *    ahead of it, or all of them if there aren't that many.
+ * 4. submitsSinceLastIntroduced goes up by 1.
+ * 5. introduceCount() pairs come in from the backlog, the first ones
+ *    canIntroduce() accepts, in backlog order, to the front of the queue
+ *    (so the backlog's first is the next question); the others stay where
+ *    they are. If any come in, the counter goes back to 0.
+ *
+ * @param {OrderFile} order - The queue (not changed).
+ * @param {BacklogFile} backlog - The backlog (not changed).
+ * @param {BacklogElement} pair - The pair submitted.
+ * @param {'yes' | 'no'} pass - From passFor().
+ * @param {object} options - What the files don't say.
+ * @param {(pair: BacklogElement) => boolean} options.canIntroduce - Whether
+ *   a backlog pair may come in now: its language turned on (D2) and its
+ *   question still there (D5).
+ * @param {() => number} [options.random=Math.random] - For advance().
+ * @returns {{ order: OrderFile, backlog: BacklogFile, introduced: BacklogElement[] }}
+ *   New copies of both files, and the pairs that came in.
+ * @throws {RangeError} From advance() or introduceCount(), if a count in
+ *   the files is invalid (parseOrder() refuses those first).
+ */
+function recordSubmit(order, backlog, pair, pass, { canIntroduce, random = Math.random }) {
+  const key = pairKey(pair);
+  const queue = [...order.queue];
+  let backlogList = backlog.backlog.filter((p) => pairKey(p) !== key);
+  let from = queue.findIndex((p) => pairKey(p) === key);
+  let passesInARow = 0;
+  if (from === -1) {
+    from = 0; // from the backlog or neither file: starts at the front (step 6, details 1 and 2)
+  } else {
+    passesInARow = queue.splice(from, 1)[0].passesInARow;
+  }
+  passesInARow = pass === 'yes' ? passesInARow + 1 : 0;
+  const to = Math.min(from + advance(passesInARow, random), queue.length);
+  queue.splice(to, 0, { question: pair.question, language: pair.language, pass, passesInARow });
+
+  let submitsSinceLastIntroduced = order.submitsSinceLastIntroduced + 1;
+  const candidates = backlogList.filter(canIntroduce);
+  const introduced = candidates.slice(0, introduceCount(queue.length, submitsSinceLastIntroduced, candidates.length));
+  if (introduced.length > 0) {
+    const keys = new Set(introduced.map(pairKey));
+    backlogList = backlogList.filter((p) => !keys.has(pairKey(p)));
+    queue.unshift(...introduced.map((p) => ({ question: p.question, language: p.language, passesInARow: 0 })));
+    submitsSinceLastIntroduced = 0;
+  }
+  return {
+    order: { ...order, submitsSinceLastIntroduced, queue },
+    backlog: { ...backlog, backlog: backlogList },
+    introduced,
+  };
+}
+
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit };

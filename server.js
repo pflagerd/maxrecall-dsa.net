@@ -19,7 +19,7 @@ const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
-const { parseQueueFiles, allowedPairs, fillBacklog } = require('./order');
+const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -519,7 +519,7 @@ async function handleExecution(req, res, { onlyVisible }) {
   try {
     const submittedAt = new Date().toISOString();
     // Submit adds what happened to its record: saved, then submissionId or saveError.
-    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string }} */ (
+    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string }} */ (
       await runSubmission({ language, code, functionName, testCases, signature, judgeMode })
     );
     // Only Submit is recorded (Run isn't). A failed save mustn't cost the
@@ -551,6 +551,19 @@ async function handleExecution(req, res, { onlyVisible }) {
         console.error(`Failed to save submission for ${problem.slug}:`, err);
         result.saved = false;
         result.saveError = /** @type {Error} */ (err).message;
+      }
+      // Only a saved Submit moves the queue (D3). Like a failed save, a
+      // failed update doesn't cost the learner their result (step 6,
+      // detail 5). No await from here to the response: see updateQueue().
+      if (result.saved) {
+        try {
+          updateQueue(/** @type {string} */ (req.userEmail), { question: problem.slug, language }, passFor(result.status));
+          result.queueUpdated = true;
+        } catch (err) {
+          console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
+          result.queueUpdated = false;
+          result.queueError = /** @type {Error} */ (err).message;
+        }
       }
     }
     res.json(result);
@@ -836,7 +849,8 @@ function sendQueueError(res, err) {
  *
  * @returns {import('./order').QuestionInfo[]} One per .json file: its file
  *   name without .json (D1), created, and its starterCode's languages.
- * @throws {Error} If questions/ can't be read, or a file isn't valid JSON.
+ * @throws {Error} If questions/ can't be read, or a file isn't valid JSON
+ *   (the message then names the file).
  */
 function questionInfos() {
   return fs
@@ -848,23 +862,50 @@ function questionInfos() {
        *
        * @param {string} f - The file's name in questions/.
        * @returns {import('./order').QuestionInfo} Its slug, created and languages.
+       * @throws {Error} "questions/<f>: ..." if it can't be read or parsed.
        */
       (f) => {
         /** @type {Problem} */
-        const problem = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8'));
+        let problem;
+        try {
+          problem = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, f), 'utf8'));
+        } catch (err) {
+          throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
+        }
         return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode) };
       },
     );
 }
 
 /**
- * At start, gives every user (listUsers()) an order.json and a backlog.json
- * holding every pair their profile allows (step 5, decision 4; D6): a user
- * with neither file gets an empty queue and a full backlog, and otherwise
- * the pairs in neither file are appended to the backlog. A file is written
- * only if it's new or has changed. A user whose profile or queue files are
- * invalid is left alone, and logged: their Run and Submit refuse until the
- * file is fixed (fail closed). Nothing here stops the server starting.
+ * Gives one user an order.json and a backlog.json holding every pair their
+ * profile allows (step 5, decision 4; D6): with neither file, an empty
+ * queue and a full backlog; otherwise the pairs in neither file are
+ * appended to the backlog. A file is written only if it's new or has
+ * changed.
+ *
+ * @param {string} email - The user's email.
+ * @param {import('./order').QuestionInfo[]} questions - From questionInfos().
+ * @returns {string} What was done, for the log, e.g. "0 in order.json, 26
+ *   in backlog.json (26 added)".
+ * @throws {Error} ProfileError or QueueFileError if a file is invalid
+ *   (nothing is written then); another Error if one can't be read or written.
+ */
+function prepareUserQueues(email, questions) {
+  const orderText = readUserFile(email, 'order.json');
+  const backlogText = readUserFile(email, 'backlog.json');
+  const { order, backlog } = parseQueueFiles(orderText, backlogText);
+  const filled = fillBacklog(order, backlog, allowedPairs(questions, loadProfile(email)));
+  if (orderText === undefined) writeUserFile(email, 'order.json', order);
+  if (backlogText === undefined || filled.added > 0) writeUserFile(email, 'backlog.json', filled.backlog);
+  return `${order.queue.length} in order.json, ${filled.backlog.backlog.length} in backlog.json (${filled.added} added)`;
+}
+
+/**
+ * At start, prepareUserQueues() for every user (listUsers()), each logged.
+ * A user whose profile or queue files are invalid is left alone, and
+ * logged: their Run and Submit refuse until the file is fixed (fail
+ * closed). Nothing here stops the server starting.
  *
  * @returns {void}
  */
@@ -879,17 +920,48 @@ function prepareQueues() {
   }
   for (const email of users) {
     try {
-      const orderText = readUserFile(email, 'order.json');
-      const backlogText = readUserFile(email, 'backlog.json');
-      const { order, backlog } = parseQueueFiles(orderText, backlogText);
-      const filled = fillBacklog(order, backlog, allowedPairs(questions, loadProfile(email)));
-      if (orderText === undefined) writeUserFile(email, 'order.json', order);
-      if (backlogText === undefined || filled.added > 0) writeUserFile(email, 'backlog.json', filled.backlog);
-      console.log(`Queues: ${email}: ${order.queue.length} in order.json, ${filled.backlog.backlog.length} in backlog.json (${filled.added} added)`);
+      console.log(`Queues: ${email}: ${prepareUserQueues(email, questions)}`);
     } catch (err) {
       console.error(`Queues: ${email}: left alone, ${/** @type {Error} */ (err).message}`);
     }
   }
+}
+
+/**
+ * Moves a pair through the user's queue after a saved Submit
+ * (recordSubmit() in order.js; step 6). A user without both files yet is
+ * first given them as at start (detail 6). Only pairs whose language is
+ * turned on and whose question still has that language can come in from
+ * the backlog (detail 3).
+ *
+ * Synchronous on purpose: reading, changing and writing happen with no
+ * await in between, so two Submits at once (two tabs) can't each read the
+ * old queue and one overwrite the other's move (a lost update; D1).
+ * backlog.json is written before order.json: a crash between the two then
+ * leaves a pair in neither file, which the next start puts back in the
+ * backlog, rather than in both, which would refuse the learner's Run and
+ * Submit until the owner fixed it by hand.
+ *
+ * @param {string} email - The user's email.
+ * @param {import('./order').BacklogElement} pair - The pair submitted.
+ * @param {'yes' | 'no'} pass - From passFor().
+ * @returns {void}
+ * @throws {Error} If a question file, the profile or a queue file can't be
+ *   read or is invalid, or a file can't be written.
+ */
+function updateQueue(email, pair, pass) {
+  const questions = questionInfos();
+  if (readUserFile(email, 'order.json') === undefined || readUserFile(email, 'backlog.json') === undefined) {
+    console.log(`Queues: ${email}: ${prepareUserQueues(email, questions)}`);
+  }
+  const { order, backlog } = loadQueueFiles(email);
+  const profile = loadProfile(email);
+  const available = new Set(questions.flatMap((q) => q.languages.map((l) => `${q.slug}/${l}`)));
+  const result = recordSubmit(order, backlog, pair, pass, {
+    canIntroduce: (p) => profile.languages.includes(p.language) && available.has(`${p.question}/${p.language}`),
+  });
+  if (JSON.stringify(result.backlog) !== JSON.stringify(backlog)) writeUserFile(email, 'backlog.json', result.backlog);
+  writeUserFile(email, 'order.json', result.order);
 }
 
 prepareQueues();
