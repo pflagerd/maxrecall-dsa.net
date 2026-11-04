@@ -394,4 +394,34 @@ function nextPair(order, backlog, canOpen) {
   return found ? { question: found.question, language: found.language } : null;
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair };
+/**
+ * One line of the problem list (step 9).
+ *
+ * @typedef {object} ListedPair
+ * @property {string} question - The question's file name without .json.
+ * @property {string} language - One of LANGUAGES.
+ * @property {'queue' | 'backlog'} where - Which file it's in.
+ * @property {'yes' | 'no'} [pass] - Queue only: the latest result, if it's
+ *   been submitted (or skipped).
+ * @property {number} [passesInARow] - Queue only.
+ */
+
+/**
+ * The problem list (step 9; D7): every pair canOpen() accepts, the queue
+ * first, in order, then the backlog. Its first is what nextPair() names.
+ * Changes nothing.
+ *
+ * @param {OrderFile} order - The queue.
+ * @param {BacklogFile} backlog - The backlog.
+ * @param {(pair: BacklogElement) => boolean} canOpen - The same test as
+ *   nextPair()'s (step 9, detail 2).
+ * @returns {ListedPair[]} The pairs, next first.
+ */
+function listPairs(order, backlog, canOpen) {
+  return [
+    ...order.queue.filter(canOpen).map((e) => ({ question: e.question, language: e.language, where: /** @type {'queue'} */ ('queue'), ...(e.pass && { pass: e.pass }), passesInARow: e.passesInARow })),
+    ...backlog.backlog.filter(canOpen).map((p) => ({ question: p.question, language: p.language, where: /** @type {'backlog'} */ ('backlog') })),
+  ];
+}
+
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs };

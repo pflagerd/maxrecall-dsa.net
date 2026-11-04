@@ -1,13 +1,13 @@
 'use strict';
 
 // Tests for order.js (docs/plans/spaced-repetition.md, D1, D3–D7, steps 5
-// to 7). Run
+// to 9). Run
 // with `make test`.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -246,4 +246,27 @@ test('with nothing anywhere that can be opened, next is null (detail 8)', () => 
 
 test('next names only the pair, not its pass or count', () => {
   assert.deepEqual(Object.keys(/** @type {object} */ (nextPair(queueOf(['a']), backlogOf([]), ANY))), ['question', 'language']);
+});
+
+test('the list is the queue in order, then the backlog, each marked', () => {
+  const order = queueOf(['a', 'b']);
+  order.queue[1] = { question: 'b', language: 'python', passesInARow: 0 }; // never submitted
+  assert.deepEqual(listPairs(order, backlogOf(['x/python']), ANY), [
+    { question: 'a', language: 'python', where: 'queue', pass: 'yes', passesInARow: 1 },
+    { question: 'b', language: 'python', where: 'queue', passesInARow: 0 },
+    { question: 'x', language: 'python', where: 'backlog' },
+  ]);
+});
+
+test('the list leaves out pairs that can\'t be opened, and starts with what next names', () => {
+  const order = queueOf(['gone', 'a']);
+  const backlog = backlogOf(['x/cpp', 'y/python']);
+  const canOpen = (/** @type {{ question: string, language: string }} */ p) => p.question !== 'gone' && p.language === 'python';
+  const listed = listPairs(order, backlog, canOpen);
+  assert.deepEqual(listed.map((p) => `${p.question}/${p.language}`), ['a/python', 'y/python']);
+  assert.deepEqual({ question: listed[0].question, language: listed[0].language }, nextPair(order, backlog, canOpen));
+});
+
+test('an empty list when nothing can be opened', () => {
+  assert.deepEqual(listPairs(queueOf(['a']), backlogOf(['x/cpp']), () => false), []);
 });

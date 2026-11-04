@@ -19,7 +19,7 @@ const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
 const { USERS_DIR, OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
-const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair } = require('./order');
+const { parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs } = require('./order');
 const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessionEmail, endSession } = require('./auth');
 
 /**
@@ -938,11 +938,44 @@ app.get(
     try {
       res.json({ next: workOutNext(/** @type {string} */ (req.userEmail)) }); // signed in: the gate
     } catch (err) {
-      const e = /** @type {Error & { code?: string }} */ (err);
-      if (e.code === 'INVALID_PROFILE') return sendProfileError(res, e);
-      if (e.code === 'INVALID_QUEUE') return sendQueueError(res, e);
-      console.error(`Next not worked out: ${e.message}`);
-      return res.status(500).json({ error: e.message });
+      return sendViewError(res, /** @type {Error & { code?: string }} */ (err), 'Next not worked out');
+    }
+  },
+);
+
+// The problem list (spaced-repetition plan, step 9; D7): the pairs that can
+// be opened, queue first, then backlog. Safe, like GET /api/next: the
+// backlog is filled in memory only, and nothing is written.
+app.get(
+  '/api/queue',
+  /**
+   * GET /api/queue: { pairs: [{ question, language, where, pass?,
+   * passesInARow?, title, difficulty, topics, sources }] }, next first.
+   *
+   * @param {AppRequest} req - The request.
+   * @param {Response} res - The list, or 500 if the profile, a queue file
+   *   or a question file is invalid.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res) => {
+    try {
+      const { order, backlog, canOpen, questionOf } = queueView(/** @type {string} */ (req.userEmail)); // signed in: the gate
+      res.json({
+        pairs: listPairs(order, backlog, canOpen).map(
+          /**
+           * Adds what the list shows of the pair's question.
+           *
+           * @param {import('./order').ListedPair} p - A pair.
+           * @returns {import('./order').ListedPair & Pick<Problem, 'title' | 'difficulty' | 'topics' | 'sources'>} The line.
+           */
+          (p) => {
+            const { title, difficulty, topics, sources } = questionOf(p.question);
+            return { ...p, title, difficulty, topics, sources };
+          },
+        ),
+      });
+    } catch (err) {
+      return sendViewError(res, /** @type {Error & { code?: string }} */ (err), 'Queue not listed');
     }
   },
 );
@@ -960,13 +993,53 @@ app.get(
  *   read, or a question file is invalid.
  */
 function workOutNext(email) {
+  const { order, backlog, canOpen, questionOf } = queueView(email);
+  const next = nextPair(order, backlog, canOpen);
+  return next && { ...next, title: questionOf(next.question).title };
+}
+
+/**
+ * A user's queue and backlog as Next and the problem list see them (steps
+ * 7 and 9): the backlog filled in memory only (step 7, detail 4), the
+ * canOpenPair() test, and a way to look up a question. Writes nothing.
+ *
+ * @param {string} email - The user's email.
+ * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile,
+ *   canOpen: (pair: import('./order').BacklogElement) => boolean,
+ *   questionOf: (slug: string) => QuestionListing }} The view. questionOf()
+ *   is only for a pair canOpen() accepted, whose question is known.
+ * @throws {Error} ProfileError (INVALID_PROFILE) or QueueFileError
+ *   (INVALID_QUEUE) for an invalid file; another Error if a file can't be
+ *   read, or a question file is invalid.
+ */
+function queueView(email) {
   const profile = loadProfile(email);
   const files = loadQueueFiles(email);
   const questions = questionInfos();
-  const backlog = fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog;
-  const next = nextPair(files.order, backlog, canOpenPair(profile, questions));
-  // canOpenPair() accepts only pairs whose question is in questions.
-  return next && { ...next, title: /** @type {QuestionListing} */ (questions.find((q) => q.slug === next.question)).title };
+  const bySlug = new Map(questions.map((q) => [q.slug, q]));
+  return {
+    order: files.order,
+    backlog: fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog,
+    canOpen: canOpenPair(profile, questions),
+    // canOpenPair() accepts only pairs whose question is in questions.
+    questionOf: (slug) => /** @type {QuestionListing} */ (bySlug.get(slug)),
+  };
+}
+
+/**
+ * Answers a request that a queue view stopped: the profile's or the
+ * queue's 500, or a plain 500 for anything else (logged as `what`).
+ *
+ * @param {Response} res - The response.
+ * @param {Error & { code?: string }} err - From queueView().
+ * @param {string} what - What couldn't be done, for the log.
+ * @returns {Response} The response, sent.
+ */
+function sendViewError(res, err, what) {
+  if (err.code === 'INVALID_PROFILE') return sendProfileError(res, err);
+  if (err.code === 'INVALID_QUEUE') return sendQueueError(res, err);
+  console.error(`${what}: ${err.message}`);
+  return res.status(500).json({ error: err.message });
 }
 
 // Any other /api/ URL is an error, not a page: without this, GET requests
@@ -1049,10 +1122,10 @@ function sendQueueError(res, err) {
 }
 
 /**
- * What order.js needs to know about a question, and its title, for
- * GET /api/next.
+ * What order.js needs to know about a question, and what GET /api/next and
+ * GET /api/queue show of it.
  *
- * @typedef {import('./order').QuestionInfo & { title: string }} QuestionListing
+ * @typedef {import('./order').QuestionInfo & Pick<Problem, 'title' | 'difficulty' | 'topics' | 'sources'>} QuestionListing
  */
 
 /**
@@ -1072,7 +1145,8 @@ function questionInfos() {
        * Reads what's needed from one question file.
        *
        * @param {string} f - The file's name in questions/.
-       * @returns {QuestionListing} Its slug, created, languages and title.
+       * @returns {QuestionListing} Its slug, created, languages, title,
+       *   difficulty, topics and sources.
        * @throws {Error} "questions/<f>: ..." if it can't be read or parsed.
        */
       (f) => {
@@ -1083,7 +1157,8 @@ function questionInfos() {
         } catch (err) {
           throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
         }
-        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title: problem.title };
+        const { title, difficulty, topics, sources } = problem;
+        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title, difficulty, topics, sources };
       },
     );
 }
