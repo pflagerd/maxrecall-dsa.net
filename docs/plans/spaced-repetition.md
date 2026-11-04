@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in) and 7 (Next) are done. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next) and 8 (Skip) are done. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -732,9 +732,36 @@ each checked to fail against a deliberately wrong version first.
    failing). **Seen while checking:** with every language on, the
    backlog goes question by question, so after Two Sum in Python, Next
    is Two Sum in JavaScript (D6's order, as decided).
-8. **Skip**: `POST /api/questions/:slug/skip`, Skip records
-   (`"skipped": "yes"`, `schemaVersion` 3) in `submissions/`, and the
-   Skip button on the page.
+8. **Done 2026-11-03.** **Skip.** `POST /api/questions/:slug/skip` with
+   `{ language, code, elapsedMs?, confirmed? }` (detail 5: `code` may be
+   empty). It shares Run's and Submit's checks (`checkExecutionRequest`
+   in `server.js`), saves a record built by the same function as a
+   Submit's (`submissionRecord`): every new record is `schemaVersion` 3,
+   and a Skip's has `"skipped": "yes"`, judging fields `null` and
+   `results` `[]` (detail 6). It then moves the pair with step 6's
+   `updateQueue` and pass `"no"`, so it counts exactly as a failed
+   Submit, and answers with `next` from `workOutNext`, the code behind
+   `GET /api/next` (detail 2). **A streak is the server's to check**
+   (detail 1): with `passesInARow` above 0 and no `confirmed: true`, it's
+   `409` with `{ code: "CONFIRM_STREAK", passesInARow }` and nothing
+   changes; the page asks and sends it again confirmed. That check reads
+   `order.json` before the record is saved, so it's a preflight; the
+   queue change itself has no `await`. On the page, Skip goes straight to
+   `next`; it's hidden while the button is Next and disabled while a
+   Submit in that language is judged (detail 4). Not saved: it stays,
+   with an alert; saved without a queue update: it warns and goes on;
+   nothing next: it stays, with an alert (detail 3). The Submissions tab
+   shows "Skipped" with "—" for the runtime, and Load works (detail 7);
+   a Skip doesn't count as having answered for the Learning/Applying
+   rule. Checked: the 39 baseline requests identical to step 7 except
+   the record's `schemaVersion` 3; 8 Skip cases against the real server
+   (saved with no streak, `409` then confirmed, five refusals saving
+   nothing, `skipped` in the summaries, five Skips bringing a pair in,
+   a record that can't be saved, a broken question file); 11 page cases
+   in headless Chromium; `browser-check.js`'s 37 observations identical
+   to `master`; 8 deliberately broken versions all caught. **Found while
+   checking:** Skip wasn't disabled while judging, because nothing
+   redrew the buttons when a Submit started; fixed in `execute`.
 9. **The problem list** in queue order, then the backlog, marked "new".
 10. **`consistency.js`**, its `make` target and the log at server start.
 11. **`make delete-question` and `make rename-question`**, with

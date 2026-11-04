@@ -85,11 +85,13 @@ const { AUTH_DIR, SESSION_LIFETIME_MS, registrationOpen, register, login, sessio
  * @property {string} submittedAt
  * @property {string} question
  * @property {string} language
- * @property {string} status
- * @property {number} passed
- * @property {number} total
- * @property {number} runtimeMs
+ * @property {string | null} status - null for a Skip.
+ * @property {number | null} passed - null for a Skip.
+ * @property {number | null} total - null for a Skip.
+ * @property {number | null} runtimeMs - null for a Skip.
  * @property {number | null} elapsedMs - null if the record doesn't have it.
+ * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8); absent for a
+ *   Submit.
  */
 
 /**
@@ -454,10 +456,135 @@ app.get(
 );
 
 /**
+ * A Run, Submit or Skip request that passed checkExecutionRequest().
+ *
+ * @typedef {object} CheckedRequest
+ * @property {Problem} problem - The question.
+ * @property {string} sha256 - Its file's SHA-256, for the record.
+ * @property {string} email - The signed-in user.
+ * @property {string} language - One of SUPPORTED_LANGUAGES, allowed by the
+ *   profile and the question.
+ * @property {string} code - The editor's code.
+ * @property {number | undefined} elapsedMs - The page's timer, if sent.
+ */
+
+/**
+ * The checks Run, Submit and Skip share, so they refuse the same things:
+ * 404 for an unknown question; 400 for a bad language, code or elapsedMs,
+ * or a language the question lacks; 403 for one the profile doesn't allow;
+ * 500 for an invalid profile or queue file (fail closed). Each refusal is
+ * sent here.
+ *
+ * @param {AppRequest} req - The request; its body should be
+ *   { language, code, elapsedMs? }.
+ * @param {Response} res - The response, sent if the request is refused.
+ * @param {{ codeRequired: boolean }} options - false for Skip, whose code
+ *   may be empty (step 8, detail 5); it must still be a string.
+ * @returns {CheckedRequest | null} What was asked, or null if refused.
+ */
+function checkExecutionRequest(req, res, { codeRequired }) {
+  const loaded = loadProblem(req.params.slug);
+  if (!loaded) {
+    res.status(404).json({ error: 'Question not found' });
+    return null;
+  }
+  const { problem } = loaded;
+  /** @type {string} */
+  const email = /** @type {string} */ (req.userEmail); // signed in: the gate
+
+  const { language, code, elapsedMs } = req.body || {};
+  /**
+   * Sends one refusal.
+   *
+   * @param {number} status - The HTTP status.
+   * @param {string} error - Why.
+   * @returns {null} So a check can `return refuse(...)`.
+   */
+  const refuse = (status, error) => {
+    res.status(status).json({ error });
+    return null;
+  };
+  if (!SUPPORTED_LANGUAGES.includes(language)) {
+    return refuse(400, `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}`);
+  }
+  if (typeof code !== 'string' || (codeRequired && !code.trim())) {
+    return refuse(400, codeRequired ? 'code is required' : 'code must be a string (it may be empty)');
+  }
+  // How long the learner took, from the problem page's timer (issue #20).
+  // Optional, so a page loaded before the timer existed can still Submit;
+  // the record then says null. It's what the browser reports, not measured
+  // here (docs/plans/elapsed-timer.md, T6).
+  if (elapsedMs !== undefined && !(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0)) {
+    return refuse(400, 'elapsedMs must be a whole number of milliseconds, 0 or more');
+  }
+
+  if (!problem.starterCode[language]) {
+    return refuse(400, `This problem doesn't support ${language}.`);
+  }
+  // The learner's profile decides which languages they may use (403
+  // otherwise). An invalid profile refuses everything rather than guess
+  // (fail closed): 500, naming the problem.
+  let profile;
+  try {
+    profile = loadProfile(email);
+  } catch (err) {
+    sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+    return null;
+  }
+  if (!profile.allowedLanguages.includes(language)) {
+    return refuse(403, `${language} isn't one of the languages you can use (${profile.allowedLanguages.join(', ')}).`);
+  }
+  // Broken order.json or backlog.json: refused the same way (step 5,
+  // decision 3).
+  try {
+    loadQueueFiles(email);
+  } catch (err) {
+    sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
+    return null;
+  }
+  return { problem, sha256: loaded.sha256, email, language, code, elapsedMs };
+}
+
+/**
+ * A Submit or Skip record (readme.html, "Where data lives"). Version 3
+ * (step 8, detail 6) added skipped: "yes" on a Skip; a Submit leaves it
+ * out. A Skip isn't judged, so its judging fields are null and results
+ * empty (D8).
+ *
+ * @param {CheckedRequest} request - What was asked.
+ * @param {string} submittedAt - When, as UTC ISO 8601.
+ * @param {import('./judge/runner').JudgeResult | null} result - The judge's
+ *   result, or null for a Skip.
+ * @returns {import('./users').SubmissionRecord} The record to save.
+ */
+function submissionRecord({ problem, sha256, language, code, elapsedMs }, submittedAt, result) {
+  return {
+    // 2 added elapsedMs (2026-11-03), 3 skipped (step 8).
+    schemaVersion: 3,
+    submittedAt,
+    question: problem.slug,
+    questionSha256: sha256,
+    language,
+    judgeMode: problem.judgeMode || 'function',
+    code,
+    ...(result === null && { skipped: /** @type {'yes'} */ ('yes') }),
+    status: result ? result.status : null,
+    passed: result ? result.passed : null,
+    total: result ? result.total : null,
+    runtimeMs: result ? result.runtimeMs : null,
+    elapsedMs: elapsedMs ?? null,
+    results: result ? result.results.map((/** @type {{ passed: boolean }} */ r) => r.passed) : [],
+    stdout: result ? result.stdout : null,
+    stderr: result ? result.stderr : null,
+  };
+}
+
+/**
  * Handles Run (visible test cases only) and Submit (all of them, then saves
- * a record). Answers 400 for a bad request, 404 for an unknown question,
- * 503 when the judge is unavailable or busy, otherwise the judge's result,
- * with saved/submissionId (or saveError) for a Submit.
+ * a record and moves the queue). Refuses what checkExecutionRequest()
+ * refuses; 503 when the judge is unavailable or busy; otherwise the judge's
+ * result, with saved/submissionId (or saveError) and queueUpdated (or
+ * queueError) for a Submit.
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
@@ -467,47 +594,9 @@ app.get(
  *   `return res...` lines only stop early.
  */
 async function handleExecution(req, res, { onlyVisible }) {
-  const loaded = loadProblem(req.params.slug);
-  if (!loaded) return res.status(404).json({ error: 'Question not found' });
-  const { problem } = loaded;
-
-  const { language, code, elapsedMs } = req.body || {};
-  if (!SUPPORTED_LANGUAGES.includes(language)) {
-    return res.status(400).json({ error: `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}` });
-  }
-  if (typeof code !== 'string' || !code.trim()) {
-    return res.status(400).json({ error: 'code is required' });
-  }
-  // How long the learner took, from the problem page's timer (issue #20).
-  // Optional, so a page loaded before the timer existed can still Submit;
-  // the record then says null. It's what the browser reports, not measured
-  // here (docs/plans/elapsed-timer.md, T6).
-  if (elapsedMs !== undefined && !(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0)) {
-    return res.status(400).json({ error: 'elapsedMs must be a whole number of milliseconds, 0 or more' });
-  }
-
-  if (!problem.starterCode[language]) {
-    return res.status(400).json({ error: `This problem doesn't support ${language}.` });
-  }
-  // The learner's profile decides which languages they may use (403
-  // otherwise). An invalid profile refuses everything rather than guess
-  // (fail closed): 500, naming the problem.
-  let profile;
-  try {
-    profile = loadProfile(/** @type {string} */ (req.userEmail)); // signed in: the gate
-  } catch (err) {
-    return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
-  }
-  if (!profile.allowedLanguages.includes(language)) {
-    return res.status(403).json({ error: `${language} isn't one of the languages you can use (${profile.allowedLanguages.join(', ')}).` });
-  }
-  // Broken order.json or backlog.json: refused the same way (step 5,
-  // decision 3). Nothing uses the queue here yet; step 6 will.
-  try {
-    loadQueueFiles(/** @type {string} */ (req.userEmail)); // signed in: the gate
-  } catch (err) {
-    return sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
-  }
+  const request = checkExecutionRequest(req, res, { codeRequired: true });
+  if (!request) return;
+  const { problem, email, language, code } = request;
 
   const judgeMode = problem.judgeMode || 'function';
   // A function-mode question always has functionName (the problem file
@@ -526,26 +615,8 @@ async function handleExecution(req, res, { onlyVisible }) {
     // learner their result, so it's reported alongside it instead.
     if (!onlyVisible) {
       try {
-        // The gate above lets only signed-in requests this far, so there is
-        // a user (and saveSubmission checks it again).
-        result.submissionId = await saveSubmission(/** @type {string} */ (req.userEmail), {
-          // 2 added elapsedMs (2026-11-03); version 1 records don't have it.
-          schemaVersion: 2,
-          submittedAt,
-          question: problem.slug,
-          questionSha256: loaded.sha256,
-          language,
-          judgeMode,
-          code,
-          status: result.status,
-          passed: result.passed,
-          total: result.total,
-          runtimeMs: result.runtimeMs,
-          elapsedMs: elapsedMs ?? null,
-          results: result.results.map((/** @type {{ passed: boolean }} */ r) => r.passed),
-          stdout: result.stdout,
-          stderr: result.stderr,
-        });
+        // saveSubmission checks the user again.
+        result.submissionId = await saveSubmission(email, submissionRecord(request, submittedAt, result));
         result.saved = true;
       } catch (err) {
         console.error(`Failed to save submission for ${problem.slug}:`, err);
@@ -557,7 +628,7 @@ async function handleExecution(req, res, { onlyVisible }) {
       // detail 5). No await from here to the response: see updateQueue().
       if (result.saved) {
         try {
-          updateQueue(/** @type {string} */ (req.userEmail), { question: problem.slug, language }, passFor(result.status));
+          updateQueue(email, { question: problem.slug, language }, passFor(result.status));
           result.queueUpdated = true;
         } catch (err) {
           console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
@@ -603,6 +674,88 @@ app.post(
   (req, res) => handleExecution(req, res, { onlyVisible: false }),
 );
 
+/**
+ * Handles Skip (step 8; D8): saves a Skip record, then moves the pair as a
+ * failed Submit would (recordSubmit() with pass "no"), and answers with
+ * what's next, so the page can go straight there (detail 2). Refuses what
+ * checkExecutionRequest() refuses, with code allowed to be empty. A pair
+ * with passesInARow above 0 needs confirmed: true, or it's 409 with
+ * { code: "CONFIRM_STREAK", passesInARow } and nothing changes (detail 1).
+ * That check reads order.json before the record is saved (an await), so
+ * it's a preflight; the queue change itself is updateQueue()'s, with no
+ * await.
+ *
+ * @param {AppRequest} req - The request; its body should be
+ *   { language, code, elapsedMs?, confirmed? }.
+ * @param {Response} res - { saved, submissionId?, saveError?, queueUpdated?,
+ *   queueError?, next?, nextError? }.
+ * @returns {Promise<Response | void>} Nothing that's used: the
+ *   `return res...` lines only stop early.
+ */
+async function handleSkip(req, res) {
+  const { confirmed } = req.body || {};
+  if (confirmed !== undefined && typeof confirmed !== 'boolean') {
+    return res.status(400).json({ error: 'confirmed must be true or false' });
+  }
+  const request = checkExecutionRequest(req, res, { codeRequired: false });
+  if (!request) return;
+  const { problem, email, language } = request;
+  const pair = { question: problem.slug, language };
+
+  let element;
+  try {
+    element = loadQueueFiles(email).order.queue.find((e) => e.question === pair.question && e.language === pair.language);
+  } catch (err) {
+    return sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
+  }
+  if (element && element.passesInARow > 0 && confirmed !== true) {
+    const n = element.passesInARow;
+    return res.status(409).json({
+      error: `Skipping resets your ${n} ${n === 1 ? 'pass' : 'passes'} in a row; send confirmed: true to skip anyway.`,
+      code: 'CONFIRM_STREAK',
+      passesInARow: n,
+    });
+  }
+
+  /** @type {{ saved: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string, next?: (import('./order').BacklogElement & { title: string }) | null, nextError?: string }} */
+  const answer = { saved: false };
+  try {
+    answer.submissionId = await saveSubmission(email, submissionRecord(request, new Date().toISOString(), null));
+    answer.saved = true;
+  } catch (err) {
+    console.error(`Failed to save skip for ${problem.slug}:`, err);
+    answer.saveError = /** @type {Error} */ (err).message;
+    return res.json(answer); // nothing changed: the page stays (detail 3a)
+  }
+  // From here to the response, no await (updateQueue()).
+  try {
+    updateQueue(email, pair, 'no');
+    answer.queueUpdated = true;
+  } catch (err) {
+    console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
+    answer.queueUpdated = false;
+    answer.queueError = /** @type {Error} */ (err).message;
+  }
+  try {
+    answer.next = workOutNext(email);
+  } catch (err) {
+    answer.nextError = /** @type {Error} */ (err).message;
+  }
+  res.json(answer);
+}
+
+app.post(
+  '/api/questions/:slug/skip',
+  /**
+   * POST /api/questions/:slug/skip: handleSkip().
+   *
+   * @param {AppRequest} req - Body { language, code, elapsedMs?, confirmed? }.
+   * @param {Response} res - Answered by handleSkip().
+   * @returns {Promise<Response | void>} Nothing that's used.
+   */
+  (req, res) => handleSkip(req, res),
+);
+
 // --- Saved submissions (the signed-in user's own) --------------------------------
 // Express 4 doesn't catch errors from async handlers, hence the try/catch.
 
@@ -614,8 +767,8 @@ app.post(
  * @param {SavedSubmission} record - A saved Submit.
  * @returns {SubmissionSummary} Its summary.
  */
-function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs }) {
-  return { id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null };
+function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs, skipped }) {
+  return { id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null, ...(skipped === 'yes' && { skipped }) };
 }
 
 // Newest first. Optional ?question=<slug> and ?language=<language> narrow
@@ -782,31 +935,39 @@ app.get(
    *   lines only stop early.
    */
   (req, res) => {
-    const email = /** @type {string} */ (req.userEmail); // signed in: the gate
-    let profile, files, questions;
     try {
-      profile = loadProfile(email);
+      res.json({ next: workOutNext(/** @type {string} */ (req.userEmail)) }); // signed in: the gate
     } catch (err) {
-      return sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
+      const e = /** @type {Error & { code?: string }} */ (err);
+      if (e.code === 'INVALID_PROFILE') return sendProfileError(res, e);
+      if (e.code === 'INVALID_QUEUE') return sendQueueError(res, e);
+      console.error(`Next not worked out: ${e.message}`);
+      return res.status(500).json({ error: e.message });
     }
-    try {
-      files = loadQueueFiles(email);
-    } catch (err) {
-      return sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
-    }
-    try {
-      questions = questionInfos();
-    } catch (err) {
-      console.error(`Next not worked out: ${/** @type {Error} */ (err).message}`);
-      return res.status(500).json({ error: /** @type {Error} */ (err).message });
-    }
-    const backlog = fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog;
-    const next = nextPair(files.order, backlog, canOpenPair(profile, questions));
-    // canOpenPair() accepts only pairs whose question is in questions.
-    const title = next && /** @type {QuestionListing} */ (questions.find((q) => q.slug === next.question)).title;
-    res.json({ next: next && { ...next, title } });
   },
 );
+
+/**
+ * What to open next for a user (step 7): nextPair() over their files, the
+ * backlog filled in memory only (detail 4), with canOpenPair(). Writes
+ * nothing. Used by GET /api/next and by Skip's answer.
+ *
+ * @param {string} email - The user's email.
+ * @returns {(import('./order').BacklogElement & { title: string }) | null}
+ *   The pair and its question's title, or null if nothing can be opened.
+ * @throws {Error} ProfileError (INVALID_PROFILE) or QueueFileError
+ *   (INVALID_QUEUE) for an invalid file; another Error if a file can't be
+ *   read, or a question file is invalid.
+ */
+function workOutNext(email) {
+  const profile = loadProfile(email);
+  const files = loadQueueFiles(email);
+  const questions = questionInfos();
+  const backlog = fillBacklog(files.order, files.backlog, allowedPairs(questions, profile)).backlog;
+  const next = nextPair(files.order, backlog, canOpenPair(profile, questions));
+  // canOpenPair() accepts only pairs whose question is in questions.
+  return next && { ...next, title: /** @type {QuestionListing} */ (questions.find((q) => q.slug === next.question)).title };
+}
 
 // Any other /api/ URL is an error, not a page: without this, GET requests
 // would fall through to the index.html fallback below and get a 200 with
