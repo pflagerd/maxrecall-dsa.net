@@ -1,7 +1,7 @@
 # Plan: limited live testing on the VPS
 
-Status: **in planning, 2026-11-04.** Nothing is built yet. Seven questions
-and decisions for the owner are below (Q1–Q2, D1–D5). Linked from
+Status: **in planning, 2026-11-04.** Nothing is built yet. Q1 and Q2 are
+answered (below); D1–D5 are waiting for the owner. Linked from
 `readme.html` → Decisions & plans.
 
 ## Goal
@@ -12,7 +12,8 @@ access as it is.
 
 "Limited" is taken to mean: a handful of people the owner invites, each
 with their own account and progress, reaching the app at
-`https://maxrecall-dsa.net` from an ordinary browser. Not open sign-up.
+`https://DOMAIN` from an ordinary browser. Not open sign-up. `DOMAIN` is
+not chosen yet (Q1).
 
 ## Where things stand (facts from the code and docs)
 
@@ -62,17 +63,30 @@ with their own account and progress, reaching the app at
   Sessions), so a backup of `auth/` holds no usable session tokens. It does
   hold password hashes.
 
-## Questions only the owner can answer
+## Questions for the owner
 
-- **Q1. DNS.** Does `maxrecall-dsa.net` (and `www.`, if wanted) have an A
-  record (and AAAA, if the VPS has IPv6) pointing at the VPS? I couldn't
-  look it up: the cloud session's network policy blocks DNS lookups. On
-  Kubuntu, `dig +short maxrecall-dsa.net A` shows it.
-- **Q2. The old MaxRecall.** Does `pflagerd/maxrecall.net` run on this
-  VPS? Its `start-server` binds 80 and 443 itself and uses certbot's
-  stop/start hooks (`maxrecall.net` repo: `start-server`,
-  `maxrecall.net.service`). If it's on this VPS, the two need one web
-  server in front of both, and that changes step 3.
+- **Q1. DNS. Answered 2026-11-04:** `maxrecall-dsa.net` doesn't point at
+  the VPS yet, and the name isn't settled; it will probably be
+  `maxrecall-code.net` or similar. Written `DOMAIN` below until it is.
+  - Nothing in the code uses a domain name. Every `maxrecall-dsa.net` in
+    the repo is the repo's or the checkout's folder name
+    (`/srv/maxrecall/maxrecall-dsa.net`), which can stay as it is. The name
+    is needed only in step 3 (the nginx config and certbot).
+  - **Choose it before step 3.** Changing it later signs everyone out: the
+    session cookie has no `Domain` attribute (`server.js`, `setSessionCookie`),
+    so browsers keep it for that one host name only
+    ([RFC 6265 §4.1.2.3](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.3)).
+    It also needs a new certificate, and HSTS keeps browsers on HTTPS for
+    the old name until it expires
+    ([RFC 6797 §6.1.1](https://www.rfc-editor.org/rfc/rfc6797#section-6.1.1)).
+    Steps 1 and 2 don't need it.
+  - Before step 3: register it, add an A record (and AAAA, if the VPS has
+    IPv6) with the VPS's address, and wait until `dig +short DOMAIN A`
+    on Kubuntu prints that address. certbot's check comes from Let's
+    Encrypt's servers over the internet, so it fails until DNS answers.
+- **Q2. The old MaxRecall. Answered 2026-11-04:** `pflagerd/maxrecall.net`
+  runs on a different VPS. Ports 80 and 443 on this one are free for
+  nginx, and the two sites don't share a web server.
 
 ## Decisions
 
@@ -165,7 +179,7 @@ Each is small and can be checked before the next.
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
    nginx, HSTS ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)), and
-   D3's gate. Then `certbot --nginx -d maxrecall-dsa.net`.
+   D3's gate. Then `certbot --nginx -d DOMAIN` (Q1).
 4. **Check from Kubuntu.** The redirect; the certificate; the cookie has
    `Secure` ([RFC 6265 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5));
    ports 3000 and 3001 still unreachable from outside (deploy-vps.md §6);
@@ -192,3 +206,5 @@ the same change.
 | Date | Decision |
 |---|---|
 | 2026-11-04 | Plan written; waiting for the owner on Q1–Q2 and D1–D5. |
+| 2026-11-04 | Q1 (owner): the domain doesn't point at the VPS yet, and its name isn't settled, probably `maxrecall-code.net` or similar. Needed before step 3 only. |
+| 2026-11-04 | Q2 (owner): the old MaxRecall runs on a different VPS, so ports 80 and 443 here are free. |
