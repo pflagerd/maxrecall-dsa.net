@@ -8,22 +8,29 @@ const { resolveInside } = require('./paths');
  * (readme.html, "Where data lives").
  *
  * @typedef {object} SubmissionRecord
- * @property {number} schemaVersion - 2 since elapsedMs was added (2026-11-03); 1 before.
+ * @property {number} schemaVersion - 3 since skipped was added (spaced-
+ *   repetition plan, step 8); 2 since elapsedMs was (2026-11-03); 1 before.
  * @property {string} submittedAt - When the Submit arrived, as UTC ISO 8601.
  * @property {string} question - The question's slug (its file name without .json).
  * @property {string} questionSha256 - SHA-256 of the question's file at the time, in hex.
  * @property {string} language - One of javascript, python, cpp, java, d.
  * @property {string} judgeMode - "function" or "program".
- * @property {string} code - What was submitted.
- * @property {string} status - The judge's verdict, e.g. "Accepted" or "Wrong Answer".
- * @property {number} passed - How many test cases passed.
- * @property {number} total - How many test cases there were.
- * @property {number} runtimeMs - How long judging took, in milliseconds.
+ * @property {string} code - What was submitted, or what the editor held
+ *   when skipped (may be empty then).
+ * @property {'yes'} [skipped] - "yes" for a Skip (D8), which isn't judged;
+ *   absent for a Submit, and from every record before version 3.
+ * @property {string | null} status - The judge's verdict, e.g. "Accepted"
+ *   or "Wrong Answer"; null for a Skip.
+ * @property {number | null} passed - How many test cases passed; null for a Skip.
+ * @property {number | null} total - How many test cases there were; null for a Skip.
+ * @property {number | null} runtimeMs - How long judging took, in
+ *   milliseconds; null for a Skip.
  * @property {number | null} [elapsedMs] - The page's timer at Submit, or null
  *   if the page didn't send it. Missing from schemaVersion 1 records.
- * @property {boolean[]} results - Pass or fail for each test case, in file order.
- * @property {string} stdout - The program's standard output.
- * @property {string} stderr - The program's standard error.
+ * @property {boolean[]} results - Pass or fail for each test case, in file
+ *   order; empty for a Skip.
+ * @property {string | null} stdout - The program's standard output; null for a Skip.
+ * @property {string | null} stderr - The program's standard error; null for a Skip.
  */
 
 /**

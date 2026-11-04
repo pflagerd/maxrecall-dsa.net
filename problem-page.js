@@ -489,13 +489,17 @@ const NEXT_GUARD_MS = 1000;
  * with a tooltip naming what's next. Next is disabled for its first
  * NEXT_GUARD_MS (and this is called again when that ends), and when there's
  * nothing to go to. The button is disabled while the current language's
- * Submit is being judged.
+ * Submit is being judged, or a Skip is being sent. Also shows Skip: hidden
+ * once the button is Next, so a Skip can't overwrite the pass just earned,
+ * and disabled while judging or skipping (step 8, detail 4; D8).
  *
  * @returns {void}
  */
 function updateSubmitButton() {
   const state = currentLanguage ? nextByLanguage[currentLanguage] : undefined;
-  const judging = currentLanguage !== null && submittingLanguages.has(currentLanguage);
+  const judging = skipping || (currentLanguage !== null && submittingLanguages.has(currentLanguage));
+  skipBtn.hidden = Boolean(state);
+  skipBtn.disabled = judging;
   if (!state) {
     submitBtn.textContent = SUBMIT_LABEL;
     submitBtn.title = SUBMIT_TITLE;
@@ -550,10 +554,81 @@ function handleSubmitClick() {
   }
   // The button is disabled until then; checked again in case of a stray click.
   if (!state.next || state.error || Date.now() < state.readyAt) return;
+  openPair(state.next);
+}
+
+/**
+ * Opens a pair: a full page load of problem.html?slug=…&language=… (step
+ * 7, detail 5), so Back returns here.
+ *
+ * @param {{ question: string, language: string }} pair - The pair.
+ * @returns {void}
+ */
+function openPair(pair) {
   const url = new URL('problem.html', window.location.href);
-  url.searchParams.set('slug', state.next.question);
-  url.searchParams.set('language', state.next.language);
+  url.searchParams.set('slug', pair.question);
+  url.searchParams.set('language', pair.language);
   window.location.assign(url);
+}
+
+// True while a Skip is being sent: Submit and Skip are disabled meanwhile.
+/** @type {boolean} */
+let skipping = false;
+
+/**
+ * Skip's click handler (step 8; D8): records the current pair as skipped,
+ * a fail, and goes to what's next. If the server says there's a streak to
+ * lose (409, CONFIRM_STREAK), asks first and sends it again confirmed
+ * (detail 1). If the Skip isn't saved, or there's nothing to go to, the
+ * page stays and an alert says why; if it's saved but the queue wasn't
+ * updated, an alert says so and the page goes on (detail 3).
+ *
+ * @returns {Promise<void>} Never rejects: failures are shown in an alert.
+ */
+async function skip() {
+  // Skip is wired up only after the first language is shown (init).
+  const language = /** @type {string} */ (currentLanguage);
+  const body = { language, code: /** @type {CodeMirror.Editor} */ (editor).getValue(), elapsedMs: Math.round(clockFor(language).elapsedMs()) };
+  skipping = true;
+  updateSubmitButton();
+  try {
+    let confirmed = false;
+    for (;;) {
+      const res = await fetch(`/api/questions/${slug}/skip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, ...(confirmed && { confirmed: true }) }),
+      });
+      const data = await res.json();
+      if (res.status === 409 && data.code === 'CONFIRM_STREAK' && !confirmed) {
+        const n = data.passesInARow;
+        if (!confirm(`Skipping resets your ${n} ${n === 1 ? 'pass' : 'passes'} in a row. Skip anyway?`)) return;
+        confirmed = true;
+        continue;
+      }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      if (!data.saved) {
+        alert(`The Skip wasn't saved, so nothing changed: ${data.saveError}`);
+        return;
+      }
+      if (data.queueUpdated === false) alert(`Skipped and saved, but your queue wasn't updated: ${data.queueError}`);
+      if (data.nextError) {
+        alert(`Skipped, but what's next couldn't be worked out: ${data.nextError}. Go back to the list for the next question.`);
+        return;
+      }
+      if (!data.next) {
+        alert('Skipped. Nothing left: every question in your languages is done.');
+        return;
+      }
+      openPair(data.next);
+      return;
+    }
+  } catch (err) {
+    alert(`Couldn't skip: ${/** @type {Error} */ (err).message}`);
+  } finally {
+    skipping = false;
+    updateSubmitButton();
+  }
 }
 
 // --- Elapsed-time timer (issue #20, docs/plans/elapsed-timer.md) ---------
@@ -1534,6 +1609,9 @@ async function execute(endpoint, button) {
     // Hold the clock while judging; the time sent is the time shown now.
     submittingLanguages.add(language);
     updateClocks();
+    // Skip is disabled while judging (step 8, detail 4), so a Skip and a
+    // Submit of the same pair can't be saved in the wrong order.
+    updateSubmitButton();
   }
   const elapsedMs = Math.round(clockFor(language).elapsedMs());
   button.disabled = true;
@@ -1634,11 +1712,12 @@ function showInSubmissionsPanel(...nodes) {
  * @property {string} submittedAt - UTC ISO 8601.
  * @property {string} question
  * @property {string} language
- * @property {string} status
- * @property {number} passed
- * @property {number} total
- * @property {number} runtimeMs
+ * @property {string | null} status - null for a Skip.
+ * @property {number | null} passed - null for a Skip.
+ * @property {number | null} total - null for a Skip.
+ * @property {number | null} runtimeMs - null for a Skip.
  * @property {number | null} elapsedMs - null for submissions before the timer.
+ * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8).
  */
 
 /**
@@ -1667,7 +1746,8 @@ async function fetchSubmissionSummaries(language) {
  * @returns {Promise<'learning' | 'applying'>} The tab to show.
  */
 async function tabForLanguage(language, summariesPromise) {
-  const submitted = await summariesPromise.then((summaries) => summaries.length > 0, () => false);
+  // A Skip doesn't count as having answered (D8).
+  const submitted = await summariesPromise.then((summaries) => summaries.some((s) => !s.skipped), () => false);
   const hasLearning = Boolean(/** @type {PublicProblem} */ (problem).learning && /** @type {Record<string, string>} */ (/** @type {PublicProblem} */ (problem).learning)[language]); // learning checked first
   return !submitted && hasLearning ? 'learning' : 'applying';
 }
@@ -1734,12 +1814,13 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(/*
     when.title = `${s.submittedAt} (UTC)`;
     row.append(
       when,
-      makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
-      makeEl('td', `${s.runtimeMs} ms`)
+      // A Skip isn't judged (step 8, detail 7): "Skipped", and no runtime.
+      s.skipped ? makeEl('td', 'Skipped', 'status-fail') : makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
+      makeEl('td', s.skipped ? '—' : `${s.runtimeMs} ms`)
     );
     // How long you took (issue #20); older submissions didn't record it.
     const took = makeEl('td', s.elapsedMs === null ? '—' : formatElapsed(s.elapsedMs));
-    took.title = s.elapsedMs === null ? 'Not recorded (submitted before the timer existed)' : 'Time on the question before this Submit';
+    took.title = s.elapsedMs === null ? 'Not recorded (submitted before the timer existed)' : `Time on the question before this ${s.skipped ? 'Skip' : 'Submit'}`;
     row.appendChild(took);
     const loadBtn = makeEl('button', 'Load');
     loadBtn.type = 'button';
@@ -1933,8 +2014,7 @@ async function init() {
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
   submitBtn.addEventListener('click', handleSubmitClick);
-  // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
-  skipBtn.addEventListener('click', () => alert('Skip button pressed'));
+  skipBtn.addEventListener('click', skip);
 
   // Last, so the buttons above are wired up without waiting for this fetch.
   openSubmissionFromAddress();
