@@ -1,4 +1,7 @@
 const slug = new URLSearchParams(window.location.search).get('slug');
+// The language to open in, when Next (or a link) names one
+// (spaced-repetition plan, step 7, detail 7): languageFromAddress().
+const addressLanguage = new URLSearchParams(window.location.search).get('language');
 
 // Every element looked up below is in problem.html, so each lookup is cast
 // to the element it finds there, without null (decision 2 in
@@ -445,27 +448,112 @@ const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 /** Each language's name as shown. @type {Record<string, string>} */
 const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java', d: 'D' };
 
-// Languages this question has been Submitted in, and saved, since the page
-// opened (issue #18). Submit is then grayed out for that language, nudging
-// the learner on to the next question. Per language because progress is per
-// (question, language). Run stays available, and a reload starts afresh:
-// it's a nudge, not a rule the server enforces (owner's decisions).
-/** @type {Set<string | null>} */
-const submittedLanguages = new Set();
-const SUBMIT_TITLE = submitBtn.title;
+// Submit turns into Next (spaced-repetition plan, D7, step 7) once this
+// question has been Submitted, and saved, in a language since the page
+// opened. Per language, because progress is per (question, language):
+// switched to another language, it's Submit again. A reload starts afresh:
+// it's a nudge, not a rule the server enforces. This replaced issue #18's
+// grayed-out Submit.
 
 /**
- * Grays out Submit for a language already submitted, with a tooltip that
- * says why; otherwise enables it.
+ * What GET /api/next named: the pair to open next.
+ *
+ * @typedef {object} NextPair
+ * @property {string} question - Its file name without .json (the slug).
+ * @property {string} language - One of LANGUAGE_LABELS's keys.
+ * @property {string} title - The question's title, for the tooltip.
+ */
+
+/**
+ * Where Next goes, for one language of this question.
+ *
+ * @typedef {object} NextState
+ * @property {NextPair | null} next - The pair, or null if nothing is left
+ *   (detail 8).
+ * @property {string} [error] - Why GET /api/next couldn't be asked: Next is
+ *   then disabled, saying so.
+ * @property {number} readyAt - When Next starts taking clicks
+ *   (Date.now() time): a second after it appears, so a second click on
+ *   Submit can't land on Next before the results are read (D7).
+ */
+
+/** Next's state by language, for languages submitted and saved. @type {Record<string, NextState>} */
+const nextByLanguage = {};
+const SUBMIT_TITLE = submitBtn.title;
+const SUBMIT_LABEL = /** @type {string} */ (submitBtn.textContent);
+/** How long Next ignores clicks after it appears, in milliseconds (D7). @type {number} */
+const NEXT_GUARD_MS = 1000;
+
+/**
+ * Shows the button as Submit, or as Next for a language already submitted,
+ * with a tooltip naming what's next. Next is disabled for its first
+ * NEXT_GUARD_MS (and this is called again when that ends), and when there's
+ * nothing to go to. The button is disabled while the current language's
+ * Submit is being judged.
  *
  * @returns {void}
  */
 function updateSubmitButton() {
-  const done = submittedLanguages.has(currentLanguage);
-  submitBtn.disabled = done;
-  submitBtn.title = done
-    ? `Already submitted in ${LANGUAGE_LABELS[/** @type {string} */ (currentLanguage)]}. Go back to the list for the next question.`
-    : SUBMIT_TITLE;
+  const state = currentLanguage ? nextByLanguage[currentLanguage] : undefined;
+  const judging = currentLanguage !== null && submittingLanguages.has(currentLanguage);
+  if (!state) {
+    submitBtn.textContent = SUBMIT_LABEL;
+    submitBtn.title = SUBMIT_TITLE;
+    submitBtn.disabled = judging;
+    return;
+  }
+  submitBtn.textContent = 'Next';
+  if (state.error) {
+    submitBtn.title = `Couldn't work out what's next: ${state.error}. Go back to the list for the next question.`;
+    submitBtn.disabled = true;
+  } else if (!state.next) {
+    submitBtn.title = 'Nothing left: every question in your languages is done.';
+    submitBtn.disabled = true;
+  } else {
+    submitBtn.title = `${state.next.title}, in ${LANGUAGE_LABELS[state.next.language] || state.next.language}`;
+    const wait = state.readyAt - Date.now();
+    submitBtn.disabled = judging || wait > 0;
+    if (wait > 0) setTimeout(updateSubmitButton, wait);
+  }
+}
+
+/**
+ * Asks the server what's next (GET /api/next), as soon as a saved Submit's
+ * result arrives (step 7, detail 5), so the tooltip can say it and Next
+ * goes exactly there.
+ *
+ * @returns {Promise<NextState>} Next's state, its guard starting now. Never
+ *   rejects: a failure is kept in error.
+ */
+async function fetchNext() {
+  try {
+    const res = await fetch('/api/next');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return { next: data.next, readyAt: Date.now() + NEXT_GUARD_MS };
+  } catch (err) {
+    return { next: null, error: /** @type {Error} */ (err).message, readyAt: Date.now() + NEXT_GUARD_MS };
+  }
+}
+
+/**
+ * Submit's click handler: Next, once it's Next and ready, opens the next
+ * pair (a full page load, so Back returns here); otherwise it Submits.
+ *
+ * @returns {void}
+ */
+function handleSubmitClick() {
+  const state = currentLanguage ? nextByLanguage[currentLanguage] : undefined;
+  if (!state) {
+    execute('submit', submitBtn);
+    return;
+  }
+  // The button is disabled until then; checked again in case of a stray click.
+  if (!state.next || state.error || Date.now() < state.readyAt) return;
+  const url = new URL('problem.html', window.location.href);
+  url.searchParams.set('slug', state.next.question);
+  url.searchParams.set('language', state.next.language);
+  window.location.assign(url);
 }
 
 // --- Elapsed-time timer (issue #20, docs/plans/elapsed-timer.md) ---------
@@ -798,6 +886,29 @@ function renderLanguageSelectOptions(available) {
 function pickInitialLanguage(problem) {
   const candidates = [profile.defaultLanguage, ...profile.languages];
   return candidates.find((l) => problem.starterCode[l]) || profile.languages[0];
+}
+
+/**
+ * The language ?language= names (step 7, detail 7), if the question can be
+ * opened in it for this visit: a language turned on in the profile, that
+ * the question has. The learner's default isn't changed. Otherwise an
+ * alert says why, and the caller uses pickInitialLanguage(). Ignored when
+ * the address also names a submission, which brings its own language.
+ *
+ * @param {PublicProblem} problem - The question being opened.
+ * @returns {string | null} The language, or null to use the usual one.
+ */
+function languageFromAddress(problem) {
+  if (!addressLanguage || new URLSearchParams(window.location.search).has('submission')) return null;
+  const name = LANGUAGE_LABELS[addressLanguage];
+  let why;
+  if (!name) why = `"${addressLanguage}" isn't a language here.`;
+  else if (!profile.allowedLanguages.includes(addressLanguage)) why = `${name} isn't one of the languages you can use.`;
+  else if (!profile.languages.includes(addressLanguage)) why = `${name} is turned off in your languages.`;
+  else if (!problem.starterCode[addressLanguage]) why = `This question can't be answered in ${name}.`;
+  else return addressLanguage;
+  alert(`The page address asks for ${name || addressLanguage}. ${why} The question opens in your usual language instead.`);
+  return null;
 }
 
 // A checkbox for the only remaining checked language can't be unchecked —
@@ -1240,6 +1351,7 @@ async function switchLanguage(newLanguage, { chosenByUser = true } = {}) {
   }
   if (newLanguage !== currentLanguage) {
     if (!(await showLanguage(newLanguage))) return true; // a later switch took over
+    setAddressParam('language', newLanguage); // so a reload reopens it (step 7, detail 7d)
     if (chosenByUser) setSubmissionInAddress(null);
   }
   // The default is saved to the profile only if it permits (saveDefaultLanguage).
@@ -1351,6 +1463,9 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
  * @property {boolean} [saved] - Submit only: whether the record was saved.
  * @property {string} [saveError] - Submit only, when not saved: why.
  * @property {string} [submissionId] - Submit only, when saved.
+ * @property {boolean} [queueUpdated] - Submit only, when saved: whether the
+ *   queue was updated (step 6).
+ * @property {string} [queueError] - When it wasn't: why.
  */
 
 /**
@@ -1364,7 +1479,7 @@ function renderResults(result) {
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
   }${typeof result.runtimeMs === 'number' ? ` (${result.runtimeMs} ms)` : ''}${
     result.saved === false ? ` — ⚠ not saved: ${result.saveError}` : ''
-  }`;
+  }${result.queueUpdated === false ? ` — ⚠ saved, but your queue wasn't updated: ${result.queueError}` : ''}`;
   consoleStatusEl.className = result.status === 'Accepted' ? 'status-pass' : 'status-fail';
 
   // textContent, not innerHTML — this is raw program output, not markup.
@@ -1436,7 +1551,9 @@ async function execute(endpoint, button) {
     consoleStateByLanguage[language] = { kind: 'result', data };
     if (stillShown()) renderResults(data);
     if (isSubmit && data.saved) {
-      submittedLanguages.add(language);
+      // Submit turns into Next (D7): ask now what it opens, so the
+      // tooltip can say it (step 7, detail 5). fetchNext() never rejects.
+      nextByLanguage[language] = await fetchNext();
       clockFor(language).freeze();
       submissionsNotice = null;
       // A saved Submit becomes the submission named in the page address, so
@@ -1453,14 +1570,15 @@ async function execute(endpoint, button) {
     consoleStateByLanguage[language] = { kind: 'error', message: /** @type {Error} */ (err).message };
     if (stillShown()) renderClientError(/** @type {Error} */ (err).message);
   } finally {
-    // Submit stays grayed out after a saved Submit; a failed one (network
-    // error, judge busy, not saved) can be tried again.
-    if (button === submitBtn) updateSubmitButton();
-    else button.disabled = false;
+    // Judging is over before the button is redrawn, which needs to know.
     if (isSubmit) {
       submittingLanguages.delete(language);
       updateClocks();
     }
+    // After a saved Submit the button is Next; a failed one (network error,
+    // judge busy, not saved) is Submit again, to be tried again.
+    if (button === submitBtn) updateSubmitButton();
+    else button.disabled = false;
   }
 }
 
@@ -1646,9 +1764,21 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(/*
  * @returns {void}
  */
 function setSubmissionInAddress(id) {
+  setAddressParam('submission', id);
+}
+
+/**
+ * Sets or removes one parameter of the page address, without reloading
+ * the page or adding to its history (history.replaceState).
+ *
+ * @param {string} name - The parameter, e.g. "submission" or "language".
+ * @param {string | null} value - Its new value, or null to remove it.
+ * @returns {void}
+ */
+function setAddressParam(name, value) {
   const url = new URL(window.location.href);
-  if (id) url.searchParams.set('submission', id);
-  else url.searchParams.delete('submission');
+  if (value) url.searchParams.set(name, value);
+  else url.searchParams.delete(name);
   history.replaceState(null, '', url);
 }
 
@@ -1797,11 +1927,12 @@ async function init() {
   renderHeader(await labelsPromise);
   // Opening the question in its initial language applies the same
   // per-language rules as switching to one (showLanguage).
-  await showLanguage(pickInitialLanguage(/** @type {PublicProblem} */ (problem)));
+  // ?language= first, if it can be used (step 7, detail 7).
+  await showLanguage(languageFromAddress(/** @type {PublicProblem} */ (problem)) ?? pickInitialLanguage(/** @type {PublicProblem} */ (problem)));
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
-  submitBtn.addEventListener('click', () => execute('submit', submitBtn));
+  submitBtn.addEventListener('click', handleSubmitClick);
   // Stub: real skip logic (advance to next problem, record as missed, etc.) comes later.
   skipBtn.addEventListener('click', () => alert('Skip button pressed'));
 

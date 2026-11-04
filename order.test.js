@@ -1,13 +1,13 @@
 'use strict';
 
-// Tests for order.js (docs/plans/spaced-repetition.md, D1, D3–D6, steps 5
-// and 6). Run
+// Tests for order.js (docs/plans/spaced-repetition.md, D1, D3–D7, steps 5
+// to 7). Run
 // with `make test`.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, fillBacklog, passFor, recordSubmit, nextPair } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -221,4 +221,29 @@ test('recordSubmit leaves the files it was given unchanged, and its result is va
   const result = recordSubmit(order, backlog, PY('x'), 'yes', { canIntroduce: ANY, random: HALF });
   assert.equal(JSON.stringify([order, backlog]), before);
   assert.doesNotThrow(() => parseQueueFiles(JSON.stringify(result.order), JSON.stringify(result.backlog)));
+});
+
+test('next is the front of the queue', () => {
+  assert.deepEqual(nextPair(queueOf(['a', 'b']), backlogOf(['x/python']), ANY), PY('a'));
+});
+
+test('next passes over pairs that can\'t be opened, leaving them where they are', () => {
+  const order = queueOf(['gone', 'b', 'c']);
+  const before = JSON.stringify(order);
+  assert.deepEqual(nextPair(order, backlogOf([]), (p) => p.question !== 'gone'), PY('b'));
+  assert.equal(JSON.stringify(order), before);
+});
+
+test('with nothing in the queue that can be opened, next is the first such backlog pair (detail 3)', () => {
+  assert.deepEqual(nextPair(queueOf([]), backlogOf(['x/cpp', 'y/python']), (p) => p.language === 'python'), PY('y'));
+  assert.deepEqual(nextPair(queueOf(['a']), backlogOf(['y/python']), (p) => p.question !== 'a'), PY('y'));
+});
+
+test('with nothing anywhere that can be opened, next is null (detail 8)', () => {
+  assert.equal(nextPair(queueOf(['a']), backlogOf(['x/cpp']), () => false), null);
+  assert.equal(nextPair(queueOf([]), backlogOf([]), ANY), null);
+});
+
+test('next names only the pair, not its pass or count', () => {
+  assert.deepEqual(Object.keys(/** @type {object} */ (nextPair(queueOf(['a']), backlogOf([]), ANY))), ['question', 'language']);
 });
