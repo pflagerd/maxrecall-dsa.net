@@ -683,13 +683,10 @@ backlog.json (0 added)` and `Consistency: … nothing found`. `(0 added)` is
 the chosen backlog working.
 
 **[Kubuntu]** Open the tunnel (§7) and <http://localhost:3000>. The list
-should hold one row, Hello World in Python, marked **new**. Open it once,
-then check the first line of `make backlog-show` again: **if it no longer
-says only `python`**, untick the others in the language menu. (A browser
-that still has the language choices from before 2026-11-03 copies them into
-your profile once, the first time it opens a problem page:
-`problem-page.js`, `migrateLocalStorageChoices`. I can't tell from here
-whether yours still has them.)
+should hold one row, Hello World in Python, marked **new**. (Until
+2026-11-04, opening a problem page could copy language choices kept in the
+browser from before 2026-11-03 into your profile, once. That copy has been
+removed, so the profile is the only place they're kept.)
 
 **Adding questions later.** The same three steps each time: stop the
 server, `make backlog-add` (with `AT=1` to put them at the front instead of

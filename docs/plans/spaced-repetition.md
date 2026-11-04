@@ -636,7 +636,10 @@ each checked to fail against a deliberately wrong version first.
      default if `canSetDefaultLanguage`. **The old `localStorage`
      choices are copied once** (owner's decision (a)): only what the
      profile permits is sent, and the keys are removed afterwards,
-     unless the server couldn't be reached. An unloadable profile gets
+     unless the server couldn't be reached. **Removed 2026-11-04**
+     (owner, option 1 of three, without a cleanup of the old keys):
+     after the step 13 reset, a browser's old choices could only undo a
+     profile set on purpose; see step 13. An unloadable profile gets
      an alert and every language shown (the server refuses Run and
      Submit then). The inline listeners it changes have signature blocks
      (owner's decision (b) on inline functions). Checked in headless
@@ -909,3 +912,11 @@ each checked to fail against a deliberately wrong version first.
     World in the queue, adding Two Sum still leaves Hello World as Next
     once more. `backlog-add` could also top the queue up to 3 at once,
     as a Submit would; that would change `order.json` too.
+    **Afterwards (2026-11-04, owner):** step 4c's one-time copy of the old
+    `localStorage` language choices into the profile is removed, since
+    a browser that still had them could turn the reset profile's other
+    languages back on. Option 1 of three: the copy goes; the two layout
+    settings (`description-pane-width`, `timer-hidden`) stay in
+    `localStorage`, being per device (option 2, moving them to the
+    server, and option 3, dropping them, were turned down); the old keys
+    are left in any browser that has them, unread (no cleanup code).
