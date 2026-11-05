@@ -69,6 +69,13 @@ not chosen yet (Q1).
 
 ## Questions for the owner
 
+- **Q1, updated 2026-11-05 (owner): three domains, `maxrecallcode.com`,
+  `maxrecallcode.net` and `maxrecallcode.org`, pointed at the VPS; no
+  `www`.** Still to decide: which one is the site's address (the other two
+  redirect to it with a 301), because the session cookie is host-only and
+  changing it later signs everyone out. Recommended: `.com`. One
+  certificate covers all three, so the redirects work over HTTPS too. Not
+  yet checked from here (the cloud session can't look up DNS).
 - **Q1. DNS. Answered 2026-11-04:** `maxrecall-dsa.net` doesn't point at
   the VPS yet, and the name isn't settled; it will probably be
   `maxrecall-code.net` or similar. Written `DOMAIN` below until it is.
@@ -411,3 +418,4 @@ the same change.
 | 2026-11-05 | D4's patched kernel confirmed (owner): after `apt update`, no newer `linux-image`/`linux-generic`/`linux-headers` package is waiting, and the installed `linux-image-generic` and `linux-image-virtual` (the packages that follow the newest kernel) are `6.8.0-147`, the running one. `6.8.0-110` is still installed, as the fallback Ubuntu keeps. 187 other updates are waiting (security ones not counted yet); installing them is for a time the owner chooses, with `make sandbox-test` and `make line-numbers-test` afterwards, since they can change g++, OpenJDK, Python or bubblewrap. |
 | 2026-11-05 | Security updates are kept up automatically (owner's `/var/log/unattended-upgrades/unattended-upgrades.log`): it runs daily from `noble` and `noble-security`, and each run ends `No packages found that can be upgraded unattended`. The one update the banner said couldn't be installed automatically is `cloud-init`, `marked to be held back`; left held (my guess: the provider holds it; the app doesn't use it). So the 187 waiting updates are ordinary `noble-updates` fixes, not urgent. |
 | 2026-11-05 | Q3 settled in the other session: option (c), `make learner-create` (#57), which needs no server stop. Recorded above; the readme's `users.js` row and `users.js`'s comment no longer call `MAXRECALL_USER` the owner allowed to register (it's only the trusted port's owner since #52). |
+| 2026-11-05 | Q1 (owner): `maxrecallcode.com`, `.net` and `.org`, pointed at the VPS; no `www`. Which is the site's address is waiting for the owner (recommended `.com`). |
