@@ -348,6 +348,8 @@ Each is small and can be checked before the next.
    would also stop the owner's `rsync` and D5's fetch per user. Checked
    against Ubuntu 24.04's `ufw` 0.36.2-6 package: loopback (the tunnel) and
    established connections are accepted before any rule.
+   **Rebooted 2026-11-05** (owner): the service and `ufw` came back by
+   themselves.
 3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
@@ -395,3 +397,4 @@ the same change.
 | 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@srv702017.hstgr.cloud true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://srv702017.hstgr.cloud:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §12 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
 | 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
 | 2026-11-05 | #54 merged to `master` and merged into this branch (§11 tester setup, then §12 firewall). The VPS's DNS name, `srv702017.hstgr.cloud` (owner), now replaces the `VPS_IP` placeholder in `docs/deploy-vps.md` and is recorded in the readme. |
+| 2026-11-05 | #55 merged (step 2). The owner rebooted the VPS (`System restart required`, D4's patched kernel): afterwards `systemctl is-active maxrecall-dsa.test.service` said `active` and `ufw status` `Status: active` with only 22/tcp, so both come back by themselves. Not yet reported: this boot's `Sandbox:` line (the AppArmor profile reloading) and the running kernel. |
