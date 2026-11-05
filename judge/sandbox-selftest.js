@@ -68,7 +68,8 @@ const REPO_DIR = path.join(__dirname, '..');
 const TOKEN = `maxrecall-selftest-${crypto.randomBytes(8).toString('hex')}`;
 
 // The G1 canary must be in this process's *starting* environment, like a
-// MAXRECALL_PASSWORD that systemd's EnvironmentFile= gives the VPS service:
+// secret that systemd's EnvironmentFile= gives a service (the VPS's had
+// MAXRECALL_PASSWORD that way until 2026-11-04):
 // /proc/<pid>/environ shows only the environment a process was started
 // with, not variables set later (process.env.X = ..., or .env files read by
 // process.loadEnvFile). So without it, this script runs itself again once,
