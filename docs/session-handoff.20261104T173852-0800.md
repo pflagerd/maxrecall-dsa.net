@@ -15,7 +15,8 @@ its state is in `docs/plans/spaced-repetition.md` and the readme.
 
 ## State at this time
 
-- `master` at `2834d90`. `make test`: 195 tests; `make typecheck` and
+- `master` at `2834d90`, plus this file, pushed straight to `master` at
+  the owner's request (no pull request). `make test`: 195 tests; `make typecheck` and
   `make doc-check` pass (run on that commit for this handoff).
 - **Limited live testing** (`docs/plans/limited-live.md`): getting the VPS
   ready for a handful of invited testers, SSH access unchanged. Nothing is
