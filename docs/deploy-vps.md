@@ -719,7 +719,9 @@ limited-live step 1 (pull request #52, 2026-11-04) or later: §8, or "The
 quick way".
 
 In the commands below, replace `tester@example.com` with their email. Run
-them as root on the VPS.
+them as root on the VPS. `docs/how-to-add-a-new-user.html` (2026-11-05)
+walks through the same steps, with what to send a tester and what to do
+later (more questions, a forgotten password, taking someone off).
 
 **1. Their folder, languages and questions: `make learner-create`**
 (since 2026-11-05, spaced-repetition step 14; it replaces making the
