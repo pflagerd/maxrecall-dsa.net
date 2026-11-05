@@ -1,21 +1,8 @@
 Help me write a procedure for creating a new problem by hand AND I'll follow the instructions as we figure them out, and you'll check that you agree with what I've done.  Let's put the result in a
   self-contained html/css/javascript how-to-add-a-new-problem.html file requiring no server to view. Use the following as what the new problem will be about: I want to reinforce some concepts about Singly Linked Lists.
 
-When Submit button is hit, switch to the next problem in order in the list.
-
-The problem list should have the problems which were the hardest for the programmer to answer coming up more frequently than problems the programmer found easier.
-
-As each problem is correctly answered it is moved down the list by some number of problems. The easier the problem for the programmer, the further down the list it goes.
-The harder the problem, the nearer down the list it goes.
-
-Implement Skip button logic.
-
-Display something that shows where spaces vs tabs are being used.
-
 Well, we kind of need both.  The focus of this system is teaching/learning rather than just testing.  The fundamental notion is that it is unfair to expect a learner know how to do something without having been given direct
  instruction beforehand.  I want students to come away able not only to code solutions to questions - definitely an "implement a function" focus - but also with the ability to write and run their own little programs.  Depending on the learning goals.
-
-Going to want to support multiple users.  Save their session results data in users/XYZ eventually (where XYZ is their userid).  For now store my data in users/daniel.pflager@gmail.com
 
 Bubbles next to the difficulty: done 2026-10-29 (see docs/plans/topics-and-sources.md).  Each question has "sources" (e.g. "Cracking the Coding Interview", shown as outlined bubbles) and "topics" (formerly "tags", shown as filled bubbles), each in the order they appear in the question.  Colours live in labels.json, one place for all questions, not in each question's json.
   Still to do: fill in each question's "sources" (all empty so far); an optional link for each topic and source ("link" in labels.json, reserved but not shown yet).
