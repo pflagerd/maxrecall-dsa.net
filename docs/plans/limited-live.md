@@ -248,7 +248,10 @@ consequences for live testing:
   start (`docs/deploy-vps.md` §10). With testers, nginx shows them an error
   for those seconds. Fine for a handful; if it becomes routine, the server
   could make the change itself, under the same no-`await` rule that keeps
-  `updateQueue` safe. Not planned yet.
+  `updateQueue` safe. Not planned yet. **Setting up a new tester
+  doesn't** (spaced-repetition step 14, #57): `make learner-create` creates
+  a learner who has no files yet, so the server keeps running
+  (`docs/deploy-vps.md` §11).
 - **What a new tester starts with is a choice (Q3, below).** With no
   `profile.json` a tester gets `"backlog": "all"`: every question in all
   five languages waiting in the backlog. The owner has just started
@@ -265,8 +268,12 @@ consequences for live testing:
   backlog-add` with the server stopped); (c) `make invite` writes a
   starting `profile.json` and backlog as well. Recommendation: **(b)** for
   the first few testers, since the tools exist; (c) once it's tedious.
-  **The owner is dealing with Q3 in another session** (2026-11-04); see
-  `docs/plans/spaced-repetition.md` and the readme for what it decides.
+  **Decided by the owner in another session:** (b) on 2026-11-04 (#54),
+  then (c) on 2026-11-05 (spaced-repetition step 14, #57): `make
+  learner-create EMAIL=… LANGUAGES=… SLUGS="…"` creates the folder, the
+  profile and the backlog in one command, with the server running, then
+  `make invite`. Procedure: `docs/deploy-vps.md` §11; details:
+  `docs/plans/spaced-repetition.md`, step 14.
 
 ## Steps (once the decisions are made)
 
@@ -403,3 +410,4 @@ the same change.
 | 2026-11-05 | #55 merged (step 2). The owner rebooted the VPS (`System restart required`, D4's patched kernel): afterwards `systemctl is-active maxrecall-dsa.test.service` said `active` and `ufw status` `Status: active` with only 22/tcp, so both come back by themselves. Then this boot's log: `Sandbox: bubblewrap 0.9.0 works (self-test passed)` (the AppArmor profile reloads at boot) and `registration by invite only`. **Correction:** I had said the restart was usually for a new kernel; here it wasn't. `uname -r` still says `6.8.0-147-generic`, with no reboot pending, so another package needed it (`/var/run/reboot-required.pkgs`, gone after the reboot, would have said which). Whether a newer kernel is waiting among the pending updates (201, 10 security, 1 not installed automatically) isn't checked yet, so D4's "kernel kept patched" isn't confirmed. |
 | 2026-11-05 | D4's patched kernel confirmed (owner): after `apt update`, no newer `linux-image`/`linux-generic`/`linux-headers` package is waiting, and the installed `linux-image-generic` and `linux-image-virtual` (the packages that follow the newest kernel) are `6.8.0-147`, the running one. `6.8.0-110` is still installed, as the fallback Ubuntu keeps. 187 other updates are waiting (security ones not counted yet); installing them is for a time the owner chooses, with `make sandbox-test` and `make line-numbers-test` afterwards, since they can change g++, OpenJDK, Python or bubblewrap. |
 | 2026-11-05 | Security updates are kept up automatically (owner's `/var/log/unattended-upgrades/unattended-upgrades.log`): it runs daily from `noble` and `noble-security`, and each run ends `No packages found that can be upgraded unattended`. The one update the banner said couldn't be installed automatically is `cloud-init`, `marked to be held back`; left held (my guess: the provider holds it; the app doesn't use it). So the 187 waiting updates are ordinary `noble-updates` fixes, not urgent. |
+| 2026-11-05 | Q3 settled in the other session: option (c), `make learner-create` (#57), which needs no server stop. Recorded above; the readme's `users.js` row and `users.js`'s comment no longer call `MAXRECALL_USER` the owner allowed to register (it's only the trusted port's owner since #52). |
