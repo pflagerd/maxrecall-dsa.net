@@ -695,9 +695,10 @@ the backlog again. What you add comes into your queue at your **next Submit
 or Skip**, not at once: with only Hello World in the queue, Next is Hello
 World once more, and the new ones come in after that Submit.
 
-## 11. The firewall: only SSH in [VPS, then Kubuntu]
+## 12. The firewall: only SSH in [VPS, then Kubuntu]
 
-Added 2026-11-04: step 2 of `docs/plans/limited-live.md`. It turns on
+Added 2026-11-04: step 2 of `docs/plans/limited-live.md` (numbered 12
+because pull request #54 adds §11, setting up a new tester). It turns on
 Ubuntu's firewall, `ufw` ("uncomplicated firewall"), so that nothing but
 SSH can be reached from outside. Today the app's ports already listen on
 `127.0.0.1` only, so this is a second layer: anything that starts listening

@@ -341,7 +341,7 @@ Each is small and can be checked before the next.
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
    in case of a lockout. Hostinger's panel may have a firewall of its own
-   (not checked). **Written 2026-11-04 as `docs/deploy-vps.md` §11, for
+   (not checked). **Written 2026-11-04 as `docs/deploy-vps.md` §12, for
    the owner to run.** Two choices made there: 80 and 443 are opened in
    step 3, with nginx, rather than now (nothing answers on them yet); and
    SSH gets `allow`, not `limit`, since `limit`'s 6 connections in 30 s
@@ -390,6 +390,7 @@ the same change.
 | 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
 | 2026-11-04 | Q3 (owner): to be dealt with in another session. Step 1 goes to `master` through a pull request. |
 | 2026-11-04 | Step 1 merged (#52, `776119d`) and deployed by the owner: the VPS log says `registration by invite only`, with the sandbox working and no `MAXRECALL_PASSWORD` warning. Registration had been closed there before (no `test.env`), so the owner has no port-3000 account on the VPS yet. |
-| 2026-11-04 | Step 2 written as `docs/deploy-vps.md` §11 (SSH only; 80 and 443 with nginx in step 3; `allow`, not `limit`). Waiting for the owner to run it. |
-| 2026-11-04 | Step 2 run by the owner: `ufw status verbose` says `Status: active`, `Default: deny (incoming), allow (outgoing), deny (routed)`, and only `22/tcp` (IPv4 and v6, `# SSH`) allowed in. Not yet reported: §11's check from a fresh SSH connection, the tunnel, and `curl` to port 3000 failing. |
-| 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@<VPS name> true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://<VPS name>:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §11 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
+| 2026-11-04 | Step 2 written as `docs/deploy-vps.md` §12 (SSH only; 80 and 443 with nginx in step 3; `allow`, not `limit`). Waiting for the owner to run it. |
+| 2026-11-04 | Step 2 run by the owner: `ufw status verbose` says `Status: active`, `Default: deny (incoming), allow (outgoing), deny (routed)`, and only `22/tcp` (IPv4 and v6, `# SSH`) allowed in. Not yet reported: §12's check from a fresh SSH connection, the tunnel, and `curl` to port 3000 failing. |
+| 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@<VPS name> true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://<VPS name>:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §12 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
+| 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
