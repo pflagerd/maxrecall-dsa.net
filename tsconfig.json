@@ -43,6 +43,11 @@
     "scripts/question-admin.js",
     "scripts/recalculate-queue.js",
     "scripts/invite.js",
-    "scripts/backlog.js"
+    "scripts/backlog.js",
+    "learner.js",
+    "learner.test.js",
+    "scripts/learner-create.js",
+    "playtest.js",
+    "playtest.test.js"
   ]
 }

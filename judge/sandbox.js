@@ -14,8 +14,8 @@ const path = require('path');
 const cgroups = require('./cgroups');
 
 // The whole environment compilers and submissions get, instead of a copy of
-// the server's (spawn's default), which can hold secrets such as
-// MAXRECALL_PASSWORD. PATH is how they find node/python3/g++/java/dmd. LANG
+// the server's (spawn's default), which can hold secrets (MAXRECALL_PASSWORD
+// did, until 2026-11-04). PATH is how they find node/python3/g++/java/dmd. LANG
 // makes text output UTF-8 everywhere: without it, Java falls back to ASCII
 // and prints "café" as "caf?" (Python coerces the C locale to UTF-8 on its
 // own, PEP 538). C.UTF-8 is built into glibc, so it exists on every machine.

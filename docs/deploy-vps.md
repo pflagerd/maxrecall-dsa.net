@@ -36,7 +36,11 @@ still uses CPU and memory within its limits. The compilers run in the same
 kind of sandbox.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
-your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.
+your machine. The VPS's DNS name is `srv702017.hstgr.cloud` (Hostinger's
+name for it; the Makefile's `VPS_HOST`, for `make open-ssh-3005`, is the
+same), and the commands below use it. On the VPS itself that name resolves
+to `127.0.1.1` (`/etc/hosts`), so a check of reaching the VPS from outside
+must be run on Kubuntu (§12).
 
 ## The quick way: `make deploy-server` [VPS]
 
@@ -464,8 +468,8 @@ ss -tlnp | grep -E ':300[01]'
 
 **[Kubuntu]**
 ```bash
-curl --max-time 5 http://VPS_IP:3000/
-curl --max-time 5 http://VPS_IP:3001/
+curl --max-time 5 http://srv702017.hstgr.cloud:3000/
+curl --max-time 5 http://srv702017.hstgr.cloud:3001/
 ```
 Both should **fail** (timeout or connection refused). If either returns
 anything, stop the service and recheck the service file.
@@ -490,7 +494,7 @@ unreachable"; I couldn't test the exact message from the cloud sandbox.
 ## 7. Use it: the SSH tunnel [Kubuntu]
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3001 root@VPS_IP
+ssh -N -L 3000:127.0.0.1:3001 root@srv702017.hstgr.cloud
 ```
 - `-L 3000:127.0.0.1:3001` forwards port 3000 on your machine to
   `127.0.0.1:3001` *as seen from the VPS*, that is, to the trusted port.
@@ -570,7 +574,7 @@ want the VPS's records on Kubuntu too, copy them into your checkout:
 
 ```bash
 cd ~/path/to/maxrecall-dsa.net
-rsync -av --ignore-existing root@VPS_IP:/srv/maxrecall/data/users/ users/
+rsync -av --ignore-existing root@srv702017.hstgr.cloud:/srv/maxrecall/data/users/ users/
 ```
 - `-a` (archive) copies folders recursively and keeps file times.
 - `-v` lists what's copied.
@@ -694,3 +698,242 @@ the end), start it. `make backlog-remove … SLUGS="…"` takes them out of
 the backlog again. What you add comes into your queue at your **next Submit
 or Skip**, not at once: with only Hello World in the queue, Next is Hello
 World once more, and the new ones come in after that Submit.
+
+## 11. Setting up a new tester before inviting them [VPS, then Kubuntu]
+
+Added 2026-11-04 (the owner's answer to Q3 in `docs/plans/limited-live.md`:
+option (b), each tester set up by hand, as §10 set up the owner; since
+2026-11-05, option (c): one command, `make learner-create`, does it). Without
+this, a tester gets no `profile.json`, so `"backlog": "all"`: every
+question in all five languages waiting for them. With it, they start with
+the languages and questions you choose.
+
+**Before anyone else, try it on a second email address of your own**
+(limited-live step 5): testers can't reach the VPS until limited-live
+steps 2–4 (firewall, nginx, certificate) are done, but you can, through
+the tunnel to port 3000 (§7). It needs invites, so the VPS must have
+limited-live step 1 (pull request #52, 2026-11-04) or later: §8, or "The
+quick way".
+
+In the commands below, replace `tester@example.com` with their email. Run
+them as root on the VPS.
+
+**1. Their folder, languages and questions: `make learner-create`**
+(since 2026-11-05, spaced-repetition step 14; it replaces making the
+folder, writing `profile.json` in vi and `make backlog-add` by hand). The
+server keeps running.
+
+```bash
+cd /srv/maxrecall/maxrecall-dsa.net
+```
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum" DRY_RUN=1
+```
+- `sudo -u maxrecall`: as the service's user, so the folder and files are
+  its own.
+- `MAXRECALL_USERS_DIR`: the service's users folder (its unit file sets
+  the same); without it the files would go into the checkout's own
+  `users/`, which the service never reads.
+- `EMAIL`: who. It's lower-cased, as registering makes it (`auth.js`,
+  `normalizeEmail`), so their work goes to this folder; the first line
+  printed says so if it changed anything.
+- `LANGUAGES`: the languages they may use, the first being their default
+  (`LANGUAGES="python java"` for two). They become `allowed.languages`,
+  not `preferred` as in §10: the tester can't turn on another language, or
+  turn Python off. With a chosen backlog that matters: if every chosen
+  question's language were turned off, Next would have nothing to give
+  them.
+- `SLUGS`: their questions, in the order they'll get them, each in every
+  one of their languages it has. `make backlog-show EMAIL=<anyone>` lists
+  every question. Give several now: what's added later only comes in at
+  their next Submit or Skip (§10, "Adding questions later").
+- `DRY_RUN=1`: shows the `profile.json` and backlog it would write, and
+  writes nothing. If they're right, run it again without `DRY_RUN=1`.
+
+It writes `profile.json` (with `"backlog": "chosen"`: the server adds
+nothing to their backlog by itself), an empty `order.json` and
+`backlog.json`, all appearing at once. It refuses, changing nothing, if
+their folder exists already: they're set up, or have used the app.
+`make backlog-show EMAIL=…` then shows what's there, and `make backlog-add`
+and `backlog-remove` (server stopped) change it. The other `allowed`
+settings (`canChooseLanguages`, `canSwitchLanguage`,
+`canSetDefaultLanguage`) are left at their default, true; see
+readme.html, "Where data lives".
+
+**2. Check it:**
+
+```bash
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=tester@example.com
+```
+- The first line should say `backlog "chosen"; languages turned on:
+  python`, then an empty queue and their questions in the backlog. No
+  restart is needed: the server reads a learner's files at each request.
+  The next start logs them as `Queues: tester@example.com: 0 in
+  order.json, 2 in backlog.json (0 added)`.
+
+**3. The invite.** The server keeps running.
+
+```bash
+sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=tester@example.com
+```
+- `MAXRECALL_AUTH_DIR` (sign-in data), not `MAXRECALL_USERS_DIR`
+  (learning data): §4 explains each part. It prints a code that works
+  once, for this email, for 7 days. Send them the code and the address,
+  and tell them to register with exactly this email.
+- If the code runs out, run it again: a new invite replaces the old one.
+  Their folder and backlog don't change.
+
+**4. Check it as them [Kubuntu].** For your own second email: open the
+tunnel with port 3000 forwarded as well (§7,
+`ssh -N -L 3000:127.0.0.1:3001 -L 3006:127.0.0.1:3000 root@srv702017.hstgr.cloud`), then
+open <http://localhost:3006/login.html#register> in a **private window**.
+Browsers keep cookies per host name, not per port, so in a normal window
+the new sign-in would replace yours (§7). Register with the email, the
+code and a password of at least 12 characters. The header should show the
+tester's email (no trusted marker), and the list their chosen questions in
+Python, marked **new**. The language menu shows only Python.
+
+**What this doesn't do:**
+- A chosen backlog limits what Next and the list offer, not what can be
+  opened: a tester who types another question's address
+  (`problem.html?slug=…`) can do it, and a Submit then puts it in their
+  queue. Their profile still limits the languages (403 for the others).
+- Each later change to a backlog (`make backlog-add`, `backlog-remove`)
+  stops the site for everyone for a few seconds (limited-live plan, "What
+  spaced-repetition step 13 changes here"). Setting a learner up with
+  `make learner-create` doesn't.
+- A setup that's never used stays: the folder counts as a user at every
+  start and in `make consistency-check`. To remove it, stop the server and
+  move the folder to `/srv/maxrecall/data/archive/`, as in §10.
+
+## 12. The firewall: only SSH in [VPS, then Kubuntu]
+
+Added 2026-11-04: step 2 of `docs/plans/limited-live.md` (numbered 12
+because pull request #54 added §11, setting up a new tester). It turns on
+Ubuntu's firewall, `ufw` ("uncomplicated firewall"), so that nothing but
+SSH can be reached from outside. Today the app's ports already listen on
+`127.0.0.1` only, so this is a second layer: anything that starts listening
+on a public address later (by mistake, or a package's default) stays
+unreachable. Ports 80 and 443 are opened in step 3, together with nginx,
+when something answers on them.
+
+**What doesn't change.** Your SSH tunnel keeps working: it reaches
+`127.0.0.1:3001` over the loopback interface, `lo`, and `ufw` accepts
+everything there before its own rules (`/usr/share/ufw/iptables/before.rules`,
+lines 20–22, `-A ufw-before-input -i lo -j ACCEPT`, read from Ubuntu
+24.04's `ufw` 0.36.2-6 package on 2026-11-04). It's separate from the
+service's own `IPAddressDeny=`/`IPAddressAllow=` (§5): that limits what
+the server's processes may talk to; `ufw` limits what may reach the
+machine. Outgoing traffic (`apt`, `git pull`) stays allowed.
+
+**The risk is locking yourself out of SSH.** The steps below allow SSH
+before turning the firewall on, check it from a fresh connection, and keep
+a second session open meanwhile. All commands are run as root.
+
+```bash
+ufw status verbose
+```
+- Shows whether `ufw` is on and its rules. Expect `Status: inactive` if
+  nobody has turned it on. If it's already active with rules, stop here and
+  paste the output into a session, rather than adding to rules nobody has
+  looked at. See [ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html).
+- `ufw` is part of Ubuntu's standard install. If the command isn't found:
+  `apt install -y ufw`.
+
+```bash
+ss -tlnp
+```
+- Lists every listening TCP socket: `-t` TCP, `-l` listening, `-n`
+  numbers rather than names, `-p` the process
+  ([ss(8)](https://manpages.ubuntu.com/manpages/noble/man8/ss.8.html)).
+- Find SSH's port: usually `0.0.0.0:22` and `[::]:22`. On 24.04 the
+  process column may say `systemd` rather than `sshd`, if SSH is started
+  by systemd's `ssh.socket` (my understanding of 24.04's default; either
+  way the port is what matters).
+- Note anything else listening on `0.0.0.0`, `[::]` or the VPS's own
+  address. Once the firewall is on, those are unreachable from outside.
+  `127.0.0.1:3000` and `127.0.0.1:3001` are the app and aren't affected.
+
+**Before going on, open a second SSH session to the VPS** and leave it
+alone. `ufw` lets connections that already exist carry on whatever the
+rules say (`before.rules` line 25, `--ctstate RELATED,ESTABLISHED -j
+ACCEPT`, in the same package), so if the new rules are wrong you can still
+type `ufw disable` there.
+
+```bash
+ufw default deny incoming
+ufw default allow outgoing
+```
+- New connections from outside are refused unless a rule allows them;
+  connections this machine makes are allowed. These are already `ufw`'s
+  defaults (`/etc/default/ufw`: `DEFAULT_INPUT_POLICY="DROP"`,
+  `DEFAULT_OUTPUT_POLICY="ACCEPT"`); setting them says so explicitly.
+
+```bash
+ufw allow 22/tcp comment 'SSH'
+```
+- Allows new connections to port 22, for IPv4 and IPv6 (`IPV6=yes` is the
+  default in `/etc/default/ufw`). If `ss` showed SSH on another port, use
+  that number instead.
+- `comment` is a label shown by `ufw status`.
+- **`allow`, not `limit`.** `ufw limit` denies an address that "attempts to
+  initiate 6 or more connections within 30 seconds" (ufw(8)). That would
+  stop password guessing, but also you: `rsync` and `git` over SSH each open
+  a connection, and fetching a git repository per user (plan, D5) opens one
+  per user. Key-only SSH logins are the better protection against guessing
+  (plan, "Also worth doing").
+
+```bash
+ufw show added
+```
+- Lists the rules added so far, before anything is turned on (`added` is
+  one of `ufw show`'s reports, `ufw/frontend.py` line 65). It should
+  show `ufw allow 22/tcp comment 'SSH'` (or your port).
+
+```bash
+ufw enable
+```
+- Turns the firewall on now and at every boot. It warns `Command may
+  disrupt existing ssh connections.` (`ufw/frontend.py`, line 912, in the
+  same package) and asks whether to go on; answer `y`.
+
+```bash
+ufw status verbose
+```
+- Should say `Status: active`, `Default: deny (incoming), allow (outgoing)`,
+  and `22/tcp ALLOW IN Anywhere` and `22/tcp (v6) ALLOW IN Anywhere (v6)`.
+
+**[Kubuntu] Check it from a fresh connection,** in a new terminal, while
+both VPS sessions stay open:
+
+```bash
+ssh root@srv702017.hstgr.cloud true && echo "ssh ok"
+```
+- Opens a new SSH connection, runs `true` (which does nothing and
+  succeeds) and prints `ssh ok`. That's the proof that new connections get
+  through, not just the ones already open.
+- **Run it on Kubuntu, not on the VPS.** On the VPS its own name resolves
+  to `127.0.1.1` (`/etc/hosts`), so the connection goes over loopback,
+  which `ufw` always accepts, and tests nothing (seen 2026-11-05).
+
+Then open the tunnel (§7) and <http://localhost:3000>: the app should work
+as before.
+
+```bash
+curl --max-time 5 http://srv702017.hstgr.cloud:3000/
+```
+- Should still fail, as in §6, and now it should **time out**
+  (`curl: (28) Connection timed out`) rather than be refused: `ufw` drops
+  the packet without answering (`DEFAULT_INPUT_POLICY="DROP"`), where
+  before the VPS answered "nothing listens here". Seen on 2026-11-05.
+
+**If the fresh connection fails,** go back to the second VPS session and
+run `ufw disable`, which turns the firewall off and keeps its rules for
+later; then look at what `ss` said about SSH's port. If you've lost every
+session, Hostinger's control panel may have a browser console for the VPS
+(I haven't checked).
+
+**Hostinger may also have a firewall of its own,** in its control panel,
+in front of the VPS (not checked). If it's configured, a port must be
+allowed in both. For step 3, 80 and 443 then need opening there too.

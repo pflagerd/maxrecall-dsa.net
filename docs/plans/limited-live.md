@@ -1,6 +1,8 @@
 # Plan: limited live testing on the VPS
 
-Status: **step 1 done, 2026-11-04** (invites and `trust proxy`). Q1, Q2
+Status: **step 1 done and deployed, 2026-11-04** (invites and `trust
+proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in). Next:
+step 3 (nginx and HTTPS), which needs the domain name (Q1). Q1, Q2
 and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
 repository per user) is open; it's needed by step 6. Nothing is exposed
 to the internet yet. Linked from
@@ -246,7 +248,10 @@ consequences for live testing:
   start (`docs/deploy-vps.md` §10). With testers, nginx shows them an error
   for those seconds. Fine for a handful; if it becomes routine, the server
   could make the change itself, under the same no-`await` rule that keeps
-  `updateQueue` safe. Not planned yet.
+  `updateQueue` safe. Not planned yet. **Setting up a new tester
+  doesn't** (spaced-repetition step 14, #57): `make learner-create` creates
+  a learner who has no files yet, so the server keeps running
+  (`docs/deploy-vps.md` §11).
 - **What a new tester starts with is a choice (Q3, below).** With no
   `profile.json` a tester gets `"backlog": "all"`: every question in all
   five languages waiting in the backlog. The owner has just started
@@ -263,8 +268,12 @@ consequences for live testing:
   backlog-add` with the server stopped); (c) `make invite` writes a
   starting `profile.json` and backlog as well. Recommendation: **(b)** for
   the first few testers, since the tools exist; (c) once it's tedious.
-  **The owner is dealing with Q3 in another session** (2026-11-04); see
-  `docs/plans/spaced-repetition.md` and the readme for what it decides.
+  **Decided by the owner in another session:** (b) on 2026-11-04 (#54),
+  then (c) on 2026-11-05 (spaced-repetition step 14, #57): `make
+  learner-create EMAIL=… LANGUAGES=… SLUGS="…"` creates the folder, the
+  profile and the backlog in one command, with the server running, then
+  `make invite`. Procedure: `docs/deploy-vps.md` §11; details:
+  `docs/plans/spaced-repetition.md`, step 14.
 
 ## Steps (once the decisions are made)
 
@@ -335,11 +344,22 @@ Each is small and can be checked before the next.
    working (`sessionEmail` doesn't check the account), so a reset by hand
    should also delete that email's files in `auth/sessions/`. Listed in
    the readme's Known gaps.
-2. **VPS: firewall.** `ufw` allowing only SSH, 80 and 443
+2. **VPS: firewall.** `ufw` allowing only SSH
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
    in case of a lockout. Hostinger's panel may have a firewall of its own
-   (not checked).
+   (not checked). **Written 2026-11-04 as `docs/deploy-vps.md` §12, for
+   the owner to run.** Two choices made there: 80 and 443 are opened in
+   step 3, with nginx, rather than now (nothing answers on them yet); and
+   SSH gets `allow`, not `limit`, since `limit`'s 6 connections in 30 s
+   would also stop the owner's `rsync` and D5's fetch per user. Checked
+   against Ubuntu 24.04's `ufw` 0.36.2-6 package: loopback (the tunnel) and
+   established connections are accepted before any rule.
+   **Rebooted 2026-11-05** (owner): the service, `ufw` and the judge's
+   sandbox (the AppArmor profile) came back by themselves. The kernel
+   stayed `6.8.0-147`: the restart was for another package. It's the
+   newest kernel Ubuntu offers this VPS (checked after `apt update`), so
+   D4's condition holds.
 3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
@@ -381,3 +401,13 @@ the same change.
 | 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |
 | 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
 | 2026-11-04 | Q3 (owner): to be dealt with in another session. Step 1 goes to `master` through a pull request. |
+| 2026-11-04 | Step 1 merged (#52, `776119d`) and deployed by the owner: the VPS log says `registration by invite only`, with the sandbox working and no `MAXRECALL_PASSWORD` warning. Registration had been closed there before (no `test.env`), so the owner has no port-3000 account on the VPS yet. |
+| 2026-11-04 | Step 2 written as `docs/deploy-vps.md` §12 (SSH only; 80 and 443 with nginx in step 3; `allow`, not `limit`). Waiting for the owner to run it. |
+| 2026-11-04 | Step 2 run by the owner: `ufw status verbose` says `Status: active`, `Default: deny (incoming), allow (outgoing), deny (routed)`, and only `22/tcp` (IPv4 and v6, `# SSH`) allowed in. Not yet reported: §12's check from a fresh SSH connection, the tunnel, and `curl` to port 3000 failing. |
+| 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@srv702017.hstgr.cloud true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://srv702017.hstgr.cloud:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §12 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
+| 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
+| 2026-11-05 | #54 merged to `master` and merged into this branch (§11 tester setup, then §12 firewall). The VPS's DNS name, `srv702017.hstgr.cloud` (owner), now replaces the `VPS_IP` placeholder in `docs/deploy-vps.md` and is recorded in the readme. |
+| 2026-11-05 | #55 merged (step 2). The owner rebooted the VPS (`System restart required`, D4's patched kernel): afterwards `systemctl is-active maxrecall-dsa.test.service` said `active` and `ufw status` `Status: active` with only 22/tcp, so both come back by themselves. Then this boot's log: `Sandbox: bubblewrap 0.9.0 works (self-test passed)` (the AppArmor profile reloads at boot) and `registration by invite only`. **Correction:** I had said the restart was usually for a new kernel; here it wasn't. `uname -r` still says `6.8.0-147-generic`, with no reboot pending, so another package needed it (`/var/run/reboot-required.pkgs`, gone after the reboot, would have said which). Whether a newer kernel is waiting among the pending updates (201, 10 security, 1 not installed automatically) isn't checked yet, so D4's "kernel kept patched" isn't confirmed. |
+| 2026-11-05 | D4's patched kernel confirmed (owner): after `apt update`, no newer `linux-image`/`linux-generic`/`linux-headers` package is waiting, and the installed `linux-image-generic` and `linux-image-virtual` (the packages that follow the newest kernel) are `6.8.0-147`, the running one. `6.8.0-110` is still installed, as the fallback Ubuntu keeps. 187 other updates are waiting (security ones not counted yet); installing them is for a time the owner chooses, with `make sandbox-test` and `make line-numbers-test` afterwards, since they can change g++, OpenJDK, Python or bubblewrap. |
+| 2026-11-05 | Security updates are kept up automatically (owner's `/var/log/unattended-upgrades/unattended-upgrades.log`): it runs daily from `noble` and `noble-security`, and each run ends `No packages found that can be upgraded unattended`. The one update the banner said couldn't be installed automatically is `cloud-init`, `marked to be held back`; left held (my guess: the provider holds it; the app doesn't use it). So the 187 waiting updates are ordinary `noble-updates` fixes, not urgent. |
+| 2026-11-05 | Q3 settled in the other session: option (c), `make learner-create` (#57), which needs no server stop. Recorded above; the readme's `users.js` row and `users.js`'s comment no longer call `MAXRECALL_USER` the owner allowed to register (it's only the trusted port's owner since #52). |
