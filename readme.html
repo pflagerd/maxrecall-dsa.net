@@ -46,7 +46,7 @@
 
 <h1>MaxRecall DSA — Project Facts</h1>
 <p class="sub">What this project is and how it fits together, as currently built.
-Last updated: 2026-11-05 (limited live testing: step 2, the firewall, done).</p>
+Last updated: 2026-11-05 (MAXRECALL_USER described as the trusted port's owner, not who may register).</p>
 
 <nav>
 <ol>
@@ -134,7 +134,7 @@ never a shared server). <code>make run</code> and <code>make dev</code> install 
   <tr><th>Path</th><th>Role</th></tr>
   <tr><td><code>server.js</code></td><td>Express server: problem API, run/submit endpoints, serves the front-end files.</td></tr>
   <tr><td><code>question-files.js</code></td><td>Reads <code>questions/</code> for the server and the consistency check: <code>isQuestionFile</code> (a <code>.json</code> file other than <code>renames.json</code>, the rename log), <code>questionInfos()</code> (each question's slug, <code>created</code>, languages, title, difficulty, topics and sources) and <code>readRenamesText()</code>.</td></tr>
-  <tr><td><code>users.js</code></td><td>Saves and reads Submit records under <code>users/&lt;email&gt;/</code> for whoever is signed in (<code>readAllRecords</code> also returns the unreadable ones, for the consistency check), and reads and writes their <code>profile.json</code>, <code>order.json</code> and <code>backlog.json</code> (<code>readUserFile</code>, <code>writeUserFile</code>, which refuse any other name, and <code>readProfileFile</code>, <code>writeProfileFile</code>: synchronous, and written to a temporary file then renamed into place). <code>listUsers()</code>: the folders in <code>users/</code> named by an email that hold <code>submissions/</code> or <code>profile.json</code>. Also reads <code>MAXRECALL_USER</code>, the owner allowed to register.</td></tr>
+  <tr><td><code>users.js</code></td><td>Saves and reads Submit records under <code>users/&lt;email&gt;/</code> for whoever is signed in (<code>readAllRecords</code> also returns the unreadable ones, for the consistency check), and reads and writes their <code>profile.json</code>, <code>order.json</code> and <code>backlog.json</code> (<code>readUserFile</code>, <code>writeUserFile</code>, which refuse any other name, and <code>readProfileFile</code>, <code>writeProfileFile</code>: synchronous, and written to a temporary file then renamed into place). <code>listUsers()</code>: the folders in <code>users/</code> named by an email that hold <code>submissions/</code> or <code>profile.json</code>. Also reads <code>MAXRECALL_USER</code>, the owner: who every request on the trusted port is (<code>server.js</code>). Since 2026-11-04 (#52) it has nothing to do with registering, which needs an invite (<code>auth.js</code>).</td></tr>
   <tr><td><code>users.test.js</code></td><td>Tests <code>users.js</code>'s user file functions and <code>listUsers()</code> in a temporary users folder (<code>make test</code>).</td></tr>
   <tr><td><code>auth.js</code></td><td>Accounts, invites and sessions: invites (<code>createInvite</code>), registration (an invited email with its code, once, before it expires, and a password of at least 12 characters), login against a scrypt hash, throttling after failed attempts, and 360-day sessions.</td></tr>
   <tr><td><code>auth.test.js</code></td><td>Tests <code>auth.js</code>'s invites and registering in a temporary sign-in folder (<code>make test</code>).</td></tr>
