@@ -36,7 +36,11 @@ still uses CPU and memory within its limits. The compilers run in the same
 kind of sandbox.
 
 Commands marked **[VPS]** run on the VPS. Commands marked **[Kubuntu]** run on
-your machine. Replace `VPS_IP` with the VPS's address. Hostinger's panel shows it.
+your machine. The VPS's DNS name is `srv702017.hstgr.cloud` (Hostinger's
+name for it; the Makefile's `VPS_HOST`, for `make open-ssh-3005`, is the
+same), and the commands below use it. On the VPS itself that name resolves
+to `127.0.1.1` (`/etc/hosts`), so a check of reaching the VPS from outside
+must be run on Kubuntu (§12).
 
 ## The quick way: `make deploy-server` [VPS]
 
@@ -464,8 +468,8 @@ ss -tlnp | grep -E ':300[01]'
 
 **[Kubuntu]**
 ```bash
-curl --max-time 5 http://VPS_IP:3000/
-curl --max-time 5 http://VPS_IP:3001/
+curl --max-time 5 http://srv702017.hstgr.cloud:3000/
+curl --max-time 5 http://srv702017.hstgr.cloud:3001/
 ```
 Both should **fail** (timeout or connection refused). If either returns
 anything, stop the service and recheck the service file.
@@ -490,7 +494,7 @@ unreachable"; I couldn't test the exact message from the cloud sandbox.
 ## 7. Use it: the SSH tunnel [Kubuntu]
 
 ```bash
-ssh -N -L 3000:127.0.0.1:3001 root@VPS_IP
+ssh -N -L 3000:127.0.0.1:3001 root@srv702017.hstgr.cloud
 ```
 - `-L 3000:127.0.0.1:3001` forwards port 3000 on your machine to
   `127.0.0.1:3001` *as seen from the VPS*, that is, to the trusted port.
@@ -570,7 +574,7 @@ want the VPS's records on Kubuntu too, copy them into your checkout:
 
 ```bash
 cd ~/path/to/maxrecall-dsa.net
-rsync -av --ignore-existing root@VPS_IP:/srv/maxrecall/data/users/ users/
+rsync -av --ignore-existing root@srv702017.hstgr.cloud:/srv/maxrecall/data/users/ users/
 ```
 - `-a` (archive) copies folders recursively and keeps file times.
 - `-v` lists what's copied.
@@ -792,7 +796,7 @@ sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EM
 
 **4. Check it as them [Kubuntu].** For your own second email: open the
 tunnel with port 3000 forwarded as well (§7,
-`ssh -N -L 3000:127.0.0.1:3001 -L 3006:127.0.0.1:3000 root@VPS_IP`), then
+`ssh -N -L 3000:127.0.0.1:3001 -L 3006:127.0.0.1:3000 root@srv702017.hstgr.cloud`), then
 open <http://localhost:3006/login.html#register> in a **private window**.
 Browsers keep cookies per host name, not per port, so in a normal window
 the new sign-in would replace yours (§7). Register with the email, the
@@ -912,7 +916,7 @@ ufw status verbose
 both VPS sessions stay open:
 
 ```bash
-ssh root@VPS_IP true && echo "ssh ok"
+ssh root@srv702017.hstgr.cloud true && echo "ssh ok"
 ```
 - Opens a new SSH connection, runs `true` (which does nothing and
   succeeds) and prints `ssh ok`. That's the proof that new connections get
@@ -925,7 +929,7 @@ Then open the tunnel (§7) and <http://localhost:3000>: the app should work
 as before.
 
 ```bash
-curl --max-time 5 http://VPS_IP:3000/
+curl --max-time 5 http://srv702017.hstgr.cloud:3000/
 ```
 - Should still fail, as in §6, and now it should **time out**
   (`curl: (28) Connection timed out`) rather than be refused: `ufw` drops

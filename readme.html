@@ -426,7 +426,7 @@ switching, pull after.</p>
 <a href="docs/deploy-vps.md"><code>docs/deploy-vps.md</code></a>. It uses Node 22 from nodejs.org (Ubuntu's own
 package is 18.19), g++ 13.2 and OpenJDK 21 from Ubuntu, and no D compiler. The server
 listens only on <code>127.0.0.1</code>: port 3000 needs sign-in, and the trusted port 3001 makes you the owner with no
-sign-in. You reach the trusted port with <code>ssh -N -L 3000:127.0.0.1:3001 root@VPS_IP</code>. Accounts and sessions live in
+sign-in. Its DNS name is <code>srv702017.hstgr.cloud</code> (Hostinger's; <code>VPS_HOST</code> in the <code>Makefile</code>); on the VPS itself it resolves to <code>127.0.1.1</code>. You reach the trusted port with <code>ssh -N -L 3000:127.0.0.1:3001 root@srv702017.hstgr.cloud</code>, or <code>make open-ssh-3005</code>. Accounts and sessions live in
 <code>/srv/maxrecall/data/auth</code>; people register on port 3000 with an invite from <code>make invite</code>, run as
 <code>maxrecall</code> (<code>docs/deploy-vps.md</code> §4). Since 2026-11-04 its firewall (<code>ufw</code>, §12) lets only SSH (port 22) in from outside; the tunnel is unaffected, since <code>ufw</code> accepts everything on the loopback interface. It runs as the
 <code>maxrecall</code> user under systemd containment: no network except loopback, and a read-only file
