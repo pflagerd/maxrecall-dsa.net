@@ -32,6 +32,7 @@
     "auth.js",
     "auth.test.js",
     "server.js",
+    "routes.js",
     "judge/queue.js",
     "judge/cgroups.js",
     "judge/sandbox.js",
