@@ -702,7 +702,8 @@ World once more, and the new ones come in after that Submit.
 ## 11. Setting up a new tester before inviting them [VPS, then Kubuntu]
 
 Added 2026-11-04 (the owner's answer to Q3 in `docs/plans/limited-live.md`:
-option (b), each tester set up by hand, as §10 set up the owner). Without
+option (b), each tester set up by hand, as §10 set up the owner; since
+2026-11-05, option (c): one command, `make learner-create`, does it). Without
 this, a tester gets no `profile.json`, so `"backlog": "all"`: every
 question in all five languages waiting for them. With it, they start with
 the languages and questions you choose.
@@ -714,73 +715,62 @@ the tunnel to port 3000 (§7). It needs invites, so the VPS must have
 limited-live step 1 (pull request #52, 2026-11-04) or later: §8, or "The
 quick way".
 
-In the commands below, replace `tester@example.com` with their email,
-**in lower case**: the server lower-cases the email when they register
-(`auth.js`, `normalizeEmail`) and saves their work in the folder with that
-name, so a folder named `Tester@Example.com` would never be used. Run them
-as root on the VPS.
+In the commands below, replace `tester@example.com` with their email. Run
+them as root on the VPS.
 
-**1. Their folder and profile.** The server needn't be stopped for this
-part.
-
-```bash
-sudo -u maxrecall mkdir /srv/maxrecall/data/users/tester@example.com
-```
-- As the service's user, so the folder is its own. If it says "File
-  exists", that email has been set up (or has used the app) before:
-  `make backlog-show` below shows what's there.
-
-```bash
-sudo -u maxrecall vi /srv/maxrecall/data/users/tester@example.com/profile.json
-```
-For Python only:
-```json
-{
-  "schemaVersion": 1,
-  "allowed": { "languages": ["python"] },
-  "backlog": "chosen"
-}
-```
-- `allowed.languages`, not `preferred` as in §10: the tester can't turn
-  on another language, or turn Python off. With a chosen backlog this
-  matters: if every chosen question's language were turned off, Next
-  would have nothing to give them. Name several languages to allow
-  several (`["python", "java"]`); the first is their default.
-- `"backlog": "chosen"`: the server adds nothing to their backlog by
-  itself.
-- The other `allowed` settings (`canChooseLanguages`, `canSwitchLanguage`,
-  `canSetDefaultLanguage`) default to true; see readme.html, "Where data
-  lives".
-
-**2. Their questions, with the server stopped** (a Submit rewrites
-`backlog.json` too, so `make backlog-add` refuses while one answers):
+**1. Their folder, languages and questions: `make learner-create`**
+(since 2026-11-05, spaced-repetition step 14; it replaces making the
+folder, writing `profile.json` in vi and `make backlog-add` by hand). The
+server keeps running.
 
 ```bash
 cd /srv/maxrecall/maxrecall-dsa.net
 ```
 
 ```bash
-systemctl stop maxrecall-dsa.test.service
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum" DRY_RUN=1
 ```
-
-```bash
-sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=tester@example.com SLUGS="hello-world two-sum" DRY_RUN=1
-```
+- `sudo -u maxrecall`: as the service's user, so the folder and files are
+  its own.
+- `MAXRECALL_USERS_DIR`: the service's users folder (its unit file sets
+  the same); without it the files would go into the checkout's own
+  `users/`, which the service never reads.
+- `EMAIL`: who. It's lower-cased, as registering makes it (`auth.js`,
+  `normalizeEmail`), so their work goes to this folder; the first line
+  printed says so if it changed anything.
+- `LANGUAGES`: the languages they may use, the first being their default
+  (`LANGUAGES="python java"` for two). They become `allowed.languages`,
+  not `preferred` as in §10: the tester can't turn on another language, or
+  turn Python off. With a chosen backlog that matters: if every chosen
+  question's language were turned off, Next would have nothing to give
+  them.
 - `SLUGS`: their questions, in the order they'll get them, each in every
-  language their profile allows (only Python here). `make backlog-show
-  EMAIL=…` lists every question. Add several now: what's added later only
-  comes in at their next Submit or Skip (§10, "Adding questions later").
-- If `Backlog after (…)` is right, run it again without `DRY_RUN=1`.
+  one of their languages it has. `make backlog-show EMAIL=<anyone>` lists
+  every question. Give several now: what's added later only comes in at
+  their next Submit or Skip (§10, "Adding questions later").
+- `DRY_RUN=1`: shows the `profile.json` and backlog it would write, and
+  writes nothing. If they're right, run it again without `DRY_RUN=1`.
+
+It writes `profile.json` (with `"backlog": "chosen"`: the server adds
+nothing to their backlog by itself), an empty `order.json` and
+`backlog.json`, all appearing at once. It refuses, changing nothing, if
+their folder exists already: they're set up, or have used the app.
+`make backlog-show EMAIL=…` then shows what's there, and `make backlog-add`
+and `backlog-remove` (server stopped) change it. The other `allowed`
+settings (`canChooseLanguages`, `canSwitchLanguage`,
+`canSetDefaultLanguage`) are left at their default, true; see
+readme.html, "Where data lives".
+
+**2. Check it:**
 
 ```bash
-systemctl start maxrecall-dsa.test.service
+sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=tester@example.com
 ```
-
-```bash
-journalctl -u maxrecall-dsa.test.service -n 30 --no-pager | grep -E 'Queues|Consistency'
-```
-- A line `Queues: tester@example.com: 0 in order.json, 2 in backlog.json
-  (0 added)`, and `nothing found` for them.
+- The first line should say `backlog "chosen"; languages turned on:
+  python`, then an empty queue and their questions in the backlog. No
+  restart is needed: the server reads a learner's files at each request.
+  The next start logs them as `Queues: tester@example.com: 0 in
+  order.json, 2 in backlog.json (0 added)`.
 
 **3. The invite.** The server keeps running.
 
@@ -809,8 +799,10 @@ Python, marked **new**. The language menu shows only Python.
   opened: a tester who types another question's address
   (`problem.html?slug=…`) can do it, and a Submit then puts it in their
   queue. Their profile still limits the languages (403 for the others).
-- Each change to a backlog stops the site for everyone for a few seconds
-  (limited-live plan, "What spaced-repetition step 13 changes here").
+- Each later change to a backlog (`make backlog-add`, `backlog-remove`)
+  stops the site for everyone for a few seconds (limited-live plan, "What
+  spaced-repetition step 13 changes here"). Setting a learner up with
+  `make learner-create` doesn't.
 - A setup that's never used stays: the folder counts as a user at every
   start and in `make consistency-check`. To remove it, stop the server and
   move the folder to `/srv/maxrecall/data/archive/`, as in §10.
