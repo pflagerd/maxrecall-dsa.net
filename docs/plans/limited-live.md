@@ -350,7 +350,9 @@ Each is small and can be checked before the next.
    established connections are accepted before any rule.
    **Rebooted 2026-11-05** (owner): the service, `ufw` and the judge's
    sandbox (the AppArmor profile) came back by themselves. The kernel
-   stayed `6.8.0-147`: the restart was for another package.
+   stayed `6.8.0-147`: the restart was for another package. It's the
+   newest kernel Ubuntu offers this VPS (checked after `apt update`), so
+   D4's condition holds.
 3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
@@ -399,3 +401,4 @@ the same change.
 | 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
 | 2026-11-05 | #54 merged to `master` and merged into this branch (§11 tester setup, then §12 firewall). The VPS's DNS name, `srv702017.hstgr.cloud` (owner), now replaces the `VPS_IP` placeholder in `docs/deploy-vps.md` and is recorded in the readme. |
 | 2026-11-05 | #55 merged (step 2). The owner rebooted the VPS (`System restart required`, D4's patched kernel): afterwards `systemctl is-active maxrecall-dsa.test.service` said `active` and `ufw status` `Status: active` with only 22/tcp, so both come back by themselves. Then this boot's log: `Sandbox: bubblewrap 0.9.0 works (self-test passed)` (the AppArmor profile reloads at boot) and `registration by invite only`. **Correction:** I had said the restart was usually for a new kernel; here it wasn't. `uname -r` still says `6.8.0-147-generic`, with no reboot pending, so another package needed it (`/var/run/reboot-required.pkgs`, gone after the reboot, would have said which). Whether a newer kernel is waiting among the pending updates (201, 10 security, 1 not installed automatically) isn't checked yet, so D4's "kernel kept patched" isn't confirmed. |
+| 2026-11-05 | D4's patched kernel confirmed (owner): after `apt update`, no newer `linux-image`/`linux-generic`/`linux-headers` package is waiting, and the installed `linux-image-generic` and `linux-image-virtual` (the packages that follow the newest kernel) are `6.8.0-147`, the running one. `6.8.0-110` is still installed, as the fallback Ubuntu keeps. 187 other updates are waiting (security ones not counted yet); installing them is for a time the owner chooses, with `make sandbox-test` and `make line-numbers-test` afterwards, since they can change g++, OpenJDK, Python or bubblewrap. |
