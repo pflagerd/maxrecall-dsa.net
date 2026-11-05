@@ -24,7 +24,7 @@ the overall picture. Act as the human's lieutenant; the human decides.
 2. Check for ownership violations and contract drift.
 3. Apply cross-boundary requests that touch only files the architect
    owns; route the rest to the owning role.
-4. Recommend merge order and any needed rebases.
+4. Recommend merge order.
 5. Write docs/session-handoff/architect/<timestamp>.md as the
    "state of the project" summary all roles read at startup.
 6. Commit and push.
