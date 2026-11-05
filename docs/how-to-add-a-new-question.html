@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Adding a New Problem</title>
+<title>Adding a New Question</title>
 <style>
   :root {
     --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
@@ -52,7 +52,7 @@
 <main>
 
 <button class="action theme" type="button" id="theme-toggle" aria-label="Switch between light and dark">Light / dark</button>
-<h1>Adding a new problem</h1>
+<h1>Adding a new question</h1>
 <p class="subtitle">How to write a question file for MaxRecall DSA by hand, check it, try it, and give it to learners. Open this file straight from disk; it needs no server.</p>
 
 <div class="note">
@@ -375,6 +375,7 @@ const stampOut = /** @type {HTMLOutputElement} */ (document.getElementById('stam
 // The checklist, kept in this browser's localStorage, if it can be: a page
 // opened from disk, a private window or blocked storage may not allow it,
 // and then the ticks just aren't kept.
+// Named before the page was renamed (2026-11-05); kept, so ticks already made stay.
 const CHECKLIST_KEY = 'maxrecall-dsa:how-to-add-a-new-problem:checklist';
 const boxes = /** @type {HTMLInputElement[]} */ (Array.from(document.querySelectorAll('#checklist input')));
 const checklistStatus = /** @type {HTMLElement} */ (document.getElementById('checklist-status'));

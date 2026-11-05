@@ -6,7 +6,7 @@
 // the spaced-repetition queue does (docs/plans/spaced-repetition.md: `slug`
 // equal to the file name, D1; `created`, D6). Then checks that each rule
 // refuses a question that breaks it. Run with `make test`.
-// docs/how-to-add-a-new-problem.html says to run it after writing one.
+// docs/how-to-add-a-new-question.html says to run it after writing one.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -35,7 +35,7 @@ for (const name of files) {
 }
 
 // --- docs/question-template.json -------------------------------------------
-// The file to copy to start a question (docs/how-to-add-a-new-problem.html,
+// The file to copy to start a question (docs/how-to-add-a-new-question.html,
 // step 3): the Python parts of singly-linked-list-hello-world.json, with a
 // placeholder created time and title. It isn't in questions/, since every
 // file there is a question.
