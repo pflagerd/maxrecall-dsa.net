@@ -348,6 +348,9 @@ Each is small and can be checked before the next.
    would also stop the owner's `rsync` and D5's fetch per user. Checked
    against Ubuntu 24.04's `ufw` 0.36.2-6 package: loopback (the tunnel) and
    established connections are accepted before any rule.
+   **Rebooted 2026-11-05** (owner): the service, `ufw` and the judge's
+   sandbox (the AppArmor profile) came back by themselves. The kernel
+   stayed `6.8.0-147`: the restart was for another package.
 3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
@@ -395,3 +398,4 @@ the same change.
 | 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@srv702017.hstgr.cloud true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://srv702017.hstgr.cloud:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §12 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
 | 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
 | 2026-11-05 | #54 merged to `master` and merged into this branch (§11 tester setup, then §12 firewall). The VPS's DNS name, `srv702017.hstgr.cloud` (owner), now replaces the `VPS_IP` placeholder in `docs/deploy-vps.md` and is recorded in the readme. |
+| 2026-11-05 | #55 merged (step 2). The owner rebooted the VPS (`System restart required`, D4's patched kernel): afterwards `systemctl is-active maxrecall-dsa.test.service` said `active` and `ufw status` `Status: active` with only 22/tcp, so both come back by themselves. Then this boot's log: `Sandbox: bubblewrap 0.9.0 works (self-test passed)` (the AppArmor profile reloads at boot) and `registration by invite only`. **Correction:** I had said the restart was usually for a new kernel; here it wasn't. `uname -r` still says `6.8.0-147-generic`, with no reboot pending, so another package needed it (`/var/run/reboot-required.pkgs`, gone after the reboot, would have said which). Whether a newer kernel is waiting among the pending updates (201, 10 security, 1 not installed automatically) isn't checked yet, so D4's "kernel kept patched" isn't confirmed. |
