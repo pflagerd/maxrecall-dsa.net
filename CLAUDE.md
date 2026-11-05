@@ -104,8 +104,10 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
 - Before starting work, read your role file, `docs/roles/<role>.md`, the most
   recent `docs/session-handoff/<role>/*.md`, and the most recent
   `docs/session-handoff/architect/*.md` (the architect's "state of the
-  project" summary). `<role>` is your role's file name in the table below,
-  without `.md`, e.g. `infrastructure-and-security`.
+  project" summary), and `docs/contracts.md` (where your role's files
+  depend on another role's, and what each side relies on). `<role>` is
+  your role's file name in the table below, without `.md`, e.g.
+  `infrastructure-and-security`.
 - Never edit files outside your role's ownership list, except the shared
   files below. If you need such a change, write it as a request in your
   handoff doc instead.

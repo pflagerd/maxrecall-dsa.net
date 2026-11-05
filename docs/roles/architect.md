@@ -6,7 +6,7 @@ the overall picture. Act as the human's lieutenant; the human decides.
 
 ## Owns
 - docs/roles/**, docs/contracts.md
-- docs/plans/documentation-standard.md
+- docs/plans/documentation-standard.md, docs/plans/server-split.md
 - docs/session-handoff/architect/*.md
 
 ## Shared files (propose changes; owner approves/merges them)
