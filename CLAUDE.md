@@ -88,3 +88,21 @@ Teaching them what you're doing comes first. Speed comes second.
   repo, not only in chat, so the other environment can pick them up.
 - Before finishing, make sure work is committed and pushed, and say which
   branch it's on.
+
+## Roles
+
+The maxrecall-dsa repo is worked on by several Claude sessions, each with one role.
+
+- Your role is stated in the first message of your session ("Role: users").
+  If no role is stated, ask before making any changes.
+- Before starting work, read your role file, `docs/roles/architect.md`, and the most
+  recent `docs/session-handoff/<role>/*.md`.
+- Never edit files outside your role's ownership list. If you need such a
+  change, write it as a request in your handoff doc instead.
+
+| Role      | Role file                 |
+|-----------|---------------------------|
+| architect | `docs/roles/architect.md` |
+| infrastructure and security  | `docs/roles/infrastructure-and-security.md`  |
+| users     | `docs/roles/users.md`     |
+| questions | `docs/roles/questions.md` |
