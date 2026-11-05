@@ -22,7 +22,8 @@ agreement or the human's approval.
   approves, with this file updated in the same pull request.
 - **Checking**: each architect session (step 2, "contract drift")
   compares every `require` that crosses roles, and the strings and paths
-  below, with this file, and checks that a pull request touching the
+  below, with this file, and the browser globals and element ids of
+  sections 10 and 11, and checks that a pull request touching the
   sign-in layer of `server.js` (section 9) has had its review.
 
 ## 1. The judge's sandbox and queue
@@ -203,3 +204,41 @@ File owner: users. Reviewer: infrastructure and security.
   pull request's description and lists it in its handoff; the architect
   routes it. Feature routes that only read `req.userEmail` don't need
   the review.
+
+## 10. The topic and source bubbles
+
+Provider: questions (`bubbles.js`, `labels.json`). Used by: users
+(`index.html`, `problems-list.js`, `problem.html`, `problem-page.js`).
+
+- **What crosses**: two global functions, since `bubbles.js` is a plain
+  `<script>`, not a module: `loadLabels` and `renderBubbles`. The pages
+  call them by name, so renaming one breaks a page without any error
+  when it loads.
+- **Relied on**:
+  - Each page loads `bubbles.js` before its own script
+    (`index.html`: before `problems-list.js`; `problem.html`: before
+    `problem-page.js`).
+  - `loadLabels()` fetches `/labels.json` and never rejects: if it
+    can't, bubbles render uncoloured.
+  - `renderBubbles(container, question, labels)` replaces what's in
+    `container` with the question's `sources` and then its `topics`, so
+    both the full question and the problem list's summary work. It builds
+    them with `textContent` and `element.style`, applying only colours
+    `CSS.supports` accepts, so a name or a hand-edited colour can't inject
+    markup.
+  - `bubbles.js` and `labels.json` are in `server.js`'s `STATIC_FILES`
+    (contract 9).
+
+## 11. The signed-in header
+
+Provider: infrastructure and security (`account.js`). Used by: users
+(`index.html`, `problem.html`).
+
+- **What crosses**: the element with `id="account"`, which each page
+  provides, and the `<script src="account.js">` each page loads.
+  `account.js` fills the element with the signed-in email and a Log out
+  button (it asks `/api/auth/me`, and posts `/api/auth/logout`: contract
+  8).
+- **Relied on**: both pages keep that element and that script; without
+  either, the email and Log out quietly disappear. `account.js` doesn't
+  depend on anything else in the page.

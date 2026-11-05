@@ -19,7 +19,7 @@ records, and the scripts that set up and adjust a learner.
 - Scripts: scripts/backlog.js, scripts/learner-create.js,
   scripts/recalculate-queue.js, scripts/consistency-check.js
 - The learner's pages: index.html, problems-list.js, problem.html,
-  problem-page.js, bubbles.js, timer.js, style.css
+  problem-page.js, timer.js, style.css
 - docs/how-to-add-a-new-user.html (adding a user or tester, start to
   finish)
 - Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
@@ -29,8 +29,8 @@ records, and the scripts that set up and adjust a learner.
 ## May read, must not edit
 - Everything the infrastructure-and-security and questions roles own, in
   particular auth.js and the judge's sandbox (infrastructure and
-  security), judge/runner.js, question-files.js and questions/*.json
-  (questions)
+  security), judge/runner.js, question-files.js, questions/*.json and
+  bubbles.js (questions)
 - Makefile and package.json (infrastructure and security): ask for a new
   `make` target there
 - docs/roles/**, other roles' handoffs, and the handoffs from before roles
