@@ -126,7 +126,7 @@ function isPlainObject(value) {
 
 /**
  * What's wrong with a question file, as make test checks it
- * (questions.test.js; docs/how-to-add-a-new-problem.html): what the
+ * (questions.test.js; docs/how-to-add-a-new-question.html): what the
  * server, the judge and the problem page rely on. Each check says which
  * field, so a new question's mistakes are found before a learner meets
  * them (for example, a language in starterCode with no functionName makes
