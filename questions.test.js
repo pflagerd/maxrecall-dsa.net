@@ -1,22 +1,20 @@
 'use strict';
 
-// Checks every question file for what the spaced-repetition queue relies on
-// (docs/plans/spaced-repetition.md): `slug` equal to the file name (D1:
-// order.json names questions by file name), and `created`, the question's
-// creation time (D6: the backlog is in creation order). Run with `make test`.
+// Checks every question file against the problem file format
+// (question-files.js, checkQuestion; readme.html, "Problem file format"):
+// what the server, the judge and the problem page rely on, including what
+// the spaced-repetition queue does (docs/plans/spaced-repetition.md: `slug`
+// equal to the file name, D1; `created`, D6). Then checks that each rule
+// refuses a question that breaks it. Run with `make test`.
+// docs/how-to-add-a-new-problem.html says to run it after writing one.
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile } = require('./question-files');
+const { isQuestionFile, checkQuestion } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
-
-// UTC ISO 8601 to the second, e.g. 2026-10-24T05:31:05Z. UTC only, so that
-// comparing two as text gives the same order as comparing them as times
-// (RFC 3339, section 5.1).
-const CREATED_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 
 const files = fs.readdirSync(QUESTIONS_DIR).filter(isQuestionFile).sort(); // not renames.json, the rename log
 
@@ -25,19 +23,134 @@ test('there are question files to check', () => {
 });
 
 for (const name of files) {
-  /** The parts of a question file checked here. @type {{ slug?: unknown, created?: unknown }} */
-  const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
-
-  test(`${name}: slug is the file name without .json`, () => {
-    assert.equal(question.slug, name.slice(0, -'.json'.length));
+  test(`${name} follows the problem file format`, () => {
+    let question;
+    try {
+      question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    } catch (err) {
+      assert.fail(`not valid JSON: ${/** @type {Error} */ (err).message}`);
+    }
+    assert.deepEqual(checkQuestion(question, name), []);
   });
+}
 
-  test(`${name}: created is a real UTC time, like 2026-10-24T05:31:05Z`, () => {
-    assert.equal(typeof question.created, 'string', 'created is missing');
-    const created = /** @type {string} */ (question.created);
-    assert.match(created, CREATED_PATTERN);
-    // A real date: 2026-02-30T00:00:00Z matches the pattern but isn't one,
-    // and Date would roll it over to 2026-03-02.
-    assert.equal(new Date(created).toISOString().replace('.000Z', 'Z'), created);
+// --- checkQuestion's rules, each broken on purpose ---------------------------
+
+/**
+ * A small valid function-mode question, in Python and C++, as a new object
+ * each time.
+ *
+ * @returns {Record<string, any>} The question.
+ */
+function valid() {
+  return {
+    slug: 'sample',
+    created: '2026-11-05T12:00:00Z',
+    title: 'Sample',
+    difficulty: 'Easy',
+    topics: ['Linked List'],
+    sources: [],
+    description: { python: '<p>Do it.</p>', cpp: '<p>Do it.</p>' },
+    examples: { python: [{ input: 'n = 1', output: '1' }], cpp: [{ input: 'n = 1', output: '1', explanation: 'One.' }] },
+    constraints: { python: [], cpp: ['1 ≤ n'] },
+    starterCode: { python: 'def f(n):\n    pass\n', cpp: 'int f(int n) {\n}\n' },
+    functionName: { python: 'f', cpp: 'f' },
+    signature: { cpp: { params: ['int'], returns: 'int' } },
+    testCases: [{ args: [1], expected: 1, hidden: false }, { args: [2], expected: null, hidden: true }],
+  };
+}
+
+/**
+ * A small valid program-mode question, in Python only.
+ *
+ * @returns {Record<string, any>} The question.
+ */
+function validProgram() {
+  return {
+    slug: 'sample',
+    created: '2026-11-05T12:00:00Z',
+    title: 'Sample',
+    difficulty: 'Hard',
+    topics: [],
+    sources: [],
+    judgeMode: 'program',
+    description: { python: '<p>Print it.</p>' },
+    examples: { python: [] },
+    constraints: { python: [] },
+    starterCode: { python: '' },
+    testCases: [{ input: '', expected: 'Hello' }],
+  };
+}
+
+test('the valid samples pass, and so does one with learning text', () => {
+  assert.deepEqual(checkQuestion(valid(), 'sample.json'), []);
+  assert.deepEqual(checkQuestion(validProgram(), 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...valid(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), [], 'learning may cover only some languages');
+});
+
+/** Given as a value to withChange(): delete the field instead. @type {symbol} */
+const DELETE = Symbol('delete');
+
+/**
+ * A question with one field changed, or deleted: a broken copy for one
+ * rule.
+ *
+ * @param {Record<string, any>} question - A question, from valid() or
+ *   validProgram() (changed in place).
+ * @param {string} fieldPath - The field, as dot-separated keys, with list
+ *   positions as numbers, e.g. "testCases.0.hidden".
+ * @param {unknown} value - Its new value, or DELETE to delete it.
+ * @returns {Record<string, any>} The question.
+ */
+function withChange(question, fieldPath, value) {
+  const keys = fieldPath.split('.');
+  const last = /** @type {string} */ (keys.pop()); // a path has at least one key
+  const parent = keys.reduce((o, k) => o[k], question);
+  if (value === DELETE) delete parent[last];
+  else parent[last] = value;
+  return question;
+}
+
+/** [what is wrong, the question, a pattern one problem must match]. @type {[string, unknown, RegExp][]} */
+const BROKEN = [
+  ['not an object', [], /must be a JSON object/],
+  ['a misspelt field', withChange(valid(), 'testcases', []), /unknown field "testcases" \(a typo\?/],
+  ['slug not the file name', withChange(valid(), 'slug', 'other'), /slug must be the file name without \.json, "sample"/],
+  ['created missing', withChange(valid(), 'created', DELETE), /created must be a UTC time/],
+  ['created not UTC', withChange(valid(), 'created', '2026-11-05T12:00:00-08:00'), /created must be a UTC time/],
+  ['created not a real date', withChange(valid(), 'created', '2026-02-30T00:00:00Z'), /isn't a real date/],
+  ['no title', withChange(valid(), 'title', ' '), /title must be text/],
+  ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Easy, Medium, Hard/],
+  ['topics not a list', withChange(valid(), 'topics', 'Linked List'), /topics must be a list of names/],
+  ['sources missing', withChange(valid(), 'sources', DELETE), /sources must be a list of names/],
+  ['an unknown judgeMode', withChange(valid(), 'judgeMode', 'functions'), /judgeMode must be "function" or "program"/],
+  ['no starterCode', withChange(valid(), 'starterCode', {}), /starterCode must give the starting code for at least one language/],
+  ['an unknown language', withChange(valid(), 'starterCode.Python', 'x'), /starterCode\.Python: not a language the judge knows/],
+  ['starter code not text', withChange(valid(), 'starterCode.python', ['def f(n):']), /starterCode\.python must be text/],
+  ['a language with no description', withChange(valid(), 'description.cpp', DELETE), /description\.cpp is missing: starterCode has cpp/],
+  ['an empty description', withChange(valid(), 'description.python', ''), /description\.python must be HTML text/],
+  ['a description for a language with no starter code', withChange(valid(), 'description.java', '<p>x</p>'), /description\.java: starterCode has no java/],
+  ['examples missing entirely (the page would throw)', withChange(valid(), 'examples', DELETE), /examples must be an object keyed by language/],
+  ['an example without output', withChange(valid(), 'examples.python.0.output', DELETE), /examples\.python must be a list of \{ input, output, explanation\? \}/],
+  ['constraints not a list', withChange(valid(), 'constraints.cpp', '1 ≤ n'), /constraints\.cpp must be a list of text/],
+  ['learning for a language with no starter code', withChange(valid(), 'learning', { d: '<p>x</p>' }), /learning\.d: starterCode has no d/],
+  ['a language with no functionName (every Run would be a NameError)', withChange(valid(), 'functionName.python', DELETE), /functionName\.python is missing: starterCode has python/],
+  ['cpp with no signature', withChange(valid(), 'signature', DELETE), /signature\.cpp must be \{ params: \[types\], returns: type \}/],
+  ['a signature without returns', withChange(valid(), 'signature.cpp.returns', DELETE), /signature\.cpp must be/],
+  ['functionName in program mode', withChange(validProgram(), 'functionName', { python: 'main' }), /functionName is only for judgeMode "function"/],
+  ['no test cases', withChange(valid(), 'testCases', []), /testCases must be a list of at least one test case/],
+  ['a test case without args', withChange(valid(), 'testCases.0.args', DELETE), /testCases\[0\]\.args must be the list of arguments/],
+  ['a test case without expected', withChange(valid(), 'testCases.1.expected', DELETE), /testCases\[1\]\.expected is missing \(null is allowed/],
+  ['a misspelt test case field', withChange(valid(), 'testCases.0.hiden', true), /testCases\[0\]: unknown "hiden"/],
+  ['hidden not true or false', withChange(valid(), 'testCases.0.hidden', 'yes'), /testCases\[0\]\.hidden must be true or false/],
+  ['every test case hidden', withChange(valid(), 'testCases.0.hidden', true), /at least one must be visible/],
+  ['a program test case without input', withChange(validProgram(), 'testCases.0.input', DELETE), /testCases\[0\]\.input must be the program's standard input/],
+  ['a program test case expecting a number', withChange(validProgram(), 'testCases.0.expected', 5), /testCases\[0\]\.expected must be the expected standard output, as text/],
+];
+
+for (const [what, question, pattern] of BROKEN) {
+  test(`refused, naming the field: ${what}`, () => {
+    const problems = checkQuestion(question, 'sample.json');
+    assert.ok(problems.some((p) => pattern.test(p)), `expected a problem matching ${pattern}, got ${JSON.stringify(problems)}`);
   });
 }

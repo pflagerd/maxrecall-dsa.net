@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adding a New Problem</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --panel: #f6f8fa; --code-bg: #eff2f5; --accent: #0b5cad; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+      --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+    --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
+  main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 16px 4rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; }
+  h2 { margin-top: 2.5rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h3 { margin-top: 1.6rem; }
+  a { color: var(--accent); }
+  .subtitle { color: var(--muted); margin: 0 0 1.5rem; }
+  code { font: .9em/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: var(--code-bg); padding: .1em .3em; border-radius: 4px; }
+  pre { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .copy { position: absolute; top: .4rem; right: .4rem; font: 12px system-ui, sans-serif; padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .note, .example-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: .6rem 1rem; margin: 1rem 0; }
+  .warn { border-left-color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  ol.steps > li { margin: .3rem 0; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: .35rem 0; }
+  .checklist label { cursor: pointer; }
+  .checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+  .stamp { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .stamp output { font: 1rem ui-monospace, monospace; background: var(--code-bg); padding: .25rem .5rem; border-radius: 4px; }
+  button.action { font: inherit; padding: .25rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .status { font-size: .9rem; color: var(--muted); }
+  .theme { float: right; }
+</style>
+</head>
+<body>
+<main>
+
+<button class="action theme" type="button" id="theme-toggle" aria-label="Switch between light and dark">Light / dark</button>
+<h1>Adding a new problem</h1>
+<p class="subtitle">How to write a question file for MaxRecall DSA by hand, check it, try it, and give it to learners. Open this file straight from disk; it needs no server.</p>
+
+<div class="note">
+  <p><strong>Status:</strong> written 2026-11-05 and being followed for the first time, with a question about <strong>singly linked lists</strong> as the example (<a href="#example">below</a>). Where following it shows a step is wrong or missing, the step gets fixed here, in the same pull request as the question.</p>
+  <p>The authority for the file format is <code>readme.html</code>, “Problem file format”, and <code>question-files.js</code>'s <code>checkQuestion</code>, which <code>make test</code> runs. This page explains them; where they disagree, they win.</p>
+</div>
+
+<h2 id="steps">The steps</h2>
+<ol class="steps">
+  <li><a href="#s1">Decide what the question is</a></li>
+  <li><a href="#s2">Start a branch</a></li>
+  <li><a href="#s3">Create the file from the template</a></li>
+  <li><a href="#s4">Fill in the fields</a></li>
+  <li><a href="#s5">Write the test cases</a></li>
+  <li><a href="#s6">Run <code>make test</code></a></li>
+  <li><a href="#s7">Try it in the app, with Run and Test</a></li>
+  <li><a href="#s8">Commit and open a pull request</a></li>
+  <li><a href="#s9">After it's merged: deploy, and give it to learners</a></li>
+</ol>
+<p>Then: the <a href="#fields">field reference</a>, the <a href="#checklist">checklist</a> and the <a href="#example">worked example</a>.</p>
+
+<h2 id="s1">1. Decide what the question is</h2>
+<p>Before any file, decide:</p>
+<ul>
+  <li><strong>What it teaches.</strong> One idea, stated in a sentence. A question that needs two new ideas is two questions.</li>
+  <li><strong>Its name</strong> (the <em>slug</em>): lowercase letters and digits, joined by single hyphens, e.g. <code>linked-list-from-values</code>. It's the file name (<code>questions/&lt;name&gt;.json</code>), part of the page's address (<code>problem.html?slug=…</code>), and how every learner's queue refers to it, so pick one you won't want to change. (If you must, <code>make rename-question</code> does it safely.)</li>
+  <li><strong>Its title</strong>, as the problem list shows it.</li>
+  <li><strong>Its difficulty</strong>: <code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</li>
+  <li><strong>Its topics and sources</strong>: names shown as bubbles. Use names already in <code>labels.json</code> where they fit, so the colours match; a new name works, in the default colours, until it's added there.</li>
+  <li><strong>How it's judged</strong> (<code>judgeMode</code>): <code>"function"</code>, the judge calls one function with arguments and compares what it returns; or <code>"program"</code>, the judge runs the whole program with some standard input and compares its output. Most questions are functions.</li>
+  <li><strong>Its languages.</strong> Each language needs its own starter code, function name, description, examples and constraints, and C++, Java and D also a type <code>signature</code>. Starting with one language and adding the others later is fine: a language left out is simply not offered.</li>
+</ul>
+<div class="note warn">
+  <p><strong>What the judge can pass in.</strong> Arguments reach the function exactly as JSON gives them: numbers, text, <code>true</code>/<code>false</code>, <code>null</code>, lists and objects. A function can <em>return</em> an object of its own (a linked list node, say): the judge turns it into JSON from its attributes. But it can't <em>receive</em> one: a linked list given as an argument would arrive as a plain dictionary. So for now, a linked list question has the learner <em>build</em> a list and return it. (Source: <code>judge/runner.js</code>, the Python harness.)</p>
+</div>
+
+<h2 id="s2">2. Start a branch</h2>
+<p>Every change goes through a pull request, on a branch of its own. In your Kubuntu checkout:</p>
+<pre><code>git switch master</code></pre>
+<pre><code>git pull --ff-only</code></pre>
+<ul>
+  <li><code>switch master</code> goes to the main branch; <code>pull --ff-only</code> brings it up to GitHub's, refusing to make a merge (<a href="https://git-scm.com/docs/git-pull#Documentation/git-pull.txt---ff-only">git-pull</a>).</li>
+</ul>
+<pre><code>git switch -c question-linked-list-from-values</code></pre>
+<ul>
+  <li><code>-c</code> creates the branch and switches to it (<a href="https://git-scm.com/docs/git-switch#Documentation/git-switch.txt--cltnew-branchgt">git-switch</a>). Name it after the question.</li>
+</ul>
+<pre><code>make test</code></pre>
+<ul>
+  <li>Should pass before you start, so that any failure later is yours.</li>
+</ul>
+
+<h2 id="s3">3. Create the file from the template</h2>
+<p>Create <code>questions/&lt;name&gt;.json</code> and paste this in. It's a function-mode question in Python only. Every <code>…</code> is something to fill in at step 4.</p>
+<pre><code>{
+  "slug": "…",
+  "created": "…",
+  "title": "…",
+  "difficulty": "Easy",
+  "topics": ["…"],
+  "sources": [],
+  "description": {
+    "python": "&lt;p&gt;…&lt;/p&gt;"
+  },
+  "examples": {
+    "python": [
+      { "input": "…", "output": "…", "explanation": "…" }
+    ]
+  },
+  "constraints": {
+    "python": ["…"]
+  },
+  "starterCode": {
+    "python": "def …(…):\n    pass\n"
+  },
+  "functionName": {
+    "python": "…"
+  },
+  "testCases": [
+    { "args": […], "expected": …, "hidden": false }
+  ]
+}</code></pre>
+<ul>
+  <li>JSON has no comments, and every string is on one line: a line break inside starter code is written <code>\n</code>, a double quote <code>\"</code>.</li>
+  <li>The order of the fields doesn't matter; this order matches the other questions.</li>
+</ul>
+
+<h2 id="s4">4. Fill in the fields</h2>
+<p>The <a href="#fields">field reference</a> has every field. Notes on the ones that need care:</p>
+<h3><code>created</code></h3>
+<p>When you created the question, in UTC, to the second. It decides where a new question goes in a backlog filled in creation order. Get it from:</p>
+<pre><code>date -u +%Y-%m-%dT%H:%M:%SZ</code></pre>
+<ul>
+  <li><code>-u</code>: in UTC. <code>+FORMAT</code>: in this format, e.g. <code>2026-11-05T19:04:31Z</code> (<a href="https://www.gnu.org/software/coreutils/manual/html_node/date-invocation.html">date</a>).</li>
+</ul>
+<div class="stamp">
+  <span>Or here, now:</span>
+  <output id="stamp-out">—</output>
+  <button class="action" type="button" id="stamp-btn">Get the time</button>
+  <button class="action" type="button" id="stamp-copy">Copy</button>
+</div>
+<h3><code>description</code>, <code>examples</code>, <code>constraints</code></h3>
+<ul>
+  <li><strong>description</strong> is HTML: <code>&lt;p&gt;</code>, <code>&lt;code&gt;</code>, <code>&lt;strong&gt;</code>. Say what the function gets and what it must return, including the edge cases (an empty list, say). Maths between <code>$…$</code> is drawn by KaTeX.</li>
+  <li><strong>examples</strong>: each has <code>input</code> and <code>output</code> as text, shown as written, and an optional <code>explanation</code>. Use the visible test cases.</li>
+  <li><strong>constraints</strong>: a list of short lines, e.g. <code>"0 ≤ len(values) ≤ 1000"</code>. It may be empty, <code>[]</code>, but must be there.</li>
+</ul>
+<h3><code>starterCode</code> and <code>functionName</code></h3>
+<ul>
+  <li>The starter code is what the editor holds when a learner opens the question: the function, with <code>pass</code> as its body, and any class it needs (a node class, say).</li>
+  <li><code>functionName</code> must be exactly the function's name in the starter code. If it's missing or wrong, every Run in that language fails with <code>NameError</code>.</li>
+</ul>
+
+<h2 id="s5">5. Write the test cases</h2>
+<p>Each test case is <code>{ "args": [ … ], "expected": …, "hidden": true or false }</code>:</p>
+<ul>
+  <li><code>args</code>: the arguments, in order, as a JSON list, even for one argument: <code>[[1, 2, 3]]</code> is one argument, the list <code>[1, 2, 3]</code>.</li>
+  <li><code>expected</code>: what the function must return, as JSON. Python's <code>None</code> is <code>null</code>.</li>
+  <li><code>hidden</code>: <code>false</code> for a case the learner sees, and Run runs; <code>true</code> for one only Submit and Test use. At least one must be visible.</li>
+</ul>
+<p>Cover: the ordinary case; the smallest inputs (empty, one item); something larger; and anything the description singles out. Make the visible ones the examples, and hide the edge cases, so passing means understanding rather than matching what was shown.</p>
+<div class="note warn">
+  <p><strong>Returning an object.</strong> The judge compares a returned object by its attributes, by name, in any order, and the <em>set</em> of names must be the same (<code>judge/runner.js</code>, <code>deepEqual</code>). For a node class with <code>value</code> and <code>next</code>, the list 1 → 2 is expected as</p>
+  <pre><code>{ "value": 1, "next": { "value": 2, "next": null } }</code></pre>
+  <p>So a learner who adds an attribute of their own (<code>self.size</code>, say) fails every case. Say so in the description.</p>
+</div>
+
+<h2 id="s6">6. Run <code>make test</code></h2>
+<pre><code>make test</code></pre>
+<p>Among its tests, one per question file checks it against the format (<code>questions.test.js</code>): a misspelt field name, a language with no function name, a test case without <code>expected</code>, all test cases hidden, and so on. A failure names the field, e.g.</p>
+<pre><code>functionName.python is missing: starterCode has python</code></pre>
+<p>It doesn't check that your <code>expected</code> answers are right. That's step 7.</p>
+
+<h2 id="s7">7. Try it in the app, with Run and Test</h2>
+<pre><code>make dev</code></pre>
+<ul>
+  <li>Starts the app on <a href="http://localhost:3000">http://localhost:3000</a> and restarts it when a file changes. Sign in as yourself (<code>MAXRECALL_USER</code>). If you have no account on this machine yet: <code>make invite EMAIL=&lt;your email&gt;</code>, then Register on the login page with the code it prints.</li>
+</ul>
+<p>Open the question directly (it isn't in your backlog):</p>
+<pre><code>http://localhost:3000/problem.html?slug=linked-list-from-values&amp;language=python</code></pre>
+<ol>
+  <li>Read it as a learner would: the description, examples and constraints.</li>
+  <li><strong>Run</strong> the starter code unchanged: every visible case should fail, not crash the page.</li>
+  <li>Write a correct answer and press <strong>Test</strong> (shown to you only). It judges every case, hidden ones shown in full, and <strong>records nothing</strong>. Every case should pass. One that doesn't means a wrong <code>expected</code>, or a wrong answer.</li>
+  <li>Write a plausible <em>wrong</em> answer (forgetting the empty list, say) and Test again: the cases meant to catch it should fail.</li>
+</ol>
+<p>Avoid <strong>Submit</strong> here: it records a result in your local <code>users/</code> folder.</p>
+
+<h2 id="s8">8. Commit and open a pull request</h2>
+<pre><code>git add questions/linked-list-from-values.json</code></pre>
+<pre><code>git commit -m "Add question: Linked List from Values"</code></pre>
+<pre><code>git push -u origin question-linked-list-from-values</code></pre>
+<ul>
+  <li><code>-u</code> remembers GitHub's copy as this branch's, so later pushes need no names (<a href="https://git-scm.com/docs/git-push#Documentation/git-push.txt---set-upstream">git-push</a>).</li>
+</ul>
+<p>Then open the pull request on GitHub, for review before merging.</p>
+
+<h2 id="s9">9. After it's merged: deploy, and give it to learners</h2>
+<p>On the VPS, as root, in root's clone: <code>git pull --ff-only</code>, then <code>make deploy-server</code> (<code>docs/deploy-vps.md</code>, “The quick way”).</p>
+<ul>
+  <li>Learners whose backlog is <code>"all"</code> get it at that restart.</li>
+  <li>Learners with a <strong>chosen</strong> backlog (you, and testers set up with <code>make learner-create</code>) get it only when it's added, with the server stopped (<code>docs/deploy-vps.md</code> §10):</li>
+</ul>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=daniel.pflager@gmail.com SLUGS=linked-list-from-values</code></pre>
+
+<h2 id="fields">Field reference</h2>
+<table>
+  <tr><th>Field</th><th>Required</th><th>What it is</th></tr>
+  <tr><td><code>slug</code></td><td>yes</td><td>The file name without <code>.json</code>.</td></tr>
+  <tr><td><code>created</code></td><td>yes</td><td>UTC time to the second, <code>2026-11-05T19:04:31Z</code>.</td></tr>
+  <tr><td><code>title</code></td><td>yes</td><td>As the list shows it.</td></tr>
+  <tr><td><code>difficulty</code></td><td>yes</td><td><code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</td></tr>
+  <tr><td><code>topics</code>, <code>sources</code></td><td>yes</td><td>Lists of names, may be empty; colours from <code>labels.json</code>.</td></tr>
+  <tr><td><code>judgeMode</code></td><td>no</td><td><code>"function"</code> (left out means this) or <code>"program"</code>.</td></tr>
+  <tr><td><code>starterCode</code></td><td>yes</td><td>By language: the editor's starting code. Its languages are the question's languages.</td></tr>
+  <tr><td><code>description</code></td><td>yes</td><td>By language: HTML.</td></tr>
+  <tr><td><code>examples</code></td><td>yes</td><td>By language: a list of <code>{ input, output, explanation? }</code>, each text.</td></tr>
+  <tr><td><code>constraints</code></td><td>yes</td><td>By language: a list of text, may be empty.</td></tr>
+  <tr><td><code>learning</code></td><td>no</td><td>By language, any of them: HTML for the Learning tab.</td></tr>
+  <tr><td><code>functionName</code></td><td>function mode</td><td>By language: the function the judge calls.</td></tr>
+  <tr><td><code>signature</code></td><td>function mode, C++/Java/D</td><td>By language: <code>{ params: [types], returns: type }</code>, and optionally <code>customSerializer</code> for a type of the question's own (see <code>singly-linked-list-hello-world.json</code>).</td></tr>
+  <tr><td><code>testCases</code></td><td>yes</td><td>Function mode: <code>{ args, expected, hidden }</code>. Program mode: <code>{ input, expected, hidden }</code>, input and expected as text.</td></tr>
+</table>
+<p>“By language” means an object with exactly <code>starterCode</code>'s languages as keys, e.g. <code>{ "python": … }</code>. The languages are <code>javascript</code>, <code>python</code>, <code>cpp</code>, <code>java</code> and <code>d</code>.</p>
+
+<h2 id="checklist">Checklist</h2>
+<p class="status" id="checklist-status">Ticks are kept in this browser only.</p>
+<ul class="checklist" id="checklist">
+  <li><label><input type="checkbox" data-key="decided"><span> Decided what it teaches, its name, title, difficulty, topics and languages (1)</span></label></li>
+  <li><label><input type="checkbox" data-key="branch"><span> On a new branch, <code>make test</code> passing (2)</span></label></li>
+  <li><label><input type="checkbox" data-key="file"><span> <code>questions/&lt;name&gt;.json</code> created from the template (3)</span></label></li>
+  <li><label><input type="checkbox" data-key="fields"><span> Every field filled in, <code>created</code> from <code>date -u</code> (4)</span></label></li>
+  <li><label><input type="checkbox" data-key="cases"><span> Test cases: ordinary, smallest, larger; visible ones as the examples (5)</span></label></li>
+  <li><label><input type="checkbox" data-key="maketest"><span> <code>make test</code> passes (6)</span></label></li>
+  <li><label><input type="checkbox" data-key="tried"><span> Tried: Run the starter code, Test a right and a wrong answer (7)</span></label></li>
+  <li><label><input type="checkbox" data-key="pr"><span> Committed, pushed, pull request open (8)</span></label></li>
+  <li><label><input type="checkbox" data-key="deployed"><span> Merged, deployed, added to learners' backlogs (9)</span></label></li>
+</ul>
+<button class="action" type="button" id="checklist-clear">Clear the ticks</button>
+
+<h2 id="example">Worked example: a singly linked list question</h2>
+<div class="example-box">
+  <p><strong>Decided 2026-11-05</strong> (owner): a question that reinforces singly linked lists, from what the judge supports today, in Python only to begin with. The question file itself is the owner's to write, following the steps above; it's reviewed, and this section filled in, as it's done.</p>
+  <ul>
+    <li><strong>What it teaches:</strong> building a singly linked list from a list of values, keeping a pointer to the tail so each append is one step, and that an empty list of values gives no list at all (<code>None</code>). The step after <code>singly-linked-list-hello-world</code>, which builds a fixed two-node list.</li>
+    <li><strong>Proposed:</strong> name <code>linked-list-from-values</code>; title “Linked List from Values”; Easy; topics <code>["Linked List", "Singly Linked List"]</code> (both in <code>labels.json</code>); sources <code>[]</code>; function mode; Python only.</li>
+    <li><strong>The function:</strong> it takes a Python list of values and returns the head of a new list holding them in order, using the node class from the hello-world question, with attributes <code>value</code> and <code>next</code>.</li>
+  </ul>
+</div>
+
+</main>
+<script>
+'use strict';
+
+/**
+ * Copies text to the clipboard: the Clipboard API where the browser allows
+ * it (a page opened from disk may not count as secure), otherwise a hidden
+ * text area and the older copy command.
+ *
+ * @param {string} text - What to copy.
+ * @returns {Promise<boolean>} Whether it was copied.
+ */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+}
+
+/**
+ * Shows "Copied" (or "Select and copy") on a button for a moment.
+ *
+ * @param {HTMLButtonElement} button - The button.
+ * @param {boolean} ok - Whether the copy worked.
+ * @returns {void}
+ */
+function flash(button, ok) {
+  const label = button.textContent;
+  button.textContent = ok ? 'Copied' : 'Select and copy';
+  setTimeout(
+    /**
+     * Puts the button's label back.
+     *
+     * @returns {void}
+     */
+    () => {
+      button.textContent = label;
+    },
+    1500,
+  );
+}
+
+// A Copy button on every code block.
+document.querySelectorAll('pre').forEach(
+  /**
+   * Adds a Copy button to one code block.
+   *
+   * @param {HTMLPreElement} pre - The block.
+   * @returns {void}
+   */
+  (pre) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy';
+    button.textContent = 'Copy';
+    button.addEventListener(
+      'click',
+      /**
+       * Copies the block's text.
+       *
+       * @returns {Promise<void>} Resolves when done.
+       */
+      async () => {
+        const code = pre.querySelector('code');
+        flash(button, await copyText((code || pre).textContent || ''));
+      },
+    );
+    pre.appendChild(button);
+  },
+);
+
+/**
+ * The time now as created wants it: UTC, to the second.
+ *
+ * @returns {string} e.g. "2026-11-05T19:04:31Z".
+ */
+function createdNow() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+const stampOut = /** @type {HTMLOutputElement} */ (document.getElementById('stamp-out'));
+/** @type {HTMLButtonElement} */ (document.getElementById('stamp-btn')).addEventListener(
+  'click',
+  /**
+   * Shows the time now.
+   *
+   * @returns {void}
+   */
+  () => {
+    stampOut.textContent = createdNow();
+  },
+);
+/** @type {HTMLButtonElement} */ (document.getElementById('stamp-copy')).addEventListener(
+  'click',
+  /**
+   * Copies the time shown, getting one first if there isn't one.
+   *
+   * @param {MouseEvent} event - The click.
+   * @returns {Promise<void>} Resolves when done.
+   */
+  async (event) => {
+    if (!/Z$/.test(stampOut.textContent || '')) stampOut.textContent = createdNow();
+    flash(/** @type {HTMLButtonElement} */ (event.currentTarget), await copyText(stampOut.textContent || ''));
+  },
+);
+
+// The checklist, kept in this browser's localStorage, if it can be: a page
+// opened from disk, a private window or blocked storage may not allow it,
+// and then the ticks just aren't kept.
+const CHECKLIST_KEY = 'maxrecall-dsa:how-to-add-a-new-problem:checklist';
+const boxes = /** @type {HTMLInputElement[]} */ (Array.from(document.querySelectorAll('#checklist input')));
+const checklistStatus = /** @type {HTMLElement} */ (document.getElementById('checklist-status'));
+
+/**
+ * The ticks kept in this browser.
+ *
+ * @returns {Record<string, boolean> | null} By checkbox key, or null if
+ *   storage can't be used.
+ */
+function loadTicks() {
+  try {
+    return JSON.parse(localStorage.getItem(CHECKLIST_KEY) || '{}');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keeps the ticks, if storage allows.
+ *
+ * @returns {void}
+ */
+function saveTicks() {
+  /** @type {Record<string, boolean>} */
+  const ticks = {};
+  for (const box of boxes) ticks[/** @type {string} */ (box.dataset.key)] = box.checked;
+  try {
+    localStorage.setItem(CHECKLIST_KEY, JSON.stringify(ticks));
+  } catch {
+    checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+  }
+}
+
+const ticks = loadTicks();
+if (ticks === null) checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+for (const box of boxes) {
+  if (ticks && ticks[/** @type {string} */ (box.dataset.key)]) box.checked = true;
+  box.addEventListener('change', saveTicks);
+}
+/** @type {HTMLButtonElement} */ (document.getElementById('checklist-clear')).addEventListener(
+  'click',
+  /**
+   * Clears every tick.
+   *
+   * @returns {void}
+   */
+  () => {
+    for (const box of boxes) box.checked = false;
+    saveTicks();
+  },
+);
+
+/** @type {HTMLButtonElement} */ (document.getElementById('theme-toggle')).addEventListener(
+  'click',
+  /**
+   * Switches between light and dark, starting from what's shown now.
+   *
+   * @returns {void}
+   */
+  () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+  },
+);
+</script>
+</body>
+</html>
