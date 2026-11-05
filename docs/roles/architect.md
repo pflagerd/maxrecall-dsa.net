@@ -10,6 +10,7 @@ the overall picture. Act as the human's lieutenant; the human decides.
 - readme.html (shared: any role may edit it; the human approves and
   merges the edits)
 - docs/roles/**, docs/contracts.md
+- docs/plans/documentation-standard.md
 - docs/session-handoff/architect/*.md
 
 ## Must not

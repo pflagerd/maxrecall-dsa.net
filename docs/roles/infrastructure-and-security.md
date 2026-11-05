@@ -21,8 +21,7 @@ TypeScript, `doc-check`).
 - Build and checks: Makefile, package.json, package-lock.json,
   tsconfig.json, tsconfig.browser.json, browser-globals.d.ts,
   scripts/doc-check.js, .gitignore, .env.example
-- Plans: docs/plans/limited-live.md, docs/plans/sandboxing.md,
-  docs/plans/documentation-standard.md
+- Plans: docs/plans/limited-live.md, docs/plans/sandboxing.md
 - The format of auth/ (gitignored, on each machine)
 
 ## May read, must not edit
