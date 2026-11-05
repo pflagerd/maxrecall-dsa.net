@@ -40,10 +40,12 @@ Teaching them what you're doing comes first. Speed comes second.
 - Keep it true: update it in the same commit as any change that makes it out
   of date, following its "Maintaining this file" section.
 - Also at the start of a session, read the newest
-  `docs/session-handoff.*.md`. Its name ends in a `YYYYMMDDTHHMMSS±HHMM`
+  `docs/session-handoff/*.md`. Its name is a `YYYYMMDDTHHMMSS±HHMM`
   timestamp in Pacific Time, the owner's zone (`-0800`, or `-0700` in
-  daylight saving time), so the last one by name is the newest. Make one
-  with `TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z`. It's a dated
+  daylight saving time), so the last one by name is the newest. Name a new
+  one `docs/session-handoff/$(TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z).md`.
+  (Before 2026-11-05 they were `docs/session-handoff.<timestamp>.md`; older
+  handoffs still name each other that way.) It's a dated
   snapshot: where it disagrees with `readme.html`, `readme.html` wins.
 
 ### Documenting code
