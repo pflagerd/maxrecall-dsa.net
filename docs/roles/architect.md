@@ -5,13 +5,13 @@ Keep the multi-instance separation coherent: ownership, contracts, and
 the overall picture. Act as the human's lieutenant; the human decides.
 
 ## Owns
-- CLAUDE.md (any role may propose changes to it; the human approves and
-  merges them)
-- readme.html (shared: any role may edit it; the human approves and
-  merges the edits)
 - docs/roles/**, docs/contracts.md
 - docs/plans/documentation-standard.md
 - docs/session-handoff/architect/*.md
+
+## Shared files (propose changes; owner approves/merges them)
+- readme.html: owner is the human (with the architect supporting the human)
+- CLAUDE.md: owner is the human (with the architect supporting the human)
 
 ## Must not
 - Edit source files directly; file requests to the owning role instead
