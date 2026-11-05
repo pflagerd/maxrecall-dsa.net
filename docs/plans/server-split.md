@@ -28,7 +28,7 @@ a file of its own; ownership of sections of one file was ruled out.
 
 | File | Owner | Holds |
 |---|---|---|
-| `server.js` | infrastructure and security | Creating the app, `trust proxy`, `express.json()`; who a request is from (`req.userEmail`, `req.viaTrustedPort`, the `AppRequest` typedef); the JSON-only rule for `POST` and `PATCH`; the cookie helpers and `/api/auth/*`; the gate and `PUBLIC_PATHS`; mounting `routes.js`; `STATIC_FILES` and the fallback to `index.html`; both listeners and the startup log |
+| `server.js` | infrastructure and security | Creating the app, `trust proxy`, `express.json()`; who a request is from (`req.userEmail`, `req.viaTrustedPort`, the `AppRequest` typedef); the JSON-only rule for `POST` and `PATCH`; the cookie helpers and `/api/auth/*`; the gate and `PUBLIC_PATHS`; mounting `routes.js`; the 404 with JSON for any other `/api/` URL (`app.all('/api/*', …)`); `STATIC_FILES` and the fallback to `index.html`; both listeners and the startup log |
 | `routes.js` (new) | users | Every feature route now in `server.js`'s "Problem data", "API", "Saved submissions", "The learner's profile" and queue sections (`/api/questions…` including run, submit, test and skip, `/api/submissions…`, `/api/profile`, `/api/next`, `/api/queue`), their helpers, and the startup work `prepareQueues()` and `logConsistency()` |
 
 `node server.js` stays the entry point, so the `Makefile`,
@@ -50,6 +50,8 @@ run, like times and ids):
 - signed out, on `PORT`: each of `PUBLIC_PATHS` (200); a page
   (redirect to the login page); an `/api/...` route (401); `/api/auth/me`;
 - a `POST` to the API that isn't JSON (415);
+- signed in, an `/api/` URL no route has (404 with JSON, not the
+  fallback's `index.html`);
 - signed in (through `TRUSTED_PORT`, which is the test email): every
   feature route, including a Run, a Submit, a Test and a Skip on a small
   question, and `/api/next`, `/api/queue`, `/api/profile`;
@@ -75,10 +77,15 @@ not the repo, unless the owner decides to keep it (see "Open").
   type import, checked by TypeScript and never run, so `routes.js` never
   `require`s `server.js` (which would be a circular `require`).
 - In `server.js`, where the feature routes were (after the gate, before
-  `STATIC_FILES` and the fallback): `const { router, start } =
-  require('./routes'); start(); app.use(router);`. The fallback
-  answers every unmatched path with `index.html`, so mounting the router
-  after it would hide every route.
+  the `/api/*` 404, `STATIC_FILES` and the fallback):
+  `const { router, start } = require('./routes'); start();
+  app.use(router);`. The `/api/*` 404
+  and the fallback answer every path that reaches them, so mounting the
+  router after either would hide every route. The 404 stays in
+  `server.js` (owner, recorded in the users handoff
+  `docs/session-handoff/users/20261105T141751-0800.md`): like
+  `STATIC_FILES` and the fallback, it decides what's answered for a URL
+  no route claims. This plan's table first left it out.
 - `server.js` keeps `OWNER_EMAIL` (who the trusted port is) and
   `USERS_DIR` (the startup log) from `users.js`; these become contract
   7's.
@@ -123,8 +130,9 @@ is stricter than the end state, never looser.
 
 - **`tsconfig.json`**, yes, a one-time exception. It's infrastructure
   and security's, and step 2 can't wait for it: TypeScript fails on a
-  listed file that doesn't exist yet (`TS6053`), and an unlisted `routes.js` breaks `CLAUDE.md`'s rule that
-  documented files are listed. So step 2's pull request adds the one
+  listed file that doesn't exist yet (`TS6053`), and an unlisted
+  `routes.js` breaks `CLAUDE.md`'s rule that documented files are
+  listed. So step 2's pull request adds the one
   line; the owner says so again in its review, and infrastructure and
   security reviews it anyway (contract 9). This allows that one line,
   not other changes to infrastructure and security's files.
