@@ -139,17 +139,34 @@
 <ul>
   <li>Should commit <code>.gitignore</code>, <code>backlog.json</code>, <code>order.json</code> and <code>profile.json</code>. The app ignores the <code>.git</code> folder: it only reads the files it knows (checked with <code>make consistency-check</code>: “nothing found”).</li>
 </ul>
-<div class="note warn">
-  <p><strong>The remote: waiting for D5.</strong> Your note's last two lines are:</p>
-  <pre><code>sudo -u maxrecall git remote add origin XYZ</code></pre>
-  <pre><code>sudo -u maxrecall git push -u origin master</code></pre>
-  <p>Where <code>XYZ</code> is, is D5's open decision, so stop after the commit until it's made:</p>
+<h3>Then copy it to Kubuntu [Kubuntu]</h3>
+<p>Kubuntu <strong>pulls</strong> from the VPS (limited-live D5, option B, owner's choice, 2026-11-05). Nothing is pushed from the VPS and it holds no credentials, so there's no <code>git remote add</code> or <code>git push</code> on the VPS, and testers' data stays on your own machines. In a folder of your choosing outside the app's checkout, say <code>~/maxrecall-backups/vps-users</code>:</p>
+<pre><code>mkdir -p ~/maxrecall-backups/vps-users</code></pre>
+<pre><code>git clone --upload-pack='sudo -u maxrecall git-upload-pack' -c remote.origin.uploadpack='sudo -u maxrecall git-upload-pack' root@srv702017.hstgr.cloud:/srv/maxrecall/data/users/tester@example.com ~/maxrecall-backups/vps-users/tester@example.com</code></pre>
+<ul>
+  <li>You connect as root, but the repository is <code>maxrecall</code>'s, and git on the VPS refuses to send it to root (“detected dubious ownership”). <code>--upload-pack='sudo -u maxrecall git-upload-pack'</code> makes the VPS run git's sending side as <code>maxrecall</code> instead (<a href="https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---upload-packltupload-packgt">git-clone</a>). Root needs no password for <code>sudo</code>.</li>
+  <li><code>-c remote.origin.uploadpack=…</code> saves the same in the copy, for every later pull: <code>--upload-pack</code> on its own is used for the clone only, and a later <code>git pull</code> is refused again (tested).</li>
+  <li>The <code>@</code> in the email is fine: only the part before the <code>:</code> is read as user and host (tested 2026-11-04).</li>
+</ul>
+<p>Later, to bring their new commits over:</p>
+<pre><code>git -C ~/maxrecall-backups/vps-users/tester@example.com pull --ff-only</code></pre>
+<p>Or every user at once:</p>
+<pre><code>for d in ~/maxrecall-backups/vps-users/*/; do git -C "$d" pull --ff-only; done</code></pre>
+<ul>
+  <li><code>--ff-only</code>: the copy only ever follows the VPS, so a pull that would need a merge is refused rather than made.</li>
+</ul>
+<div class="note">
+  <p><strong>Tested</strong> (cloud, git 2.43.0) with a repository owned by another user, over <code>file://</code>, which uses the same upload-pack setting as SSH:</p>
   <ul>
-    <li><strong>A private GitHub repository per user:</strong> the VPS has no GitHub credentials (<code>docs/deploy-vps.md</code> §9), so <code>maxrecall</code> would need a key of its own; and testers' code and email would then be on GitHub, which the message in step 5 would have to say.</li>
-    <li><strong>Kubuntu pulls from the VPS</strong> (recommended): no remote here, nothing pushed; instead Kubuntu runs <code>git clone</code> once and <code>git pull</code> after, over SSH. These two lines then aren't needed.</li>
-    <li><strong>A bare repository elsewhere on the VPS:</strong> simple, but not a backup.</li>
+    <li>a plain clone as root was refused (“dubious ownership”);</li>
+    <li>the clone above worked;</li>
+    <li>after a new commit on the VPS side, a plain <code>git pull --ff-only</code> brought it over.</li>
   </ul>
-  <p>Either way, this commits only the <em>starting</em> files. Their work is kept only if something commits again later, which is D5's other open part: a timer on the VPS, or by hand.</p>
+  <p>Not tested over real SSH to the VPS.</p>
+  <p><strong>With git-nested</strong> (your own tool): whatever it runs to fetch from the VPS must run git's sending side as <code>maxrecall</code> there, as these commands do, or it gets the same refusal.</p>
+</div>
+<div class="note warn">
+  <p><strong>Not yet automatic:</strong> this step commits only the <em>starting</em> files. Their later work reaches their repository only once something commits it periodically on the VPS: <a href="https://github.com/pflagerd/maxrecall-dsa.net/issues/64">issue #64</a>. Until then, a pull brings over only this first commit.</p>
 </div>
 
 <h2 id="s4">4. Make their invite: <code>make invite</code></h2>
