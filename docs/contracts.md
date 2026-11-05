@@ -170,9 +170,9 @@ Provider: users (`server.js`). Used by: infrastructure and security
 Unlike 1–8, this isn't one role's code used by another: users owns
 `server.js`, but part of it is security, which is infrastructure and
 security's subject (`docs/roles/users.md`, "Out of scope"). A stopgap
-(owner, 2026-11-05) until `server.js` is split, the sign-in layer kept
-by infrastructure and security and the feature routes moved to route
-modules.
+(owner, 2026-11-05) until `server.js` is split: the sign-in layer stays
+in `server.js`, which goes to infrastructure and security, and the
+feature routes move to `routes.js`, users' (`docs/plans/server-split.md`).
 
 File owner: users. Reviewer: infrastructure and security.
 
