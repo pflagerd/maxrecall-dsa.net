@@ -11,7 +11,6 @@ the overall picture. Act as the human's lieutenant; the human decides.
   merges the edits)
 - docs/roles/**, docs/contracts.md
 - docs/session-handoff/architect/*.md
-- CI ownership check
 
 ## Must not
 - Edit source files directly; file requests to the owning role instead
