@@ -8,8 +8,9 @@ records, and the scripts that set up and adjust a learner.
 
 ## Owns (files/directories the role owns)
 - docs/session-handoff/users/
-- server.js (every HTTP route, sign-in's and Test's included: the other
-  roles ask here for route changes)
+- routes.js: every feature route (an Express Router that server.js
+  mounts after the gate; docs/contracts.md, contract 9). The other roles
+  ask here for route changes.
 - A learner's files: users.js, profile.js, order.js, learner.js, and
   their tests (users.test.js, profile.test.js, order.test.js,
   learner.test.js)
@@ -28,8 +29,9 @@ records, and the scripts that set up and adjust a learner.
 
 ## May read, must not edit
 - Everything the infrastructure-and-security and questions roles own, in
-  particular auth.js and the judge's sandbox (infrastructure and
-  security), judge/runner.js, question-files.js, questions/*.json and
+  particular server.js (the sign-in layer: ask there to add a page or
+  file to STATIC_FILES), auth.js and the judge's sandbox (infrastructure
+  and security), judge/runner.js, question-files.js, questions/*.json and
   bubbles.js (questions)
 - Makefile and package.json (infrastructure and security): ask for a new
   `make` target there

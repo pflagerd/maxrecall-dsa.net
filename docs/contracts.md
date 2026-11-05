@@ -23,8 +23,8 @@ agreement or the human's approval.
 - **Checking**: each architect session (step 2, "contract drift")
   compares every `require` that crosses roles, and the strings and paths
   below, with this file, and the browser globals and element ids of
-  sections 10 and 11, and checks that a pull request touching the
-  sign-in layer of `server.js` (section 9) has had its review.
+  sections 10 and 11, and that `server.js` still mounts the router as
+  section 9 says.
 
 ## 1. The judge's sandbox and queue
 
@@ -48,19 +48,18 @@ Provider: infrastructure and security (`judge/sandbox.js`,
 
 ## 2. Judging, for the server and the sandbox test
 
-Provider: questions (`judge/runner.js`). Used by: users (`server.js`);
+Provider: questions (`judge/runner.js`). Used by: users (`routes.js`);
 infrastructure and security (`judge/sandbox-selftest.js`).
 
 - **What crosses**: `runSubmission`; for the sandbox test also
-  `TIMEOUT_MS` and `CPP_COMPILE_TIMEOUT_MS`. `server.js` also takes
-  `describeSandbox` from `judge/sandbox.js` and `MAX_RUNNING`,
-  `MAX_WAITING` from `judge/queue.js` (infrastructure and security), for
-  its startup log.
+  `TIMEOUT_MS` and `CPP_COMPILE_TIMEOUT_MS`. (`server.js`'s start-up log
+  uses `describeSandbox`, `MAX_RUNNING` and `MAX_WAITING`, but since the
+  split both sides of that are infrastructure and security's.)
 - **Relied on**:
   - `runSubmission(submission)` gives a `JudgeResult`, and judges through
     the real sandbox and queue: the sandbox test submits hostile code
     through it to prove the sandbox holds.
-  - `server.js` answers 503 for an error whose `code` is
+  - `routes.js` answers 503 for an error whose `code` is
     `'SANDBOX_UNAVAILABLE'` or `'JUDGE_BUSY'`, and sets `Retry-After` from
     `retryAfterSeconds` for `'JUDGE_BUSY'`; anything else is a 500. It
     matches the strings, not the classes: renaming a code passes
@@ -68,18 +67,18 @@ infrastructure and security (`judge/sandbox-selftest.js`).
 
 ## 3. The Test button's rules
 
-Provider: questions (`playtest.js`). Used by: users (`server.js`, which
+Provider: questions (`playtest.js`). Used by: users (`routes.js`, which
 has the route).
 
 - **What crosses**: `canTestQuestions`, `revealHidden`, `markRevealed`.
 - **Relied on**: only the owner may Test (`canTestQuestions`);
   `revealHidden` returns copies, so the question file isn't changed.
-  Recording nothing for a Test is `server.js`'s side of it.
+  Recording nothing for a Test is `routes.js`'s side of it.
 
 ## 4. The question bank
 
 Provider: questions (`question-files.js`, `questions/**`). Used by: users
-(`server.js`, `scripts/backlog.js`, `scripts/learner-create.js`,
+(`routes.js`, `scripts/backlog.js`, `scripts/learner-create.js`,
 `scripts/recalculate-queue.js`, `scripts/consistency-check.js`).
 
 - **What crosses**: `QUESTIONS_DIR`, `isQuestionFile`, `questionInfos`,
@@ -129,27 +128,39 @@ Provider: questions (`scripts/question-admin.js`). Used by: users
     `127.0.0.1` at `$PORT` (default 3000) or `$TRUSTED_PORT`.
 - Questions asks users before changing any of the three.
 
-## 7. Signing in, and paths
+## 7. Paths, and who the users are
 
-Provider: infrastructure and security (`auth.js`, `paths.js`). Used by:
-users (`server.js`, `users.js`). And the other way: users (`users.js`)
-provides `EMAIL_PATTERN` to infrastructure and security (`auth.js`).
+Provider: infrastructure and security (`paths.js`). Used by: users
+(`routes.js`, for `loadProblem`; `users.js`). And the other way: users
+(`users.js`) provides `EMAIL_PATTERN` to `auth.js`, and `OWNER_EMAIL` and
+`USERS_DIR` to `server.js` (infrastructure and security).
 
-- **What crosses**: from `auth.js`, `AUTH_DIR`, `SESSION_LIFETIME_MS`,
-  `register`, `login`, `sessionEmail`, `endSession`; from `paths.js`,
-  `resolveInside`; from `users.js`, `EMAIL_PATTERN`.
+- **What crosses**: from `paths.js`, `resolveInside`; from `users.js`,
+  `EMAIL_PATTERN`, `OWNER_EMAIL`, `USERS_DIR`. (`auth.js`'s `register`,
+  `login`, `sessionEmail` and the rest are used only by `server.js` since
+  the split: both infrastructure and security's.)
 - **Relied on**:
-  - `sessionEmail(token)` gives the email, or `null` for anything that
-    isn't a live session; it throws only if a session file can't be read.
   - `resolveInside(baseDir, ...parts)` gives `null` for anything outside
     `baseDir` (path traversal), and for `baseDir` itself.
   - `EMAIL_PATTERN` is the one definition of an email this app accepts,
     for registering and for a learner's folder name alike.
+  - `OWNER_EMAIL` is who the trusted listener's requests are
+    (`server.js`), and who may Test (`routes.js`, through
+    `canTestQuestions`): the same person in both.
+  - `USERS_DIR` is where learners' files are; `server.js` only names it in
+    its start-up log.
 
-## 8. The sign-in routes and ports
+## 8. The sign-in routes and ports (retired)
 
-Provider: users (`server.js`). Used by: infrastructure and security
-(`login-page.js`, `account.js`, `deploy/nginx-maxrecallcode.conf`,
+**Retired 2026-11-05**, when `server.js` went to infrastructure and
+security (`docs/plans/server-split.md`, step 4): the routes, the pages
+that call them, nginx and the service file are now all that role's, so
+this is no longer between roles. Kept, not renumbered, since other
+documents name contracts by number; what follows is what that role
+relies on within its own files.
+
+Provider and user: infrastructure and security (`server.js`;
+`login-page.js`, `account.js`, `deploy/nginx-maxrecallcode.conf`,
 `deploy/maxrecall-dsa.test.service`).
 
 - **What crosses**: the paths `/api/auth/register`, `/api/auth/login`,
@@ -166,49 +177,48 @@ Provider: users (`server.js`). Used by: infrastructure and security
     sign-in, the SSH tunnel only), which the service file sets to 3000
     and 3001.
 
-## 9. The sign-in layer of `server.js` (a review rule)
+## 9. The router behind the gate
 
-Unlike 1–8, this isn't one role's code used by another: users owns
-`server.js`, but part of it is security, which is infrastructure and
-security's subject (`docs/roles/users.md`, "Out of scope"). A stopgap
-(owner, 2026-11-05) until `server.js` is split: the sign-in layer stays
-in `server.js`, which goes to infrastructure and security, and the
-feature routes move to `routes.js`, users' (`docs/plans/server-split.md`).
+Provider: infrastructure and security (`server.js`, the sign-in layer).
+Used by: users (`routes.js`, the feature routes). And the other way:
+users provides `router` and `start` to `server.js`.
 
-File owner: users. Reviewer: infrastructure and security.
+Since the split (#76, `docs/plans/server-split.md`), `server.js` holds
+only the sign-in layer and is infrastructure and security's. Before it,
+users owned all of `server.js`, and this contract was a review rule
+(owner, 2026-11-05): a users change to the sign-in layer was reviewed by
+infrastructure and security. That review is what #76 itself had.
 
-- **The sign-in layer**, found by these names rather than line numbers:
-  - who a request is from: the middleware that sets `req.userEmail` and
-    `req.viaTrustedPort`;
-  - the JSON-only rule for every `POST` and `PATCH` (415 otherwise),
-    which with the session cookie's `SameSite` stops cross-site request
-    forgery;
-  - the `/api/auth/*` routes (`register`, `login`, `logout`, `me`);
-  - the gate: `PUBLIC_PATHS`, and the 401 or the redirect to the login
-    page for everything else not signed in;
-  - what's answered for a URL no route claims: the 404 with JSON for
-    any other `/api/` URL (`app.all('/api/*', …)`), `STATIC_FILES`, and
-    the fallback to `index.html`, in that order, after every feature
-    route;
-  - listening: `PORT`, `HOST`, `TRUSTED_PORT` (`trustedServer`, bound to
-    `127.0.0.1`), and `trust proxy`.
-- **Relied on**:
-  - Every request that reaches a feature route and isn't for one of
-    `PUBLIC_PATHS` has `req.userEmail` set, from a live session or the
-    trusted listener.
-  - Only `PUBLIC_PATHS` are reachable without signing in.
-  - Only `STATIC_FILES` are served as files: never the server's source,
-    `.env`, `users/` or `auth/`.
-  - An `/api/` URL no route claims gets a 404 with JSON, never the
-    fallback's `index.html` with a 200.
-  - The trusted listener, where there's no sign-in, is reachable only
-    from the machine itself.
-- **The rule**: a users change that touches the sign-in layer, or adds
-  to `PUBLIC_PATHS` or `STATIC_FILES`, is reviewed by infrastructure and
-  security before the human merges it. The users session says so in its
-  pull request's description and lists it in its handoff; the architect
-  routes it. Feature routes that only read `req.userEmail` don't need
-  the review.
+- **What crosses**: from `routes.js`, `router` (an Express Router) and
+  `start`; from `server.js`, `req.userEmail` and the `AppRequest`
+  typedef, which `routes.js` takes as `import('./server').AppRequest`, a
+  type only: `routes.js` never `require`s `server.js`.
+- **Relied on, by users** (`server.js`'s side):
+  - `server.js` mounts `router` after the gate and before the 404 for any
+    other `/api/` URL (`app.all('/api/*', …)`), `STATIC_FILES` and the
+    fallback to `index.html`. So the router sees only requests that have
+    passed the gate, with `req.userEmail` set from a live session or the
+    trusted listener, and the JSON-only rule for `POST` and `PATCH`
+    already applied.
+  - `server.js` requires `routes.js` before its other local modules, so
+    modules load in the order they did before the split, and calls
+    `start()` once, just before `app.listen`.
+- **Relied on, by infrastructure and security** (`routes.js`'s side):
+  - `routes.js` registers its routes when it's required, all under
+    `/api/`, and does nothing else that decides who may see what: no
+    `router.use`, `all` or `param`, no file serving (`sendFile`,
+    `express.static`), no cookies, and it never assigns `req.userEmail`.
+    What's public (`PUBLIC_PATHS`), what's served (`STATIC_FILES`) and who
+    a request is from stay `server.js`'s.
+  - `start()` does users' start-up work, `prepareQueues()` and
+    `logConsistency()`, and loading the module starts nothing else.
+  - A new page or file to serve is a request to infrastructure and
+    security to add it to `STATIC_FILES`.
+- **Checking it**: the characterization check (a code block in
+  `docs/session-handoff/users/20261105T141751-0800.md`) catches a router
+  mounted in front of the gate: in infrastructure and security's
+  negative test, 13 lines differed, signed out `/api/questions` giving
+  the question bank.
 
 ## 10. The topic and source bubbles
 
@@ -242,8 +252,8 @@ Provider: infrastructure and security (`account.js`). Used by: users
 - **What crosses**: the element with `id="account"`, which each page
   provides, and the `<script src="account.js">` each page loads.
   `account.js` fills the element with the signed-in email and a Log out
-  button (it asks `/api/auth/me`, and posts `/api/auth/logout`: contract
-  8).
+  button (it asks `/api/auth/me`, and posts `/api/auth/logout`, both in
+  `server.js`, the same role's).
 - **Relied on**: both pages keep that element and that script; without
   either, the email and Log out quietly disappear. `account.js` doesn't
   depend on anything else in the page.

@@ -9,6 +9,11 @@ TypeScript, `doc-check`).
 
 ## Owns (files/directories the role owns)
 - docs/session-handoff/infrastructure-and-security/
+- server.js, the sign-in layer: who a request is from and the trusted
+  port, the JSON-only rule, /api/auth/*, the gate and PUBLIC_PATHS,
+  mounting routes.js (users') after the gate, the /api/* 404,
+  STATIC_FILES and the fallback, the listeners (docs/contracts.md,
+  contract 9; docs/plans/server-split.md)
 - Signing in: auth.js, auth.test.js, scripts/invite.js, login.html,
   login-page.js, account.js
 - paths.js (the path traversal guard)
@@ -18,16 +23,17 @@ TypeScript, `doc-check`).
 - Toolchains and the cloud environment: scripts/toolchain-deps.sh,
   scripts/sandbox-deps.sh, docs/d-compiler.md, .claude/settings.json,
   .claude/hooks/**
-- Build and checks: Makefile, package.json, package-lock.json,
-  tsconfig.json, tsconfig.browser.json, browser-globals.d.ts,
-  scripts/doc-check.js, .gitignore, .env.example
+- Build and checks: Makefile, package.json, tsconfig.json,
+  tsconfig.browser.json, browser-globals.d.ts, scripts/doc-check.js,
+  .gitignore, .env.example (package-lock.json is gitignored, so not a
+  tracked file)
 - Plans: docs/plans/limited-live.md, docs/plans/sandboxing.md
 - The format of auth/ (gitignored, on each machine)
 
 ## May read, must not edit
-- Everything the users and questions roles own, in particular server.js
-  (users), users.js (users), questions/*.json and judge/runner.js
-  (questions)
+- Everything the users and questions roles own, in particular routes.js
+  (users: the feature routes server.js mounts), users.js (users),
+  questions/*.json and judge/runner.js (questions)
 - docs/how-to-add-a-new-user.html (users): ask there for changes to its
   invite, shared login and backup steps
 - docs/roles/**, other roles' handoffs, and the handoffs from before roles

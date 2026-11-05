@@ -29,7 +29,7 @@ template for writing one.
 - Everything the infrastructure-and-security and users roles own, in
   particular the judge's sandbox and queue (judge/sandbox.js,
   judge/seccomp/, judge/cgroups.js, judge/sandbox-selftest.js,
-  judge/queue.js: infrastructure and security), server.js and order.js
+  judge/queue.js: infrastructure and security), routes.js and order.js
   (users)
 - Makefile and package.json (infrastructure and security): ask for a new
   `make` target there
