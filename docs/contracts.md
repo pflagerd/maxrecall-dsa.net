@@ -22,7 +22,8 @@ agreement or the human's approval.
   approves, with this file updated in the same pull request.
 - **Checking**: each architect session (step 2, "contract drift")
   compares every `require` that crosses roles, and the strings and paths
-  below, with this file.
+  below, with this file, and checks that a pull request touching the
+  sign-in layer of `server.js` (section 9) has had its review.
 
 ## 1. The judge's sandbox and queue
 
@@ -163,3 +164,42 @@ Provider: users (`server.js`). Used by: infrastructure and security
   - `server.js` listens on `PORT` (sign-in) and `TRUSTED_PORT` (no
     sign-in, the SSH tunnel only), which the service file sets to 3000
     and 3001.
+
+## 9. The sign-in layer of `server.js` (a review rule)
+
+Unlike 1–8, this isn't one role's code used by another: users owns
+`server.js`, but part of it is security, which is infrastructure and
+security's subject (`docs/roles/users.md`, "Out of scope"). A stopgap
+(owner, 2026-11-05) until `server.js` is split, the sign-in layer kept
+by infrastructure and security and the feature routes moved to route
+modules.
+
+File owner: users. Reviewer: infrastructure and security.
+
+- **The sign-in layer**, found by these names rather than line numbers:
+  - who a request is from: the middleware that sets `req.userEmail` and
+    `req.viaTrustedPort`;
+  - the JSON-only rule for every `POST` and `PATCH` (415 otherwise),
+    which with the session cookie's `SameSite` stops cross-site request
+    forgery;
+  - the `/api/auth/*` routes (`register`, `login`, `logout`, `me`);
+  - the gate: `PUBLIC_PATHS`, and the 401 or the redirect to the login
+    page for everything else not signed in;
+  - what's served: `STATIC_FILES`, and the fallback to `index.html`;
+  - listening: `PORT`, `HOST`, `TRUSTED_PORT` (`trustedServer`, bound to
+    `127.0.0.1`), and `trust proxy`.
+- **Relied on**:
+  - Every request that reaches a feature route and isn't for one of
+    `PUBLIC_PATHS` has `req.userEmail` set, from a live session or the
+    trusted listener.
+  - Only `PUBLIC_PATHS` are reachable without signing in.
+  - Only `STATIC_FILES` are served as files: never the server's source,
+    `.env`, `users/` or `auth/`.
+  - The trusted listener, where there's no sign-in, is reachable only
+    from the machine itself.
+- **The rule**: a users change that touches the sign-in layer, or adds
+  to `PUBLIC_PATHS` or `STATIC_FILES`, is reviewed by infrastructure and
+  security before the human merges it. The users session says so in its
+  pull request's description and lists it in its handoff; the architect
+  routes it. Feature routes that only read `req.userEmail` don't need
+  the review.
