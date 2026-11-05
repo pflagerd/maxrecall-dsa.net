@@ -1,8 +1,8 @@
 # Plan: limited live testing on the VPS
 
 Status: **step 1 done and deployed, 2026-11-04** (invites and `trust
-proxy`); step 2 (the firewall) on, its last check (a fresh SSH
-connection from Kubuntu) not yet reported. Q1, Q2
+proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in). Next:
+step 3 (nginx and HTTPS), which needs the domain name (Q1). Q1, Q2
 and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
 repository per user) is open; it's needed by step 6. Nothing is exposed
 to the internet yet. Linked from
@@ -392,3 +392,4 @@ the same change.
 | 2026-11-04 | Step 1 merged (#52, `776119d`) and deployed by the owner: the VPS log says `registration by invite only`, with the sandbox working and no `MAXRECALL_PASSWORD` warning. Registration had been closed there before (no `test.env`), so the owner has no port-3000 account on the VPS yet. |
 | 2026-11-04 | Step 2 written as `docs/deploy-vps.md` §11 (SSH only; 80 and 443 with nginx in step 3; `allow`, not `limit`). Waiting for the owner to run it. |
 | 2026-11-04 | Step 2 run by the owner: `ufw status verbose` says `Status: active`, `Default: deny (incoming), allow (outgoing), deny (routed)`, and only `22/tcp` (IPv4 and v6, `# SSH`) allowed in. Not yet reported: §11's check from a fresh SSH connection, the tunnel, and `curl` to port 3000 failing. |
+| 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@<VPS name> true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://<VPS name>:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §11 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |

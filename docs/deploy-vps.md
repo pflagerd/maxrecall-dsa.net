@@ -800,6 +800,9 @@ ssh root@VPS_IP true && echo "ssh ok"
 - Opens a new SSH connection, runs `true` (which does nothing and
   succeeds) and prints `ssh ok`. That's the proof that new connections get
   through, not just the ones already open.
+- **Run it on Kubuntu, not on the VPS.** On the VPS its own name resolves
+  to `127.0.1.1` (`/etc/hosts`), so the connection goes over loopback,
+  which `ufw` always accepts, and tests nothing (seen 2026-11-05).
 
 Then open the tunnel (§7) and <http://localhost:3000>: the app should work
 as before.
@@ -807,8 +810,10 @@ as before.
 ```bash
 curl --max-time 5 http://VPS_IP:3000/
 ```
-- Should still fail, as in §6: now refused by the firewall as well as by
-  the app listening on `127.0.0.1` only.
+- Should still fail, as in §6, and now it should **time out**
+  (`curl: (28) Connection timed out`) rather than be refused: `ufw` drops
+  the packet without answering (`DEFAULT_INPUT_POLICY="DROP"`), where
+  before the VPS answered "nothing listens here". Seen on 2026-11-05.
 
 **If the fresh connection fails,** go back to the second VPS session and
 run `ufw disable`, which turns the firewall off and keeps its rules for
