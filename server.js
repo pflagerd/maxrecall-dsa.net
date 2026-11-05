@@ -14,6 +14,7 @@ try {
 }
 
 const { runSubmission } = require('./judge/runner');
+const { canTestQuestions, revealHidden, markRevealed } = require('./playtest');
 const { describeSandbox } = require('./judge/sandbox');
 const { MAX_RUNNING, MAX_WAITING } = require('./judge/queue');
 const { resolveInside } = require('./paths');
@@ -490,20 +491,24 @@ app.get(
  */
 
 /**
- * The checks Run, Submit and Skip share, so they refuse the same things:
- * 404 for an unknown question; 400 for a bad language, code or elapsedMs,
- * or a language the question lacks; 403 for one the profile doesn't allow;
- * 500 for an invalid profile or queue file (fail closed). Each refusal is
- * sent here.
+ * The checks Run, Submit, Skip and Test share, so they refuse the same
+ * things: 404 for an unknown question; 400 for a bad language, code or
+ * elapsedMs, or a language the question lacks; 403 for one the profile
+ * doesn't allow; 500 for an invalid profile or queue file (fail closed).
+ * Each refusal is sent here. For Test (issue #58, detail 5) the profile
+ * and queue files aren't consulted: it tests the question in any language
+ * it has, and changes nothing of the learner's.
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
  * @param {Response} res - The response, sent if the request is refused.
- * @param {{ codeRequired: boolean }} options - false for Skip, whose code
- *   may be empty (step 8, detail 5); it must still be a string.
+ * @param {{ codeRequired: boolean, forTest?: boolean }} options -
+ *   codeRequired: false for Skip, whose code may be empty (step 8, detail
+ *   5); it must still be a string. forTest: true for Test, which skips the
+ *   profile and queue checks.
  * @returns {CheckedRequest | null} What was asked, or null if refused.
  */
-function checkExecutionRequest(req, res, { codeRequired }) {
+function checkExecutionRequest(req, res, { codeRequired, forTest = false }) {
   const loaded = loadProblem(req.params.slug);
   if (!loaded) {
     res.status(404).json({ error: 'Question not found' });
@@ -542,6 +547,7 @@ function checkExecutionRequest(req, res, { codeRequired }) {
   if (!problem.starterCode[language]) {
     return refuse(400, `This problem doesn't support ${language}.`);
   }
+  if (forTest) return { problem, sha256: loaded.sha256, email, language, code, elapsedMs };
   // The learner's profile decides which languages they may use (403
   // otherwise). An invalid profile refuses everything rather than guess
   // (fail closed): 500, naming the problem.
@@ -601,21 +607,23 @@ function submissionRecord({ problem, sha256, language, code, elapsedMs }, submit
 }
 
 /**
- * Handles Run (visible test cases only) and Submit (all of them, then saves
- * a record and moves the queue). Refuses what checkExecutionRequest()
- * refuses; 503 when the judge is unavailable or busy; otherwise the judge's
- * result, with saved/submissionId (or saveError) and queueUpdated (or
- * queueError) for a Submit.
+ * Handles Run (visible test cases only), Submit (all of them, then saves
+ * a record and moves the queue) and Test (issue #58: all of them, the
+ * hidden ones' details shown, and nothing saved or moved). Refuses what
+ * checkExecutionRequest() refuses; 503 when the judge is unavailable or
+ * busy; otherwise the judge's result, with saved/submissionId (or
+ * saveError) and queueUpdated (or queueError) for a Submit, and tested:
+ * true for a Test.
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
  * @param {Response} res - The response.
- * @param {{ onlyVisible: boolean }} options - true for Run, false for Submit.
+ * @param {{ mode: 'run' | 'submit' | 'test' }} options - Which it is.
  * @returns {Promise<Response | void>} Nothing that's used: the
  *   `return res...` lines only stop early.
  */
-async function handleExecution(req, res, { onlyVisible }) {
-  const request = checkExecutionRequest(req, res, { codeRequired: true });
+async function handleExecution(req, res, { mode }) {
+  const request = checkExecutionRequest(req, res, { codeRequired: true, forTest: mode === 'test' });
   if (!request) return;
   const { problem, email, language, code } = request;
 
@@ -623,18 +631,28 @@ async function handleExecution(req, res, { onlyVisible }) {
   // A function-mode question always has functionName (the problem file
   // format); one without would throw here, as before.
   const functionName = judgeMode === 'function' ? /** @type {Record<string, string>} */ (problem.functionName)[language] : undefined;
-  const testCases = onlyVisible ? problem.testCases.filter((tc) => !tc.hidden) : problem.testCases;
+  // Test gives the judge copies with hidden taken off, so it sends back
+  // every case's details (playtest.js, detail 4).
+  const testCases = mode === 'run' ? problem.testCases.filter((tc) => !tc.hidden)
+    : mode === 'test' ? revealHidden(problem.testCases)
+      : problem.testCases;
   const signature = problem.signature && problem.signature[language];
 
   try {
     const submittedAt = new Date().toISOString();
     // Submit adds what happened to its record: saved, then submissionId or saveError.
-    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string }} */ (
+    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string, tested?: boolean }} */ (
       await runSubmission({ language, code, functionName, testCases, signature, judgeMode })
     );
-    // Only Submit is recorded (Run isn't). A failed save mustn't cost the
-    // learner their result, so it's reported alongside it instead.
-    if (!onlyVisible) {
+    // Test: the hidden cases marked again, and nothing saved or moved
+    // (issue #58, details 3 and 4).
+    if (mode === 'test') {
+      result.results = markRevealed(result.results, problem.testCases);
+      result.tested = true;
+    }
+    // Only Submit is recorded (Run and Test aren't). A failed save mustn't
+    // cost the learner their result, so it's reported alongside it instead.
+    if (mode === 'submit') {
       try {
         // saveSubmission checks the user again.
         result.submissionId = await saveSubmission(email, submissionRecord(request, submittedAt, result));
@@ -680,7 +698,7 @@ app.post(
    * @param {Response} res - Answered by handleExecution().
    * @returns {Promise<Response | void>} Nothing that's used.
    */
-  (req, res) => handleExecution(req, res, { onlyVisible: true }),
+  (req, res) => handleExecution(req, res, { mode: 'run' }),
 );
 app.post(
   '/api/questions/:slug/submit',
@@ -692,7 +710,23 @@ app.post(
    * @param {Response} res - Answered by handleExecution().
    * @returns {Promise<Response | void>} Nothing that's used.
    */
-  (req, res) => handleExecution(req, res, { onlyVisible: false }),
+  (req, res) => handleExecution(req, res, { mode: 'submit' }),
+);
+app.post(
+  '/api/questions/:slug/test',
+  /**
+   * POST /api/questions/:slug/test (issue #58): handleExecution() on every
+   * test case, hidden ones shown in full, nothing saved. The owner only:
+   * anyone else gets 403 before anything else is looked at (detail 2).
+   *
+   * @param {AppRequest} req - Body { language, code }.
+   * @param {Response} res - Answered by handleExecution(), or 403 here.
+   * @returns {Promise<Response | void> | Response} Nothing that's used.
+   */
+  (req, res) => {
+    if (!canTestQuestions(req.userEmail, OWNER_EMAIL)) return res.status(403).json({ error: 'Only the owner can Test questions.' });
+    return handleExecution(req, res, { mode: 'test' });
+  },
 );
 
 /**
@@ -862,6 +896,20 @@ function loadProfile(email) {
 }
 
 /**
+ * The profile as the page gets it (GET /api/profile, PATCH
+ * /api/profile/preferred): the effective profile plus canTestQuestions,
+ * whether the Test button is shown (issue #58). Both answers carry it,
+ * since the page replaces its copy with either.
+ *
+ * @param {string} email - The signed-in user.
+ * @param {import('./profile').EffectiveProfile} profile - Their profile.
+ * @returns {import('./profile').EffectiveProfile & { canTestQuestions: boolean }} The answer.
+ */
+function profileForPage(email, profile) {
+  return { ...profile, canTestQuestions: canTestQuestions(email, OWNER_EMAIL) };
+}
+
+/**
  * Answers a request that a profile problem stopped: 500 for an invalid
  * profile.json (the server's data, not the request, is wrong) or one that
  * can't be read, and logs it, since the owner has to fix the file.
@@ -889,7 +937,7 @@ app.get(
    */
   (req, res) => {
     try {
-      res.json(loadProfile(/** @type {string} */ (req.userEmail))); // signed in: the gate
+      res.json(profileForPage(/** @type {string} */ (req.userEmail), loadProfile(/** @type {string} */ (req.userEmail)))); // signed in: the gate
     } catch (err) {
       sendProfileError(res, /** @type {Error & { code?: string }} */ (err));
     }
@@ -932,7 +980,7 @@ app.patch(
     }
     try {
       writeProfileFile(email, contents);
-      res.json(parseProfile(readProfileFile(email)));
+      res.json(profileForPage(email, parseProfile(readProfileFile(email))));
     } catch (err) {
       sendProfileError(res, /** @type {Error} */ (err));
     }

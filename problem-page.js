@@ -23,6 +23,8 @@ const languageFilterNames = Array.from(/** @type {NodeListOf<HTMLElement>} */ (l
 const runBtn = /** @type {HTMLButtonElement} */ (document.getElementById('run-btn'));
 const submitBtn = /** @type {HTMLButtonElement} */ (document.getElementById('submit-btn'));
 const skipBtn = /** @type {HTMLButtonElement} */ (document.getElementById('skip-btn'));
+// Test (issue #58): shown only when the profile answer says canTestQuestions.
+const testBtn = /** @type {HTMLButtonElement} */ (document.getElementById('test-btn'));
 const timerBtn = /** @type {HTMLButtonElement} */ (document.getElementById('elapsed-timer'));
 const timerDigitsEl = /** @type {HTMLElement} */ (document.getElementById('elapsed-timer-digits'));
 const consoleStatusEl = /** @type {HTMLElement} */ (document.getElementById('console-status'));
@@ -748,7 +750,8 @@ setInterval(renderTimer, 250);
 // that copy, so a browser's old values can't change the profile any more.)
 
 /**
- * The profile as GET /api/profile sends it (profile.js, effectiveProfile).
+ * The profile as GET /api/profile sends it (profile.js, effectiveProfile,
+ * plus server.js's canTestQuestions).
  *
  * @typedef {object} EffectiveProfile
  * @property {string[]} allowedLanguages - Languages the learner may use at all.
@@ -757,6 +760,8 @@ setInterval(renderTimer, 250);
  * @property {boolean} canChooseLanguages - May they turn languages on and off?
  * @property {boolean} canSwitchLanguage - May they change a question's language themselves?
  * @property {boolean} canSetDefaultLanguage - May they set their default language?
+ * @property {boolean} [canTestQuestions] - Is the Test button shown? The
+ *   owner only (issue #58); the server refuses anyone else's Test itself.
  */
 
 /**
@@ -773,6 +778,7 @@ let profile = {
   canChooseLanguages: true,
   canSwitchLanguage: true,
   canSetDefaultLanguage: true,
+  canTestQuestions: false,
 };
 
 /**
@@ -836,6 +842,7 @@ async function loadProfile() {
  * @returns {void}
  */
 function applyProfileToControls() {
+  testBtn.hidden = !profile.canTestQuestions;
   languageCheckboxes.forEach(
     /**
      * Shows or hides one language's menu row, and ticks its checkbox if the
@@ -1423,7 +1430,7 @@ function escapeHtml(str) {
  * @returns {string} The entry's HTML.
  */
 function renderTestCase(r, { showErrorIfHidden = false } = {}) {
-  if (r.hidden) {
+  if (r.hidden && !r.revealed) {
     const errorLine = showErrorIfHidden && r.error
       ? `<br/><span class="test-case-error">Error: <code>${escapeHtml(r.error)}</code></span>`
       : '';
@@ -1434,8 +1441,11 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
   // Expected only makes sense to show next to an actual result to compare
   // against — once the case has thrown, there's nothing to compare, so
   // skip straight to the error instead.
+  // A hidden case's details are here only in a Test (issue #58, detail 4),
+  // which says so.
+  const label = r.hidden ? `Hidden test case ${r.index + 1} (shown because this is a Test)` : `Test case ${r.index + 1}`;
   return `<div class="test-case ${r.passed ? 'pass' : 'fail'}">
-    <strong>Test case ${r.index + 1}:</strong> ${r.passed ? 'Passed' : 'Failed'}<br/>
+    <strong>${label}:</strong> ${r.passed ? 'Passed' : 'Failed'}<br/>
     <span>Input: <code>${formatValue(r.input)}</code></span><br/>
     ${
       r.error
@@ -1448,7 +1458,8 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
 
 /**
  * One test case's result, as the judge sends it. Hidden cases have only
- * index, hidden and passed (and error).
+ * index, hidden and passed (and error), except in a Test (issue #58),
+ * where they also have their details and revealed.
  *
  * @typedef {object} TestResult
  * @property {number} index - Its position in the question's test cases, from 0.
@@ -1458,10 +1469,11 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
  * @property {unknown} [expected]
  * @property {unknown} [actual]
  * @property {string} [error] - The submission's own error text, for this case.
+ * @property {boolean} [revealed] - Test only: a hidden case with its details.
  */
 
 /**
- * What POST /api/questions/:slug/run or /submit answers (server.js,
+ * What POST /api/questions/:slug/run, /submit or /test answers (server.js,
  * handleExecution).
  *
  * @typedef {object} JudgeResult
@@ -1479,6 +1491,7 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
  * @property {boolean} [queueUpdated] - Submit only, when saved: whether the
  *   queue was updated (step 6).
  * @property {string} [queueError] - When it wasn't: why.
+ * @property {boolean} [tested] - Test only (issue #58): nothing was recorded.
  */
 
 /**
@@ -1492,7 +1505,9 @@ function renderResults(result) {
     typeof result.passed === 'number' ? ` — ${result.passed}/${result.total} test cases passed` : ''
   }${typeof result.runtimeMs === 'number' ? ` (${result.runtimeMs} ms)` : ''}${
     result.saved === false ? ` — ⚠ not saved: ${result.saveError}` : ''
-  }${result.queueUpdated === false ? ` — ⚠ saved, but your queue wasn't updated: ${result.queueError}` : ''}`;
+  }${result.queueUpdated === false ? ` — ⚠ saved, but your queue wasn't updated: ${result.queueError}` : ''}${
+    result.tested ? ' — Tested, not recorded' : ''
+  }`;
   consoleStatusEl.className = result.status === 'Accepted' ? 'status-pass' : 'status-fail';
 
   // textContent, not innerHTML — this is raw program output, not markup.
@@ -1528,10 +1543,12 @@ function renderClientError(message) {
 }
 
 /**
- * Runs or submits the editor's code, and shows and files the answer.
+ * Runs, submits or tests the editor's code, and shows and files the
+ * answer. A Test (issue #58) is like a Run: the clock isn't held, no time
+ * is sent, and nothing about Next or Submissions changes.
  *
- * @param {'run' | 'submit'} endpoint - Which to do.
- * @param {HTMLButtonElement} button - Run or Submit, disabled meanwhile.
+ * @param {'run' | 'submit' | 'test'} endpoint - Which to do.
+ * @param {HTMLButtonElement} button - Run, Submit or Test, disabled meanwhile.
  * @returns {Promise<void>} Never rejects: failures are shown in the console.
  */
 async function execute(endpoint, button) {
@@ -1951,6 +1968,7 @@ async function init() {
 
   languageSelect.addEventListener('change', () => handleLanguageChange(languageSelect));
   runBtn.addEventListener('click', () => execute('run', runBtn));
+  testBtn.addEventListener('click', () => execute('test', testBtn));
   submitBtn.addEventListener('click', handleSubmitClick);
   skipBtn.addEventListener('click', skip);
 
