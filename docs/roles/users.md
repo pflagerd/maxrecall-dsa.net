@@ -20,6 +20,8 @@ records, and the scripts that set up and adjust a learner.
   scripts/recalculate-queue.js, scripts/consistency-check.js
 - The learner's pages: index.html, problems-list.js, problem.html,
   problem-page.js, bubbles.js, timer.js, style.css
+- docs/how-to-add-a-new-user.html (adding a user or tester, start to
+  finish)
 - Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
   docs/plans/elapsed-timer.md
 - The format of users/<email>/ (gitignored, on each machine)

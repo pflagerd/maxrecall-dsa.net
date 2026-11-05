@@ -21,8 +21,6 @@ TypeScript, `doc-check`).
 - Build and checks: Makefile, package.json, package-lock.json,
   tsconfig.json, tsconfig.browser.json, browser-globals.d.ts,
   scripts/doc-check.js, .gitignore, .env.example
-- docs/how-to-add-a-new-user.html (invites, the shared login, each user's
-  folder as a git repository)
 - Plans: docs/plans/limited-live.md, docs/plans/sandboxing.md,
   docs/plans/documentation-standard.md
 - The format of auth/ (gitignored, on each machine)
@@ -31,6 +29,8 @@ TypeScript, `doc-check`).
 - Everything the users and questions roles own, in particular server.js
   (users), users.js (users), questions/*.json and judge/runner.js
   (questions)
+- docs/how-to-add-a-new-user.html (users): ask there for changes to its
+  invite, shared login and backup steps
 - docs/roles/**, other roles' handoffs, and the handoffs from before roles
   (docs/session-handoff/*.md)
 - TODO, THOUGHTS (the human's notes)
