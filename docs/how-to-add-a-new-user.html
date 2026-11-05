@@ -64,8 +64,8 @@
 <p>Two separate halves, made at different times:</p>
 <table>
   <tr><th>Half</th><th>Where (on the VPS)</th><th>Made by</th></tr>
-  <tr><td><strong>Their learning</strong>: languages, queue, backlog, Submit records</td><td><code>/srv/maxrecall/data/users/&lt;email&gt;/</code></td><td>You, with <code>make learner-create</code> (step 2), before they've done anything</td></tr>
-  <tr><td><strong>Their sign-in</strong>: a password hash, and sessions</td><td><code>/srv/maxrecall/data/auth/accounts/&lt;email&gt;.json</code>, <code>auth/sessions/</code></td><td>Them, registering with your invite (steps 3 and 5)</td></tr>
+  <tr><td><strong>Their learning</strong>: languages, queue, backlog, Submit records</td><td><code>/srv/maxrecall/data/users/&lt;email&gt;/</code></td><td>You, with <code>make learner-create</code> (step 2), before they've done anything; a git repository from step 3</td></tr>
+  <tr><td><strong>Their sign-in</strong>: a password hash, and sessions</td><td><code>/srv/maxrecall/data/auth/accounts/&lt;email&gt;.json</code>, <code>auth/sessions/</code></td><td>Them, registering with your invite (steps 4 and 6)</td></tr>
 </table>
 <p>Both are named by their email <strong>in lower case</strong>: registering lower-cases it (<code>auth.js</code>, <code>normalizeEmail</code>), and so does <code>make learner-create</code>. In front of both, every visitor first gets nginx's <strong>shared</strong> login (Basic auth, <code>docs/deploy-vps.md</code> §13), the same username and password for everyone, while testing is limited.</p>
 <p>Without step 2 a new user still works, but with no <code>profile.json</code> they get every question in all five languages waiting for them (<code>"backlog": "all"</code>). Step 2 gives them only the languages and questions you choose.</p>
@@ -74,15 +74,16 @@
 <ol class="steps">
   <li><a href="#s1">Decide their email, languages and first questions</a></li>
   <li><a href="#s2">Set them up: <code>make learner-create</code></a></li>
-  <li><a href="#s3">Make their invite: <code>make invite</code></a></li>
-  <li><a href="#s4">Send them what they need</a></li>
-  <li><a href="#s5">They register</a></li>
-  <li><a href="#s6">Check it as them</a></li>
+  <li><a href="#s3">Make their folder a git repository</a></li>
+  <li><a href="#s4">Make their invite: <code>make invite</code></a></li>
+  <li><a href="#s5">Send them what they need</a></li>
+  <li><a href="#s6">They register</a></li>
+  <li><a href="#s7">Check it as them</a></li>
 </ol>
 <p>Then: <a href="#kubuntu">on Kubuntu</a>, <a href="#later">later changes</a>, <a href="#owner">your own account</a>, <a href="#shared">the shared login</a>, <a href="#limits">what testers can and can't do</a> and the <a href="#checklist">checklist</a>.</p>
 <p>All the VPS commands are run as root on the VPS, <code>srv702017.hstgr.cloud</code>, from the service's checkout:</p>
 <pre><code>cd /srv/maxrecall/maxrecall-dsa.net</code></pre>
-<p>The server keeps running for all six steps.</p>
+<p>The server keeps running for all seven steps.</p>
 
 <h2 id="s1">1. Decide their email, languages and first questions</h2>
 <ul>
@@ -116,7 +117,42 @@
   <li>The first line should say <code>backlog "chosen"; languages turned on: python</code>, then an empty queue and their questions in the backlog.</li>
 </ul>
 
-<h2 id="s3">3. Make their invite: <code>make invite</code></h2>
+<h2 id="s3">3. Make their folder a git repository</h2>
+<p>So their work has a history, and can be copied off the VPS (limited-live D5, the owner's idea). Their folder now holds only its three starting files, so the first commit is small.</p>
+<pre><code>cd /srv/maxrecall/data/users/tester@example.com</code></pre>
+<pre><code>sudo -u maxrecall git init -b master</code></pre>
+<ul>
+  <li><strong>Every git command as <code>maxrecall</code></strong>, who owns the folder. Run as root, <code>.git</code> would be root's, and <code>maxrecall</code> couldn't commit to it later; and git refuses to work as root in a repository another user owns (“detected dubious ownership”, git's <code>safe.directory</code> check; tested with git 2.43.0, Ubuntu 24.04's).</li>
+  <li><code>-b master</code> names the first branch, so it matches the push below whatever git's default is (<a href="https://git-scm.com/docs/git-init#Documentation/git-init.txt--bltbranch-namegt">git-init</a>).</li>
+</ul>
+<pre><code>printf '*.tmp-*\n' | sudo -u maxrecall tee .gitignore &gt;/dev/null</code></pre>
+<ul>
+  <li>The server writes each file as <code>&lt;name&gt;.tmp-&lt;number&gt;</code>, then renames it into place (<code>users.js</code>, <code>writeUserFile</code>); this keeps a half-written one out of any commit. <code>tee</code> writes the file as <code>maxrecall</code> (a plain <code>&gt;</code> would write it as root).</li>
+</ul>
+<pre><code>sudo -u maxrecall git config user.name "MaxRecall VPS"</code></pre>
+<pre><code>sudo -u maxrecall git config user.email "maxrecall@srv702017.hstgr.cloud"</code></pre>
+<ul>
+  <li>Who the commits are by, for this repository only. <code>maxrecall</code> has none, and without one the commit stops with “Please tell me who you are”. It's only a label; the address needn't receive mail.</li>
+</ul>
+<pre><code>sudo -u maxrecall git add .</code></pre>
+<pre><code>sudo -u maxrecall git commit -m "new user initial commit"</code></pre>
+<ul>
+  <li>Should commit <code>.gitignore</code>, <code>backlog.json</code>, <code>order.json</code> and <code>profile.json</code>. The app ignores the <code>.git</code> folder: it only reads the files it knows (checked with <code>make consistency-check</code>: “nothing found”).</li>
+</ul>
+<div class="note warn">
+  <p><strong>The remote: waiting for D5.</strong> Your note's last two lines are:</p>
+  <pre><code>sudo -u maxrecall git remote add origin XYZ</code></pre>
+  <pre><code>sudo -u maxrecall git push -u origin master</code></pre>
+  <p>Where <code>XYZ</code> is, is D5's open decision, so stop after the commit until it's made:</p>
+  <ul>
+    <li><strong>A private GitHub repository per user:</strong> the VPS has no GitHub credentials (<code>docs/deploy-vps.md</code> §9), so <code>maxrecall</code> would need a key of its own; and testers' code and email would then be on GitHub, which the message in step 5 would have to say.</li>
+    <li><strong>Kubuntu pulls from the VPS</strong> (recommended): no remote here, nothing pushed; instead Kubuntu runs <code>git clone</code> once and <code>git pull</code> after, over SSH. These two lines then aren't needed.</li>
+    <li><strong>A bare repository elsewhere on the VPS:</strong> simple, but not a backup.</li>
+  </ul>
+  <p>Either way, this commits only the <em>starting</em> files. Their work is kept only if something commits again later, which is D5's other open part: a timer on the VPS, or by hand.</p>
+</div>
+
+<h2 id="s4">4. Make their invite: <code>make invite</code></h2>
 <pre><code>sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=tester@example.com</code></pre>
 <ul>
   <li><code>MAXRECALL_AUTH_DIR</code> (sign-in data) this time, not <code>MAXRECALL_USERS_DIR</code> (learning data).</li>
@@ -125,7 +161,7 @@
   <li>Lost or expired: run it again. A new invite replaces the old one; their folder doesn't change.</li>
 </ul>
 
-<h2 id="s4">4. Send them what they need</h2>
+<h2 id="s5">5. Send them what they need</h2>
 <p>Four things: the address, the shared login, their code, and the email to register with. A draft, to edit before sending. It also says what's stored about them (the limited-live plan's D5: a note to testers). That's a courtesy, not legal advice: whether anything more is needed depends on where they live.</p>
 <pre><code>Hello,
 
@@ -156,11 +192,11 @@ Thanks!</code></pre>
   <li>Replace <code>tester</code> with the username you chose in <code>docs/deploy-vps.md</code> §13, step 5, if it's different.</li>
 </ul>
 
-<h2 id="s5">5. They register</h2>
+<h2 id="s6">6. They register</h2>
 <p>At <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a>, after the shared login: email, invite code and a password of their own (at least 12 characters). Registering signs them in, deletes the invite, and shows their list. Sessions last 360 days.</p>
 <p>Every refusal gives one message, “Registration isn't open for that email and invite code.”, whatever the reason: a wrong email, a wrong or expired code, a used one. That's deliberate (it reveals nothing to someone guessing). The usual causes: a different email from the one invited, or a code copied with a character missing. A too-short password gets its own message. After 5 refusals for one email, each try waits longer (up to 15 minutes); restarting the server clears that.</p>
 
-<h2 id="s6">6. Check it as them</h2>
+<h2 id="s7">7. Check it as them</h2>
 <p>For the rehearsal with your own second email, or to see what a tester sees: open <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a> in a <strong>private window</strong>. In a normal window the new sign-in would replace yours: browsers keep one cookie per site.</p>
 <ul>
   <li>The header shows their email.</li>
@@ -173,6 +209,9 @@ Thanks!</code></pre>
 <p>The same two commands, without <code>sudo</code> or <code>env</code>: on Kubuntu the folders are the checkout's own <code>users/</code> and <code>auth/</code>.</p>
 <pre><code>make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum"</code></pre>
 <pre><code>make invite EMAIL=tester@example.com</code></pre>
+<ul>
+  <li>Step 3 the same way, in <code>users/tester@example.com</code>, as yourself: <code>git init -b master</code>, the <code>.gitignore</code>, <code>git add .</code> and <code>git commit</code>. Your own git identity is used, so no <code>git config</code>. The app checkout's own <code>.gitignore</code> leaves <code>users/</code> out (<code>/users/</code>), so the checkout's git never sees the learner's repository inside it.</li>
+</ul>
 <pre><code>make dev</code></pre>
 <ul>
   <li>Then register at <a href="http://localhost:3000/login.html#register">http://localhost:3000/login.html#register</a>. There's no shared login on Kubuntu: that's nginx's, on the VPS.</li>
@@ -191,7 +230,7 @@ Thanks!</code></pre>
 <p>What's added comes into their queue at their next Submit or Skip (<code>docs/deploy-vps.md</code> §10).</p>
 
 <h3>The invite ran out before they registered</h3>
-<p>Run step 3 again, and send the new code.</p>
+<p>Run step 4 again, and send the new code.</p>
 
 <h3>A forgotten password</h3>
 <p>There's no reset page. Delete their sign-in, <strong>sessions included</strong>, and invite them again. Their learning (queue, records) is untouched:</p>
@@ -201,7 +240,7 @@ Thanks!</code></pre>
   <li>Why sessions too: deleting only the account leaves any browser already signed in as them working, for up to 360 days, because a session is checked against its own file, not the account (<code>readme.html</code>, “Known gaps”).</li>
 </ul>
 <pre><code>rm /srv/maxrecall/data/auth/accounts/tester@example.com.json</code></pre>
-<p>Then step 3 (a new invite) and steps 4–5 (they register again, with a new password).</p>
+<p>Then step 4 (a new invite) and steps 5–6 (they register again, with a new password).</p>
 
 <h3>Taking someone off</h3>
 <p>Sign them out and remove their account (the two commands just above), then put their learning folder aside rather than deleting it:</p>
@@ -213,7 +252,7 @@ Thanks!</code></pre>
 </ul>
 
 <h2 id="owner">Your own account</h2>
-<p>Through the SSH tunnel's trusted port you need none: every request there is you. On the public site you do, like anyone else. Your learning folder already exists, so skip step 2: <code>make invite EMAIL=daniel.pflager@gmail.com</code> (step 3), then register. Being <code>MAXRECALL_USER</code> gives you the <strong>Test</strong> button there too.</p>
+<p>Through the SSH tunnel's trusted port you need none: every request there is you. On the public site you do, like anyone else. Your learning folder already exists, so skip step 2: <code>make invite EMAIL=daniel.pflager@gmail.com</code> (step 4), then register. Step 3 applies to your folder too; its first commit then holds your records so far. Being <code>MAXRECALL_USER</code> gives you the <strong>Test</strong> button there too.</p>
 
 <h2 id="shared">The shared login</h2>
 <p>One username and password, in <code>/etc/nginx/maxrecall.htpasswd</code>, keep strangers away from the app altogether while testing is limited (the limited-live plan's D3). It isn't per person: who someone is comes from their own sign-in.</p>
@@ -241,10 +280,11 @@ Thanks!</code></pre>
 <ul class="checklist" id="checklist">
   <li><label><input type="checkbox" data-key="decided"><span> Decided their email, languages and first questions (1)</span></label></li>
   <li><label><input type="checkbox" data-key="created"><span> <code>make learner-create</code>, dry run then for real, and <code>make backlog-show</code> checked (2)</span></label></li>
-  <li><label><input type="checkbox" data-key="invite"><span> <code>make invite</code> run, code noted (3)</span></label></li>
-  <li><label><input type="checkbox" data-key="sent"><span> Sent the address, the shared login (password separately), the code and the email (4)</span></label></li>
-  <li><label><input type="checkbox" data-key="registered"><span> They've registered (5)</span></label></li>
-  <li><label><input type="checkbox" data-key="checked"><span> Checked as them, in a private window (6)</span></label></li>
+  <li><label><input type="checkbox" data-key="git"><span> Their folder a git repository, first commit made, as <code>maxrecall</code> (3)</span></label></li>
+  <li><label><input type="checkbox" data-key="invite"><span> <code>make invite</code> run, code noted (4)</span></label></li>
+  <li><label><input type="checkbox" data-key="sent"><span> Sent the address, the shared login (password separately), the code and the email (5)</span></label></li>
+  <li><label><input type="checkbox" data-key="registered"><span> They've registered (6)</span></label></li>
+  <li><label><input type="checkbox" data-key="checked"><span> Checked as them, in a private window (7)</span></label></li>
 </ul>
 <button class="action" type="button" id="checklist-clear">Clear the ticks</button>
 
