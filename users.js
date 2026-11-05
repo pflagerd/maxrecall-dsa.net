@@ -54,8 +54,9 @@ const DEFAULT_USER = 'daniel.pflager@gmail.com';
 const EMAIL_PATTERN = /^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 
 /**
- * MAXRECALL_USER: the owner, who every request on the trusted port is
- * (server.js). Registering doesn't use it: since 2026-11-04 it needs an
+ * MAXRECALL_USER: the owner, who every request on the trusted port is,
+ * and the only one who may Test a question (server.js,
+ * canTestQuestions). Registering doesn't use it: since 2026-11-04 it needs an
  * invite (auth.js). Checked once at startup: a bad value stops the server
  * immediately.
  *

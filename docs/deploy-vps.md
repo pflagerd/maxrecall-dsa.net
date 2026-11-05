@@ -1,8 +1,11 @@
-# Running MaxRecall DSA on the VPS (Ubuntu 24.04, SSH tunnel only)
+# Running MaxRecall DSA on the VPS (Ubuntu 24.04)
 
 Written 2026-10-29; sign-in added 2026-10-30. This is option A from the
 2026-10-29 discussion: the app listens only on the VPS's own loopback address
-(`127.0.0.1`), and you reach it through an SSH tunnel. Nothing is exposed to
+(`127.0.0.1`), and you reach it through an SSH tunnel. **Since 2026-11-05
+(§13, limited-live step 3) nginx also serves it at
+<https://maxrecallcode.net>**, behind a shared Basic auth login and the app's
+own sign-in, and only to port 3000. Until §13 is done, nothing is exposed to
 the internet.
 
 It listens on two ports, both on `127.0.0.1`:
@@ -937,3 +940,269 @@ session, Hostinger's control panel may have a browser console for the VPS
 **Hostinger may also have a firewall of its own,** in its control panel,
 in front of the VPS (not checked). If it's configured, a port must be
 allowed in both. For step 3, 80 and 443 then need opening there too.
+
+## 13. HTTPS for the world: nginx and a certificate [VPS, then Kubuntu]
+
+Added 2026-11-05: step 3 of `docs/plans/limited-live.md`. It puts nginx in
+front of the app, so the site is at **<https://maxrecallcode.net>**, with
+`maxrecallcode.com` and `maxrecallcode.org` redirecting there (owner,
+2026-11-05; no `www`). Testers first get nginx's shared Basic auth login,
+then the app's own sign-in (an invite, §11). The configuration is
+`deploy/nginx-maxrecallcode.conf`; read its comments for what each part
+does.
+
+**What doesn't change:** the app still listens on `127.0.0.1` only, nginx
+connects to it there, and only to port 3000, which needs signing in. The
+trusted port, 3001, stays reachable only through your SSH tunnel (§7). The
+service's own network filter (`IPAddressAllow=localhost`, §5) is untouched:
+nginx talks to it over loopback.
+
+**Tested in a cloud session, 2026-11-05**, with Ubuntu 24.04's nginx 1.24.0
+(certbot 2.9.0's options, messages and timer read from its package),
+a self-signed certificate in the certbot path, and the app behind it:
+- the redirects (`http://…`, and `https://` for `.com` and `.org`) keep the
+  path and query;
+- the Basic auth: 401 without it or with a wrong password;
+- HSTS on every answer, a 401 included;
+- HTTP/2, TLS 1.2 and 1.3;
+- TLS 1.1 refused by the server;
+- the app saw `X-Forwarded-Proto: https` and nginx's own `X-Forwarded-For`,
+  not the fake ones sent, and no `Authorization`;
+- registering through nginx set the session cookie with `Secure`, and
+  `trusted` was false;
+- 30 quick `/api/auth/me` all 200, while quick logins got 429 after the
+  burst.
+
+Not testable there: the `listen [::]` lines (the cloud has no IPv6; the VPS
+has), and Let's Encrypt itself.
+
+**Before you start:**
+- This section's pull request is merged (the configuration file comes from
+  the repo).
+- DNS for all three names (checked by the owner, 2026-11-05). On Kubuntu:
+  ```bash
+  for d in maxrecallcode.net maxrecallcode.com maxrecallcode.org; do echo "$d: $(dig @1.1.1.1 +short $d A) $(dig @1.1.1.1 +short $d AAAA)"; done
+  ```
+  - Each line should show both of the VPS's addresses. `@1.1.1.1` asks a
+    public DNS server rather than your own (cached) one.
+- If Hostinger's control panel has a firewall for the VPS, allow 80 and 443
+  there too (not checked whether it has one).
+
+All commands below are run as root on the VPS.
+
+### 1. The code and the packages
+
+```bash
+git -C /root/maxrecall-dsa.net pull --ff-only
+```
+- Updates the checkout you run `make` from, so it has the configuration
+  file. `-C` runs git in that folder; `--ff-only` only ever moves forward
+  to match GitHub.
+
+```bash
+apt install -y nginx certbot
+```
+- nginx 1.24 is in Ubuntu's **main** archive (Canonical's security
+  updates); certbot 2.9.0 is in universe and only runs to get or renew the
+  certificate (plan, D1). `-y` answers yes.
+- nginx starts at once with Ubuntu's welcome page on port 80. Nobody can
+  see it yet: the firewall still blocks 80 (§12).
+
+```bash
+rm /etc/nginx/sites-enabled/default
+```
+- Turns the welcome page off. (`sites-available/default` stays, unused.)
+
+### 2. Open ports 80 and 443
+
+```bash
+ufw allow 80/tcp comment 'HTTP (nginx: redirect, certbot)'
+```
+```bash
+ufw allow 443/tcp comment 'HTTPS (nginx)'
+```
+- Port 80 is needed even though the site is HTTPS only: browsers start
+  there when someone types the bare name, and Let's Encrypt checks the
+  domain over it, now and at every renewal.
+
+```bash
+ufw status
+```
+- Should list 22, 80 and 443, each for IPv4 and v6.
+
+### 3. A temporary site, for the first certificate
+
+nginx won't load the real configuration until the certificate it names
+exists, so first a small site that only answers Let's Encrypt's check.
+
+```bash
+install -d /var/www/letsencrypt/.well-known/acme-challenge
+```
+- `install -d` creates the folders (all of them, like `mkdir -p`). certbot
+  puts its one-time check files in the last one, and nginx serves them.
+
+```bash
+cat > /etc/nginx/sites-available/acme-bootstrap.conf <<'END'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name maxrecallcode.net maxrecallcode.com maxrecallcode.org;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / { return 404; }
+}
+END
+```
+- `cat > FILE <<'END' … END` writes the lines between into the file (a
+  *here-document*; the quotes around `END` keep `$` and the like as they
+  are).
+
+```bash
+ln -s /etc/nginx/sites-available/acme-bootstrap.conf /etc/nginx/sites-enabled/
+```
+- nginx reads `sites-enabled/` (`/etc/nginx/nginx.conf`, line 60); a
+  symbolic link there turns a site on.
+
+```bash
+nginx -t && systemctl reload nginx
+```
+- `nginx -t` checks the configuration without changing anything; `&&`
+  reloads only if it passed. A reload keeps nginx running.
+
+```bash
+echo ping > /var/www/letsencrypt/.well-known/acme-challenge/ping
+```
+
+**[Kubuntu]**, the same check Let's Encrypt will make:
+```bash
+for d in maxrecallcode.net maxrecallcode.com maxrecallcode.org; do echo "$d: $(curl -sS --max-time 10 http://$d/.well-known/acme-challenge/ping)"; done
+```
+- Each should print `ping`. A timeout means a firewall (ufw, or
+  Hostinger's) still blocks port 80.
+
+### 4. The certificate
+
+```bash
+certbot certonly --webroot -w /var/www/letsencrypt --cert-name maxrecallcode.net -d maxrecallcode.net -d maxrecallcode.com -d maxrecallcode.org --dry-run
+```
+- A **trial against Let's Encrypt's staging server** (`--dry-run`), which
+  saves nothing. Let's Encrypt limits how many real certificates a domain
+  can get, so try here first.
+- `certonly`: only get the certificate; certbot doesn't touch nginx's
+  configuration (that's the repo's file).
+- `--webroot -w /var/www/letsencrypt`: certbot proves you control the names
+  by writing a file there, which Let's Encrypt fetches over port 80.
+- `--cert-name maxrecallcode.net`: the certificate's name, so it lands in
+  `/etc/letsencrypt/live/maxrecallcode.net/`, where the configuration looks.
+- One `-d` per name: one certificate covers all three.
+- The first run asks for an email address (for notices about the
+  certificate) and to agree to Let's Encrypt's terms.
+
+It should end with `The dry run was successful.` Then for real:
+
+```bash
+certbot certonly --webroot -w /var/www/letsencrypt --cert-name maxrecallcode.net -d maxrecallcode.net -d maxrecallcode.com -d maxrecallcode.org --deploy-hook 'systemctl reload nginx'
+```
+- `--deploy-hook`: after each successful renewal, reload nginx so it uses
+  the new certificate. certbot saves it in
+  `/etc/letsencrypt/renewal/maxrecallcode.net.conf` (as `renew_hook`), so
+  it applies to every renewal, not just this run.
+- It should say `Successfully received certificate.` and name the files in
+  `/etc/letsencrypt/live/maxrecallcode.net/`.
+
+Renewal is automatic: the package's `certbot.timer` runs `certbot -q renew`
+twice a day (`/usr/lib/systemd/system/certbot.timer`), which renews when
+the certificate has 30 days or fewer left (`"renew_before_expiry": "30
+days"`, certbot 2.9.0's `_internal/constants.py`, line 160).
+
+### 5. The testers' shared login (Basic auth, D3)
+
+```bash
+printf 'tester:%s\n' "$(openssl passwd -6)" > /etc/nginx/maxrecall.htpasswd
+```
+- `openssl passwd -6` asks for the password twice (`Password:`,
+  `Verifying - Password:`) without showing it, and prints its SHA-512
+  crypt hash; the file stores `tester:` and that hash, never the password.
+- `tester` is the username testers type; choose another if you like.
+- Give testers the username and password with their invite.
+
+```bash
+chown root:www-data /etc/nginx/maxrecall.htpasswd
+```
+```bash
+chmod 640 /etc/nginx/maxrecall.htpasswd
+```
+- nginx's workers run as `www-data`; this lets them read the file, and
+  nobody else.
+
+### 6. The real site
+
+```bash
+cp /root/maxrecall-dsa.net/deploy/nginx-maxrecallcode.conf /etc/nginx/sites-available/maxrecallcode.conf
+```
+```bash
+ln -s /etc/nginx/sites-available/maxrecallcode.conf /etc/nginx/sites-enabled/
+```
+```bash
+rm /etc/nginx/sites-enabled/acme-bootstrap.conf
+```
+- The real configuration answers Let's Encrypt's checks on port 80 itself,
+  so the temporary site goes (two sites for the same names on port 80
+  would make nginx warn and use only one).
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+```bash
+certbot renew --dry-run
+```
+- Rehearses a renewal against the staging server, through the real
+  configuration. Should end `Congratulations, all simulated renewals
+  succeeded`.
+
+**Updating the configuration later:** copy the file again, then
+`nginx -t && systemctl reload nginx`.
+
+### 7. Check it [Kubuntu]
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' 'http://maxrecallcode.com/problem.html?slug=x'
+```
+- `-o /dev/null` throws the page away; `-w` prints the status and where it
+  redirects. Should print `301 https://maxrecallcode.net/problem.html?slug=x`.
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://maxrecallcode.org/
+```
+- Should print `301 https://maxrecallcode.net/`, with no certificate error.
+
+```bash
+curl -sSI https://maxrecallcode.net/
+```
+- `-I` shows only the headers. Should be `HTTP/2 401`, with
+  `strict-transport-security: max-age=86400` and
+  `www-authenticate: Basic realm="MaxRecall testing"`.
+
+```bash
+curl --max-time 5 http://maxrecallcode.net:3000/
+```
+- Should still time out: only 80 and 443 are open (§12).
+
+**In a browser**, open <https://maxrecallcode.net> in a private window:
+the browser asks for the Basic auth username and password, then the app's
+login page appears. The padlock should name Let's Encrypt.
+
+**Your own account.** Through the tunnel you never needed one, so you may
+not have one on the VPS (registration was closed there before invites):
+```bash
+cd /srv/maxrecall/maxrecall-dsa.net
+```
+```bash
+sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=daniel.pflager@gmail.com
+```
+- Then register on <https://maxrecallcode.net/login.html#register> with that
+  email, the code and a password of your own. Your records are already in
+  `users/` under that email, so they're yours as soon as you sign in.
+
+**To take the site offline again:** `rm /etc/nginx/sites-enabled/maxrecallcode.conf`,
+then `systemctl reload nginx`. The tunnel keeps working.

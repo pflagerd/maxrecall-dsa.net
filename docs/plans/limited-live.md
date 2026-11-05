@@ -1,8 +1,9 @@
 # Plan: limited live testing on the VPS
 
 Status: **step 1 done and deployed, 2026-11-04** (invites and `trust
-proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in). Next:
-step 3 (nginx and HTTPS), which needs the domain name (Q1). Q1, Q2
+proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in); **step 3
+written** (nginx and HTTPS for `maxrecallcode.net`, `docs/deploy-vps.md`
+§13), for the owner to run. Q1, Q2
 and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
 repository per user) is open; it's needed by step 6. Nothing is exposed
 to the internet yet. Linked from
@@ -69,6 +70,14 @@ not chosen yet (Q1).
 
 ## Questions for the owner
 
+- **Q1, updated 2026-11-05 (owner): three domains, `maxrecallcode.com`,
+  `maxrecallcode.net` and `maxrecallcode.org`, pointed at the VPS; no
+  `www`.** **`maxrecallcode.net` is the site's address** (owner,
+  2026-11-05). Before that was decided: which one is the site's address (the other two
+  redirect to it with a 301), because the session cookie is host-only and
+  changing it later signs everyone out. Recommended: `.com`. One
+  certificate covers all three, so the redirects work over HTTPS too. Not
+  yet checked from here (the cloud session can't look up DNS).
 - **Q1. DNS. Answered 2026-11-04:** `maxrecall-dsa.net` doesn't point at
   the VPS yet, and the name isn't settled; it will probably be
   `maxrecall-code.net` or similar. Written `DOMAIN` below until it is.
@@ -365,6 +374,39 @@ Each is small and can be checked before the next.
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
    nginx, HSTS ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)), and
    D3's gate. Then `certbot --nginx -d DOMAIN` (Q1).
+   **Written 2026-11-05 as `docs/deploy-vps.md` §13 and
+   `deploy/nginx-maxrecallcode.conf`, for the owner to run.** Choices made
+   there (small ones, stated rather than asked):
+   - `maxrecallcode.net` is the site (owner); `.com` and `.org` redirect
+     to it with a 301, over HTTP and HTTPS; one certificate covers all
+     three.
+   - `certbot certonly --webroot` rather than `certbot --nginx`, so certbot
+     never edits nginx's configuration and the installed file stays the
+     repo's. A small HTTP-only site serves the first check; the real
+     configuration serves renewals. `--deploy-hook 'systemctl reload
+     nginx'` is saved for renewals (`renew_hook`, certbot's
+     `_internal/renewal.py`).
+   - Rate limiting (D3) only on `/api/auth/login` and `/api/auth/register`,
+     10 a minute per address plus a burst of 5: every page asks
+     `/api/auth/me` (`account.js`), so limiting all of `/api/auth/` would
+     break browsing.
+   - HSTS for a day while testing (`max-age=86400`), a year later; no
+     `includeSubDomains` or `preload`.
+   - TLS 1.2 and 1.3 only (Ubuntu's `nginx.conf` still allows 1.0 and
+     1.1); HTTP/2.
+   - nginx replaces `X-Forwarded-For` with the visitor's address, and
+     doesn't pass the Basic auth password on (`Authorization`).
+   - `proxy_read_timeout 300s`: a Submit can wait behind 10 others, 2 at a
+     time, each up to about 30 s (`judge/runner.js`, `judge/queue.js`),
+     beyond nginx's 60 s default. Worked out from the limits, not measured.
+   - No app change was needed: step 1's `trust proxy` makes the cookie
+     `Secure` behind nginx. (I had said a small one would be; wrong.)
+   **Tested in the cloud** with nginx 1.24.0, a self-signed certificate in
+   certbot's path and the real app behind it: the redirects, the 401s,
+   HSTS on every answer, HTTP/2, TLS 1.1 refused, the headers the app
+   receives, a `Secure` cookie from registering through nginx,
+   `trusted: false`, `/api/auth/me` never limited and logins limited after
+   the burst. Not testable there: IPv6 `listen` lines and Let's Encrypt.
 4. **Check from Kubuntu.** The redirect; the certificate; the cookie has
    `Secure` ([RFC 6265 §4.1.2.5](https://www.rfc-editor.org/rfc/rfc6265#section-4.1.2.5));
    ports 3000 and 3001 still unreachable from outside (deploy-vps.md §6);
@@ -411,3 +453,5 @@ the same change.
 | 2026-11-05 | D4's patched kernel confirmed (owner): after `apt update`, no newer `linux-image`/`linux-generic`/`linux-headers` package is waiting, and the installed `linux-image-generic` and `linux-image-virtual` (the packages that follow the newest kernel) are `6.8.0-147`, the running one. `6.8.0-110` is still installed, as the fallback Ubuntu keeps. 187 other updates are waiting (security ones not counted yet); installing them is for a time the owner chooses, with `make sandbox-test` and `make line-numbers-test` afterwards, since they can change g++, OpenJDK, Python or bubblewrap. |
 | 2026-11-05 | Security updates are kept up automatically (owner's `/var/log/unattended-upgrades/unattended-upgrades.log`): it runs daily from `noble` and `noble-security`, and each run ends `No packages found that can be upgraded unattended`. The one update the banner said couldn't be installed automatically is `cloud-init`, `marked to be held back`; left held (my guess: the provider holds it; the app doesn't use it). So the 187 waiting updates are ordinary `noble-updates` fixes, not urgent. |
 | 2026-11-05 | Q3 settled in the other session: option (c), `make learner-create` (#57), which needs no server stop. Recorded above; the readme's `users.js` row and `users.js`'s comment no longer call `MAXRECALL_USER` the owner allowed to register (it's only the trusted port's owner since #52). |
+| 2026-11-05 | Q1 (owner): `maxrecallcode.com`, `.net` and `.org`, pointed at the VPS; no `www`. Which is the site's address is waiting for the owner (recommended `.com`). |
+| 2026-11-05 | Q1 (owner): `maxrecallcode.net` is the site; DNS checked by the owner for all three names (A and AAAA, the `.org` AAAA after a cache delay). Step 3 written as `docs/deploy-vps.md` §13 with `deploy/nginx-maxrecallcode.conf`, tested in the cloud; waiting for the owner to run it. |
