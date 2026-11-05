@@ -1,6 +1,8 @@
 # Plan: limited live testing on the VPS
 
-Status: **step 1 done, 2026-11-04** (invites and `trust proxy`). Q1, Q2
+Status: **step 1 done and deployed, 2026-11-04** (invites and `trust
+proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in). Next:
+step 3 (nginx and HTTPS), which needs the domain name (Q1). Q1, Q2
 and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
 repository per user) is open; it's needed by step 6. Nothing is exposed
 to the internet yet. Linked from
@@ -335,11 +337,17 @@ Each is small and can be checked before the next.
    working (`sessionEmail` doesn't check the account), so a reset by hand
    should also delete that email's files in `auth/sessions/`. Listed in
    the readme's Known gaps.
-2. **VPS: firewall.** `ufw` allowing only SSH, 80 and 443
+2. **VPS: firewall.** `ufw` allowing only SSH
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
    in case of a lockout. Hostinger's panel may have a firewall of its own
-   (not checked).
+   (not checked). **Written 2026-11-04 as `docs/deploy-vps.md` §12, for
+   the owner to run.** Two choices made there: 80 and 443 are opened in
+   step 3, with nginx, rather than now (nothing answers on them yet); and
+   SSH gets `allow`, not `limit`, since `limit`'s 6 connections in 30 s
+   would also stop the owner's `rsync` and D5's fetch per user. Checked
+   against Ubuntu 24.04's `ufw` 0.36.2-6 package: loopback (the tunnel) and
+   established connections are accepted before any rule.
 3. **VPS: nginx and the certificate (D1, D3).** A config file kept in
    `deploy/` like the service file: HTTP → HTTPS redirect, proxy to
    `127.0.0.1:3000` only (never 3001), `X-Forwarded-*` headers set by
@@ -381,3 +389,9 @@ the same change.
 | 2026-11-04 | `master` (spaced-repetition step 13, a chosen backlog) merged into this branch: conflicts only where both added lines (Makefile, server.js imports, tsconfig.json, readme rows); `make test` 195. Its consequences, and Q3 (how a new tester starts), recorded above. |
 | 2026-11-04 | `master` `d1d19af` merged (readme only: the owner's VPS check of step 13, so the VPS runs `52ac615` and has `/srv/maxrecall/data/archive/`). Nothing in this plan changes. |
 | 2026-11-04 | Q3 (owner): to be dealt with in another session. Step 1 goes to `master` through a pull request. |
+| 2026-11-04 | Step 1 merged (#52, `776119d`) and deployed by the owner: the VPS log says `registration by invite only`, with the sandbox working and no `MAXRECALL_PASSWORD` warning. Registration had been closed there before (no `test.env`), so the owner has no port-3000 account on the VPS yet. |
+| 2026-11-04 | Step 2 written as `docs/deploy-vps.md` §12 (SSH only; 80 and 443 with nginx in step 3; `allow`, not `limit`). Waiting for the owner to run it. |
+| 2026-11-04 | Step 2 run by the owner: `ufw status verbose` says `Status: active`, `Default: deny (incoming), allow (outgoing), deny (routed)`, and only `22/tcp` (IPv4 and v6, `# SSH`) allowed in. Not yet reported: §12's check from a fresh SSH connection, the tunnel, and `curl` to port 3000 failing. |
+| 2026-11-05 | Step 2 checked from Kubuntu (owner): `ssh root@srv702017.hstgr.cloud true` printed `ssh ok` (a fresh connection gets in), and `curl --max-time 5 http://srv702017.hstgr.cloud:3000/` timed out rather than being refused, which is `ufw` dropping it (`DEFAULT_INPUT_POLICY="DROP"`). Step 2 done. A first try ran `ssh` from the VPS to its own name, which resolves to 127.0.1.1 there and goes over loopback, so it tested nothing; §12 now says so. Still to do: the reboot the login banner asks for (`System restart required`; D4's patched kernel), then checking the service and `ufw` came back by themselves. |
+| 2026-11-05 | The firewall section renumbered §12: pull request #54 (the owner's other session, Q3's option (b)) adds `docs/deploy-vps.md` §11, setting up a new tester before inviting them. |
+| 2026-11-05 | #54 merged to `master` and merged into this branch (§11 tester setup, then §12 firewall). The VPS's DNS name, `srv702017.hstgr.cloud` (owner), now replaces the `VPS_IP` placeholder in `docs/deploy-vps.md` and is recorded in the readme. |
