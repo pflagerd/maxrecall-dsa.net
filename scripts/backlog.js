@@ -21,6 +21,7 @@ const { questionInfos } = require('../question-files');
 const { parseProfile } = require('../profile');
 const { parseQueueFiles, pairsToAdd, addToBacklog, removeFromBacklog } = require('../order');
 const { Refusal, refuseIfServerRunning, checkName } = require('./question-admin');
+const { splitList } = require('../learner');
 
 /**
  * A user's profile and queue files, checked.
@@ -75,7 +76,7 @@ function requireChosen(user) {
  * @throws {Refusal} If SLUGS is missing or a name isn't valid.
  */
 function readSlugs() {
-  const slugs = (process.env.SLUGS || '').split(/[\s,]+/).filter(Boolean);
+  const slugs = splitList(process.env.SLUGS);
   if (!slugs.length) throw new Refusal('SLUGS is required: question names, separated by spaces, e.g. SLUGS="hello-world two-sum"');
   return slugs.map((slug) => checkName('SLUGS', slug));
 }

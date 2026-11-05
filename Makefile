@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue backlog-show backlog-add backlog-remove invite sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue backlog-show backlog-add backlog-remove learner-create invite sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -142,6 +142,17 @@ backlog-add:
 
 backlog-remove:
 	node scripts/backlog.js remove
+
+# Setting up a new learner before their invite goes out (docs/plans/
+# spaced-repetition.md, step 14): make learner-create EMAIL=… LANGUAGES=python
+# SLUGS="hello-world two-sum". Writes users/<email>/ (the email lower-cased)
+# with profile.json (allowed.languages, "backlog": "chosen"), an empty
+# order.json and backlog.json, all at once; refuses if the folder exists.
+# The server can keep running. It doesn't make the invite: it prints the
+# make invite command. DRY_RUN=1 changes nothing. The values reach the
+# script through its environment, as for backlog-add.
+learner-create:
+	node scripts/learner-create.js
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -280,6 +281,63 @@ function writeUserFile(email, name, contents) {
 }
 
 /**
+ * Why createUser() didn't create a user: their folder is already there.
+ */
+class UserExistsError extends Error {
+  /** @param {string} email - The user. */
+  constructor(email) {
+    super(`${email} already has a folder in ${USERS_DIR}`);
+    this.code = 'USER_EXISTS';
+  }
+}
+
+/**
+ * Creates a new user's folder holding these files (spaced-repetition plan,
+ * step 14, details 5 and 6; make learner-create), all at once: they're
+ * written into users/.new-user-<random> (no "@", so listUsers() never
+ * counts it), then the folder is rename()d into place, so the server never
+ * sees a user with only some of their files. Never replaces anyone: it
+ * refuses if the folder exists. That's checked just before the rename, not
+ * by it (Node has no rename that refuses to replace an empty folder), so a
+ * folder appearing in those microseconds would be replaced if empty; it's
+ * meant for someone with no account yet, whose folder nothing else creates.
+ *
+ * @param {string} email - The new user's email, as a folder name (lower case).
+ * @param {Partial<Record<'profile.json' | 'order.json' | 'backlog.json', object>>} files -
+ *   The files, by name (USER_FILES only), as objects; each is written as
+ *   writeUserFile() writes it.
+ * @returns {string} The new folder's path.
+ * @throws {UserExistsError} If the user's folder already exists.
+ * @throws {Error} "Invalid user" if email doesn't match EMAIL_PATTERN;
+ *   "Unknown user file" for another name; another Error if a file can't be
+ *   written (the temporary folder is removed then).
+ */
+function createUser(email, files) {
+  const dir = typeof email === 'string' && EMAIL_PATTERN.test(email) && resolveInside(USERS_DIR, email);
+  if (!dir) throw new Error('Invalid user');
+  for (const name of Object.keys(files)) {
+    if (!USER_FILES.includes(name)) throw new Error(`Unknown user file ${JSON.stringify(name)}`);
+  }
+  if (fs.existsSync(dir)) throw new UserExistsError(email);
+  fs.mkdirSync(USERS_DIR, { recursive: true });
+  // mkdirSync, not mkdtempSync: mkdtemp makes the folder readable by its
+  // owner only (0700), unlike every other user's folder (umask's default).
+  const tmp = path.join(USERS_DIR, `.new-user-${crypto.randomBytes(6).toString('hex')}`);
+  fs.mkdirSync(tmp);
+  try {
+    for (const [name, contents] of Object.entries(files)) {
+      fs.writeFileSync(path.join(tmp, name), `${JSON.stringify(contents, null, 2)}\n`);
+    }
+    if (fs.existsSync(dir)) throw new UserExistsError(email);
+    fs.renameSync(tmp, dir);
+  } catch (err) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
+  return dir;
+}
+
+/**
  * Keeps a copy of one of a user's files beside it, before a command that
  * rewrites it all (make recalculate-queue, spaced-repetition plan, step 12,
  * detail 4): users/<email>/<name>.before-<label>. Nothing reads the copy;
@@ -349,4 +407,4 @@ function listUsers() {
     .sort();
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, backupUserFile, listUsers };
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, backupUserFile, createUser, UserExistsError, listUsers };

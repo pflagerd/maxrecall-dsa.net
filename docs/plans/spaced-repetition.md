@@ -1,6 +1,6 @@
 # Plan: spaced repetition (the order questions come back in)
 
-Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) 11 (deleting and renaming questions) 12a (recalculating from the records) and 13 (a chosen backlog) are done; 12b is for later. All eight
+Status: **being built.** Steps 1 (`advance.js`), 2 (`introduce.js`), 3 (`created` in every question file), 4 (`profile.json`, read by the server and the page) 5 (`order.json` and `backlog.json`, created and filled at server start) 6 (a saved Submit moves its pair and brings new ones in), 7 (Next), 8 (Skip), 9 (the problem list in queue order), 10 (the consistency check) 11 (deleting and renaming questions) 12a (recalculating from the records), 13 (a chosen backlog) and 14 (setting up a new learner) are done; 12b is for later. All eight
 decisions, D1–D8, are made; the decision log just below has one entry
 per decision, and the Decisions section gives each one in full, with the
 reasoning behind it.
@@ -935,3 +935,51 @@ each checked to fail against a deliberately wrong version first.
     question that wasn't chosen, opened by its address, still accepted
     and put in the queue (noted in §11). Option (c), `make invite` writing
     the starting files, if this gets tedious.
+14. **Done 2026-11-05: setting up a new learner in one command**, `make
+    learner-create EMAIL=… LANGUAGES=… SLUGS="…"` (`learner.js`,
+    `scripts/learner-create.js`, `users.js`'s `createUser`): option (c)
+    of limited-live Q3, after (b), by hand, in `docs/deploy-vps.md` §11.
+    Owner's details, all yes ("1-7 yes"):
+    1. **A separate target, not part of `make invite`**: invites belong
+       to the session doing access and security (owner, 2026-11-05: this
+       session does users and questions). It prints the `make invite`
+       command and doesn't run it, so re-running a setup never restarts
+       an invite's 7 days.
+    2. **`EMAIL` is lower-cased**, as registering makes it
+       (`normalizeEmail`), and the folder used is printed.
+    3. **`LANGUAGES` is required**, no default; it becomes
+       `allowed.languages`, the first being the default language.
+    4. **`SLUGS` is required**, in that order, by `make backlog-add`'s
+       rules (`pairsToAdd`, `addToBacklog`).
+    5. **`profile.json` (`allowed.languages`, `"backlog": "chosen"`),
+       `backlog.json` and an empty `order.json`, all at once**: written
+       into `users/.new-user-<random>` (no `@`, so `listUsers` never
+       counts it), then the folder is renamed into place.
+    6. **It refuses if the folder exists**, so it never replaces anyone,
+       and so **the server can keep running**: nothing else writes the
+       folder of someone with no account yet, and the server reads a
+       learner's files at each request. The check is made just before the
+       rename, not by it: Node has no rename that refuses to replace an
+       empty folder (Linux's `renameat2` with `RENAME_NOREPLACE`), so a
+       folder appearing in those microseconds, if empty, would be
+       replaced.
+    7. **`DRY_RUN=1`** shows the files and writes nothing.
+    `scripts/backlog.js` now splits `SLUGS` with `learner.js`'s
+    `splitList` too. Checked: 18 new tests (213 in all); 14 deliberately
+    broken versions, 13 caught. Two were missed at first and the tests
+    strengthened: a backlog sorted alphabetically (the test's names were
+    already in that order, and then a fix that was in creation order
+    instead, so three questions are now given in neither), and a
+    temporary folder whose name holds an `@` (the test now looks while
+    `createUser` writes, through a `toJSON` that `JSON.stringify` calls).
+    The one left can't behave differently: without the first existence
+    check, the second, just before the rename, refuses the same way. A
+    scenario against a real server, running throughout: a dry run that
+    writes nothing; `EMAIL=Tester@Example.COM` creating
+    `tester@example.com` (mode 755 like the others, no temporary folder
+    left); a second run refused before printing anything else; six
+    refusals; an invite and registration with no restart, then the
+    chosen questions offered, and a Submit bringing the second in; a
+    restart logging `(0 added)` and the check finding nothing.
+    **Later, maybe:** `TEMPLATE=other@example.com`, copying another
+    learner's languages and questions for a group starting the same way.
