@@ -39,13 +39,17 @@ Teaching them what you're doing comes first. Speed comes second.
   known gaps and decisions. Read it at the start of a session.
 - Keep it true: update it in the same commit as any change that makes it out
   of date, following its "Maintaining this file" section.
-- Also at the start of a session, read the newest
-  `docs/session-handoff/*.md`. Its name is a `YYYYMMDDTHHMMSS±HHMM`
-  timestamp in Pacific Time, the owner's zone (`-0800`, or `-0700` in
-  daylight saving time), so the last one by name is the newest. Name a new
-  one `docs/session-handoff/$(TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z).md`.
-  (Before 2026-11-05 they were `docs/session-handoff.<timestamp>.md`; older
-  handoffs still name each other that way.) It's a dated
+- Also at the start of a session, read the newest handoff of your role,
+  `docs/session-handoff/<role>/*.md`, and the architect's,
+  `docs/session-handoff/architect/*.md` (see "Roles"). A handoff's name is
+  a `YYYYMMDDTHHMMSS±HHMM` timestamp in Pacific Time, the owner's zone
+  (`-0800`, or `-0700` in daylight saving time), so the last one by name is
+  the newest. Name a new one
+  `docs/session-handoff/<role>/$(TZ=America/Los_Angeles date +%Y%m%dT%H%M%S%z).md`.
+  (Handoffs from before roles, 2026-11-05, are directly in
+  `docs/session-handoff/`; before that day's #68 they were
+  `docs/session-handoff.<timestamp>.md`, and the older ones still name
+  each other that way.) A handoff is a dated
   snapshot: where it disagrees with `readme.html`, `readme.html` wins.
 
 ### Documenting code
@@ -97,10 +101,17 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
 
 - Your role is stated in the first message of your session ("Role: users").
   If no role is stated, ask before making any changes.
-- Before starting work, read your role file, `docs/roles/architect.md`, and the most
-  recent `docs/session-handoff/<role>/*.md`.
-- Never edit files outside your role's ownership list. If you need such a
-  change, write it as a request in your handoff doc instead.
+- Before starting work, read your role file, `docs/roles/architect.md`, the most
+  recent `docs/session-handoff/<role>/*.md`, and the most recent
+  `docs/session-handoff/architect/*.md` (the architect's "state of the
+  project" summary). `<role>` is the role file's name without `.md`, e.g.
+  `infrastructure-and-security`.
+- Never edit files outside your role's ownership list, except the shared
+  files below. If you need such a change, write it as a request in your
+  handoff doc instead.
+- Shared files: any role may edit `readme.html`, and any role may propose a
+  change to `CLAUDE.md` (in its own pull request, saying so in the
+  description). The human approves and merges both.
 
 | Role      | Role file                 |
 |-----------|---------------------------|
