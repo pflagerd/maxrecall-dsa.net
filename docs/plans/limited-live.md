@@ -3,8 +3,8 @@
 Status: **step 1 done and deployed, 2026-11-04** (invites and `trust
 proxy`); **step 2 done, 2026-11-05** (the firewall: only SSH in); **step 3
 done, 2026-11-05**: the site is live at `https://maxrecallcode.net`, behind
-the shared Basic auth login (`docs/deploy-vps.md` §13). Next: step 5, then
-step 6 (backups, D5). Q1, Q2
+the shared Basic auth login (`docs/deploy-vps.md` §13); **step 4** (checks
+from outside) done the same day. Next: step 5, then step 6 (backups, D5). Q1, Q2
 and D1–D4 are answered and decided (below). D5 (the owner's idea of a git
 repository per user) is open; it's needed by step 6. Nothing is exposed
 to the internet yet. Linked from
@@ -456,4 +456,4 @@ the same change.
 | 2026-11-05 | Q3 settled in the other session: option (c), `make learner-create` (#57), which needs no server stop. Recorded above; the readme's `users.js` row and `users.js`'s comment no longer call `MAXRECALL_USER` the owner allowed to register (it's only the trusted port's owner since #52). |
 | 2026-11-05 | Q1 (owner): `maxrecallcode.com`, `.net` and `.org`, pointed at the VPS; no `www`. Which is the site's address is waiting for the owner (recommended `.com`). |
 | 2026-11-05 | Q1 (owner): `maxrecallcode.net` is the site; DNS checked by the owner for all three names (A and AAAA, the `.org` AAAA after a cache delay). Step 3 written as `docs/deploy-vps.md` §13 with `deploy/nginx-maxrecallcode.conf`, tested in the cloud; waiting for the owner to run it. |
-| 2026-11-05 | Step 3 run by the owner (#62, `docs/deploy-vps.md` §13): `https://maxrecallcode.net` asks for the shared Basic auth login, then the app's Register form; registering with an invite signed the owner in and showed their list. The owner's first account on the public site. §13 step 7's `curl` output wasn't reported. Next: step 5 (a second email of the owner's, `make learner-create` and `make invite`), then step 6 (backups, D5, and the note to testers). |
+| 2026-11-05 | Step 3 run by the owner (#62, `docs/deploy-vps.md` §13): `https://maxrecallcode.net` asks for the shared Basic auth login, then the app's Register form; registering with an invite signed the owner in and showed their list. The owner's first account on the public site. §13 step 7 from Kubuntu: `https://maxrecallcode.org/` gave `301 https://maxrecallcode.net/` (so the certificate covers it), `https://maxrecallcode.net/` `HTTP/2 401` with `strict-transport-security: max-age=86400`, and port 3000 timed out. That's step 4 (checks from outside) too. Next: step 5 (a second email of the owner's, `make learner-create` and `make invite`), then step 6 (backups, D5, and the note to testers). |
