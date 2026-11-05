@@ -46,6 +46,8 @@
     "scripts/backlog.js",
     "learner.js",
     "learner.test.js",
-    "scripts/learner-create.js"
+    "scripts/learner-create.js",
+    "playtest.js",
+    "playtest.test.js"
   ]
 }
