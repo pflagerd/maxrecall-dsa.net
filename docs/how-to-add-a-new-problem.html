@@ -106,38 +106,25 @@
 </ul>
 
 <h2 id="s3">3. Create the file from the template</h2>
-<p>Create <code>questions/&lt;name&gt;.json</code> and paste this in. It's a function-mode question in Python only. Every <code>…</code> is something to fill in at step 4.</p>
-<pre><code>{
-  "slug": "…",
-  "created": "…",
-  "title": "…",
-  "difficulty": "Easy",
-  "topics": ["…"],
-  "sources": [],
-  "description": {
-    "python": "&lt;p&gt;…&lt;/p&gt;"
-  },
-  "examples": {
-    "python": [
-      { "input": "…", "output": "…", "explanation": "…" }
-    ]
-  },
-  "constraints": {
-    "python": ["…"]
-  },
-  "starterCode": {
-    "python": "def …(…):\n    pass\n"
-  },
-  "functionName": {
-    "python": "…"
-  },
-  "testCases": [
-    { "args": […], "expected": …, "hidden": false }
-  ]
-}</code></pre>
+<p>Copy <code>docs/question-template.json</code> to your question's file, and change it. The template is the Python parts of <code>singly-linked-list-hello-world.json</code>, a working function-mode question with a node class, so a copy starts out valid and you change it rather than write it from nothing (owner's suggestion, 2026-11-05). It lives in <code>docs/</code>, not <code>questions/</code>: every file in <code>questions/</code> is a question, listed and given to learners.</p>
+<pre><code>cp docs/question-template.json questions/linked-list-from-values.json</code></pre>
+<ul>
+  <li><code>cp SOURCE DEST</code> copies the file (<a href="https://www.gnu.org/software/coreutils/manual/html_node/cp-invocation.html">cp</a>). Use your question's name in place of <code>linked-list-from-values</code>.</li>
+</ul>
+<p>What to change in the copy (step 4 says how):</p>
+<table>
+  <tr><th>Field</th><th>In the template</th><th>Change it to</th></tr>
+  <tr><td><code>slug</code></td><td><code>question-template</code></td><td>Your file's name, without <code>.json</code>.</td></tr>
+  <tr><td><code>created</code></td><td><code>2000-01-01T00:00:00Z</code>, a placeholder</td><td>Now, from <code>date -u</code>. <code>make test</code> fails while a question still has the template's.</td></tr>
+  <tr><td><code>title</code></td><td>“Question Template (change me)”</td><td>Yours. <code>make test</code> fails while it's still the template's.</td></tr>
+  <tr><td><code>difficulty</code>, <code>topics</code>, <code>sources</code></td><td>Easy; Linked List, Singly Linked List; none</td><td>Yours (for the worked example, they stay).</td></tr>
+  <tr><td><code>learning</code></td><td>Hello World's Learning tab</td><td>Rewrite it for your question, or delete the whole field: it's optional.</td></tr>
+  <tr><td><code>description</code>, <code>examples</code>, <code>constraints</code></td><td>Hello World's</td><td>Yours.</td></tr>
+  <tr><td><code>starterCode</code>, <code>functionName</code></td><td>The node class and <code>build_hello_world_list()</code></td><td>Your function (keep the node class if you use it); <code>functionName</code> its exact name.</td></tr>
+  <tr><td><code>testCases</code></td><td>One case: no arguments, the Hello → World! list</td><td>Yours (step 5).</td></tr>
+</table>
 <ul>
   <li>JSON has no comments, and every string is on one line: a line break inside starter code is written <code>\n</code>, a double quote <code>\"</code>.</li>
-  <li>The order of the fields doesn't matter; this order matches the other questions.</li>
 </ul>
 
 <h2 id="s4">4. Fill in the fields</h2>
@@ -243,7 +230,7 @@
 <ul class="checklist" id="checklist">
   <li><label><input type="checkbox" data-key="decided"><span> Decided what it teaches, its name, title, difficulty, topics and languages (1)</span></label></li>
   <li><label><input type="checkbox" data-key="branch"><span> On a new branch, <code>make test</code> passing (2)</span></label></li>
-  <li><label><input type="checkbox" data-key="file"><span> <code>questions/&lt;name&gt;.json</code> created from the template (3)</span></label></li>
+  <li><label><input type="checkbox" data-key="file"><span> <code>docs/question-template.json</code> copied to <code>questions/&lt;name&gt;.json</code> (3)</span></label></li>
   <li><label><input type="checkbox" data-key="fields"><span> Every field filled in, <code>created</code> from <code>date -u</code> (4)</span></label></li>
   <li><label><input type="checkbox" data-key="cases"><span> Test cases: ordinary, smallest, larger; visible ones as the examples (5)</span></label></li>
   <li><label><input type="checkbox" data-key="maketest"><span> <code>make test</code> passes (6)</span></label></li>

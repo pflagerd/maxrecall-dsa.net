@@ -34,6 +34,28 @@ for (const name of files) {
   });
 }
 
+// --- docs/question-template.json -------------------------------------------
+// The file to copy to start a question (docs/how-to-add-a-new-problem.html,
+// step 3): the Python parts of singly-linked-list-hello-world.json, with a
+// placeholder created time and title. It isn't in questions/, since every
+// file there is a question.
+
+const TEMPLATE_FILE = path.join(__dirname, 'docs', 'question-template.json');
+/** The template, parsed. @type {Record<string, any>} */
+const template = JSON.parse(fs.readFileSync(TEMPLATE_FILE, 'utf8'));
+
+test('docs/question-template.json follows the problem file format, so a copy starts valid', () => {
+  assert.deepEqual(checkQuestion(template, 'question-template.json'), []);
+});
+
+test('no question still has the template\'s placeholder created time or title (copied but not changed)', () => {
+  for (const name of files) {
+    const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    assert.notEqual(question.created, template.created, `${name}: created is still the template's, ${template.created}: use date -u +%Y-%m-%dT%H:%M:%SZ`);
+    assert.notEqual(question.title, template.title, `${name}: title is still the template's`);
+  }
+});
+
 // --- checkQuestion's rules, each broken on purpose ---------------------------
 
 /**
