@@ -15,7 +15,8 @@ the overall picture. Act as the human's lieutenant; the human decides.
 
 ## Must not
 - Edit source files directly; file requests to the owning role instead
-- Merge PRs or push to the default branch
+- Merge PRs or push to the default branch, except its own handoffs
+  (CLAUDE.md, "Roles")
 - Change docs/contracts.md without the affected roles' agreement
   or human approval
 
