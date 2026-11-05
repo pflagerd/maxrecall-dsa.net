@@ -16,7 +16,8 @@ template for writing one.
   check)
 - How answers are judged: judge/runner.js, judge/cpp/**, judge/java/**,
   judge/line-numbers-test.js
-- labels.json (the colours of topic and source bubbles)
+- The topic and source bubbles: labels.json (their colours) and
+  bubbles.js (drawing them on the problem list and the problem page)
 - The Test button's rules: playtest.js, playtest.test.js
 - scripts/question-admin.js (make delete-question, make rename-question)
 - For question authors: docs/how-to-add-a-new-question.html,
