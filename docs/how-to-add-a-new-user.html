@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adding a New User</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --panel: #f6f8fa; --code-bg: #eff2f5; --accent: #0b5cad; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+      --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+    --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
+  main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 16px 4rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; }
+  h2 { margin-top: 2.5rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h3 { margin-top: 1.6rem; }
+  a { color: var(--accent); }
+  .subtitle { color: var(--muted); margin: 0 0 1.5rem; }
+  code { font: .9em/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: var(--code-bg); padding: .1em .3em; border-radius: 4px; }
+  pre { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .copy { position: absolute; top: .4rem; right: .4rem; font: 12px system-ui, sans-serif; padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .note, .example-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: .6rem 1rem; margin: 1rem 0; }
+  .warn { border-left-color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  ol.steps > li { margin: .3rem 0; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: .35rem 0; }
+  .checklist label { cursor: pointer; }
+  .checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+  .stamp { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .stamp output { font: 1rem ui-monospace, monospace; background: var(--code-bg); padding: .25rem .5rem; border-radius: 4px; }
+  button.action { font: inherit; padding: .25rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .status { font-size: .9rem; color: var(--muted); }
+  .theme { float: right; }
+</style>
+</head>
+<body>
+<main>
+
+<button class="action theme" type="button" id="theme-toggle" aria-label="Switch between light and dark">Light / dark</button>
+<h1>Adding a new user</h1>
+<p class="subtitle">How to give someone, a tester included, an account on MaxRecall DSA: their languages and first questions, their invite, what to send them, and what to do later (more questions, a forgotten password, taking them off). Open this file straight from disk; it needs no server.</p>
+
+<div class="note">
+  <p><strong>Status:</strong> written 2026-11-05, for the first testers of <a href="https://maxrecallcode.net">https://maxrecallcode.net</a> (limited-live plan, steps 5 and 6). The first time through is a rehearsal, with a second email address of your own.</p>
+  <p>The authorities are <code>docs/deploy-vps.md</code> (§4 invites, §11 a new tester, §13 the site and its shared login) and <code>readme.html</code>, “Where data lives”; the code is <code>auth.js</code> (invites, registering), <code>learner.js</code> and <code>scripts/learner-create.js</code> (a new learner's files). This page explains them; where they disagree, they win.</p>
+</div>
+
+<h2 id="what">What a user is</h2>
+<p>Two separate halves, made at different times:</p>
+<table>
+  <tr><th>Half</th><th>Where (on the VPS)</th><th>Made by</th></tr>
+  <tr><td><strong>Their learning</strong>: languages, queue, backlog, Submit records</td><td><code>/srv/maxrecall/data/users/&lt;email&gt;/</code></td><td>You, with <code>make learner-create</code> (step 2), before they've done anything; a git repository from step 3</td></tr>
+  <tr><td><strong>Their sign-in</strong>: a password hash, and sessions</td><td><code>/srv/maxrecall/data/auth/accounts/&lt;email&gt;.json</code>, <code>auth/sessions/</code></td><td>Them, registering with your invite (steps 4 and 6)</td></tr>
+</table>
+<p>Both are named by their email <strong>in lower case</strong>: registering lower-cases it (<code>auth.js</code>, <code>normalizeEmail</code>), and so does <code>make learner-create</code>. In front of both, every visitor first gets nginx's <strong>shared</strong> login (Basic auth, <code>docs/deploy-vps.md</code> §13), the same username and password for everyone, while testing is limited.</p>
+<p>Without step 2 a new user still works, but with no <code>profile.json</code> they get every question in all five languages waiting for them (<code>"backlog": "all"</code>). Step 2 gives them only the languages and questions you choose.</p>
+
+<h2 id="steps">The steps, for a tester on the VPS</h2>
+<ol class="steps">
+  <li><a href="#s1">Decide their email, languages and first questions</a></li>
+  <li><a href="#s2">Set them up: <code>make learner-create</code></a></li>
+  <li><a href="#s3">Make their folder a git repository</a></li>
+  <li><a href="#s4">Make their invite: <code>make invite</code></a></li>
+  <li><a href="#s5">Send them what they need</a></li>
+  <li><a href="#s6">They register</a></li>
+  <li><a href="#s7">Check it as them</a></li>
+</ol>
+<p>Then: <a href="#kubuntu">on Kubuntu</a>, <a href="#later">later changes</a>, <a href="#owner">your own account</a>, <a href="#shared">the shared login</a>, <a href="#limits">what testers can and can't do</a> and the <a href="#checklist">checklist</a>.</p>
+<p>All the VPS commands are run as root on the VPS, <code>srv702017.hstgr.cloud</code>, from the service's checkout:</p>
+<pre><code>cd /srv/maxrecall/maxrecall-dsa.net</code></pre>
+<p>The server keeps running for all seven steps.</p>
+
+<h2 id="s1">1. Decide their email, languages and first questions</h2>
+<ul>
+  <li><strong>Their email</strong>, exactly as they'll type it when registering (case doesn't matter). It's their username in the app.</li>
+  <li><strong>Their languages</strong>: one or more of <code>javascript</code>, <code>python</code>, <code>cpp</code>, <code>java</code>, <code>d</code>. The first is their default. They can't turn on any others.</li>
+  <li><strong>Their first questions</strong>, in the order they'll get them. Several: questions added later only come in at their next Submit or Skip. To see every question's name:</li>
+</ul>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=daniel.pflager@gmail.com</code></pre>
+<ul>
+  <li>Lists your own queue and backlog, then every question with where its pairs are. It only reads. Any existing user's email will do.</li>
+</ul>
+
+<h2 id="s2">2. Set them up: <code>make learner-create</code></h2>
+<p>First a dry run, which writes nothing:</p>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum" DRY_RUN=1</code></pre>
+<ul>
+  <li><code>sudo -u maxrecall</code>: as the service's user, so the files are its own (<a href="https://www.sudo.ws/docs/man/sudo.man/">sudo(8)</a>).</li>
+  <li><code>env MAXRECALL_USERS_DIR=…</code>: the service's users folder. Without it the files would go into the checkout's own <code>users/</code>, which the service never reads.</li>
+  <li><code>EMAIL</code>, <code>LANGUAGES</code> (<code>"python java"</code> for two) and <code>SLUGS</code> (quoted, separated by spaces): from step 1. Each question goes in once for each of their languages it has.</li>
+  <li><code>DRY_RUN=1</code>: shows the <code>profile.json</code> and backlog it would write.</li>
+</ul>
+<p>If it's right, the same without <code>DRY_RUN=1</code>:</p>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum"</code></pre>
+<ul>
+  <li>Writes their folder with <code>profile.json</code> (<code>allowed.languages</code>, and <code>"backlog": "chosen"</code>: the server adds nothing to their backlog by itself), an empty <code>order.json</code> and their <code>backlog.json</code>, all at once.</li>
+  <li>It refuses, changing nothing, if their folder exists already: they're set up, or have used the app. See <a href="#later">later changes</a> instead.</li>
+</ul>
+<p>Check it (only reads):</p>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=tester@example.com</code></pre>
+<ul>
+  <li>The first line should say <code>backlog "chosen"; languages turned on: python</code>, then an empty queue and their questions in the backlog.</li>
+</ul>
+
+<h2 id="s3">3. Make their folder a git repository</h2>
+<p>So their work has a history, and can be copied off the VPS (limited-live D5, the owner's idea). Their folder now holds only its three starting files, so the first commit is small.</p>
+<pre><code>cd /srv/maxrecall/data/users/tester@example.com</code></pre>
+<pre><code>sudo -u maxrecall git init -b master</code></pre>
+<ul>
+  <li><strong>Every git command as <code>maxrecall</code></strong>, who owns the folder. Run as root, <code>.git</code> would be root's, and <code>maxrecall</code> couldn't commit to it later; and git refuses to work as root in a repository another user owns (“detected dubious ownership”, git's <code>safe.directory</code> check; tested with git 2.43.0, Ubuntu 24.04's).</li>
+  <li><code>-b master</code> names the first branch, so it matches the push below whatever git's default is (<a href="https://git-scm.com/docs/git-init#Documentation/git-init.txt--bltbranch-namegt">git-init</a>).</li>
+</ul>
+<pre><code>printf '*.tmp-*\n' | sudo -u maxrecall tee .gitignore &gt;/dev/null</code></pre>
+<ul>
+  <li>The server writes each file as <code>&lt;name&gt;.tmp-&lt;number&gt;</code>, then renames it into place (<code>users.js</code>, <code>writeUserFile</code>); this keeps a half-written one out of any commit. <code>tee</code> writes the file as <code>maxrecall</code> (a plain <code>&gt;</code> would write it as root).</li>
+</ul>
+<pre><code>sudo -u maxrecall git config user.name "MaxRecall VPS"</code></pre>
+<pre><code>sudo -u maxrecall git config user.email "maxrecall@srv702017.hstgr.cloud"</code></pre>
+<ul>
+  <li>Who the commits are by, for this repository only. <code>maxrecall</code> has none, and without one the commit stops with “Please tell me who you are”. It's only a label; the address needn't receive mail.</li>
+</ul>
+<pre><code>sudo -u maxrecall git add .</code></pre>
+<pre><code>sudo -u maxrecall git commit -m "new user initial commit"</code></pre>
+<ul>
+  <li>Should commit <code>.gitignore</code>, <code>backlog.json</code>, <code>order.json</code> and <code>profile.json</code>. The app ignores the <code>.git</code> folder: it only reads the files it knows (checked with <code>make consistency-check</code>: “nothing found”).</li>
+</ul>
+<h3>Then copy it to Kubuntu [Kubuntu]</h3>
+<p>Kubuntu <strong>pulls</strong> from the VPS (limited-live D5, option B, owner's choice, 2026-11-05). Nothing is pushed from the VPS and it holds no credentials, so there's no <code>git remote add</code> or <code>git push</code> on the VPS, and testers' data stays on your own machines. In a folder of your choosing outside the app's checkout, say <code>~/maxrecall-backups/vps-users</code>:</p>
+<pre><code>mkdir -p ~/maxrecall-backups/vps-users</code></pre>
+<pre><code>git clone --upload-pack='sudo -u maxrecall git-upload-pack' -c remote.origin.uploadpack='sudo -u maxrecall git-upload-pack' root@srv702017.hstgr.cloud:/srv/maxrecall/data/users/tester@example.com ~/maxrecall-backups/vps-users/tester@example.com</code></pre>
+<ul>
+  <li>You connect as root, but the repository is <code>maxrecall</code>'s, and git on the VPS refuses to send it to root (“detected dubious ownership”). <code>--upload-pack='sudo -u maxrecall git-upload-pack'</code> makes the VPS run git's sending side as <code>maxrecall</code> instead (<a href="https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---upload-packltupload-packgt">git-clone</a>). Root needs no password for <code>sudo</code>.</li>
+  <li><code>-c remote.origin.uploadpack=…</code> saves the same in the copy, for every later pull: <code>--upload-pack</code> on its own is used for the clone only, and a later <code>git pull</code> is refused again (tested).</li>
+  <li>The <code>@</code> in the email is fine: only the part before the <code>:</code> is read as user and host (tested 2026-11-04).</li>
+</ul>
+<p>Later, to bring their new commits over:</p>
+<pre><code>git -C ~/maxrecall-backups/vps-users/tester@example.com pull --ff-only</code></pre>
+<p>Or every user at once:</p>
+<pre><code>for d in ~/maxrecall-backups/vps-users/*/; do git -C "$d" pull --ff-only; done</code></pre>
+<ul>
+  <li><code>--ff-only</code>: the copy only ever follows the VPS, so a pull that would need a merge is refused rather than made.</li>
+</ul>
+<div class="note">
+  <p><strong>Tested</strong> (cloud, git 2.43.0) with a repository owned by another user, over <code>file://</code>, which uses the same upload-pack setting as SSH:</p>
+  <ul>
+    <li>a plain clone as root was refused (“dubious ownership”);</li>
+    <li>the clone above worked;</li>
+    <li>after a new commit on the VPS side, a plain <code>git pull --ff-only</code> brought it over.</li>
+  </ul>
+  <p>Not tested over real SSH to the VPS.</p>
+  <p><strong>With git-nested</strong> (your own tool): whatever it runs to fetch from the VPS must run git's sending side as <code>maxrecall</code> there, as these commands do, or it gets the same refusal.</p>
+</div>
+<div class="note warn">
+  <p><strong>Not yet automatic:</strong> this step commits only the <em>starting</em> files. Their later work reaches their repository only once something commits it periodically on the VPS: <a href="https://github.com/pflagerd/maxrecall-dsa.net/issues/64">issue #64</a>. Until then, a pull brings over only this first commit.</p>
+</div>
+
+<h2 id="s4">4. Make their invite: <code>make invite</code></h2>
+<pre><code>sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EMAIL=tester@example.com</code></pre>
+<ul>
+  <li><code>MAXRECALL_AUTH_DIR</code> (sign-in data) this time, not <code>MAXRECALL_USERS_DIR</code> (learning data).</li>
+  <li>It prints a code, <strong>shown only now</strong>: only its SHA-256 is stored. It works <strong>once</strong>, for <strong>this email only</strong>, for <strong>7 days</strong>.</li>
+  <li>It refuses if you're not the user who owns the sign-in folder, so the server can always read the invite. Run as root without <code>sudo -u maxrecall</code>, it says so.</li>
+  <li>Lost or expired: run it again. A new invite replaces the old one; their folder doesn't change.</li>
+</ul>
+
+<h2 id="s5">5. Send them what they need</h2>
+<p>Four things: the address, the shared login, their code, and the email to register with. A draft, to edit before sending. It also says what's stored about them (the limited-live plan's D5: a note to testers). That's a courtesy, not legal advice: whether anything more is needed depends on where they live.</p>
+<pre><code>Hello,
+
+You're invited to try MaxRecall DSA, a practice site for data
+structures and algorithms that I'm building. It's early, so expect
+rough edges, and please tell me about them.
+
+1. Open https://maxrecallcode.net
+2. Your browser asks for a username and password first. That's a
+   shared login for everyone testing:
+     username: tester
+     password: (I'll send it separately)
+3. On the site's own page, choose Register and enter:
+     email:       tester@example.com   (exactly this one)
+     invite code: PASTE-THE-CODE-HERE  (works once, for 7 days)
+     password:    one of your own, at least 12 characters
+4. You'll see your list of questions. Where a question has a
+   Learning tab, read it first.
+
+What's kept: your email, a hash of your password (never the password
+itself), and what you submit (your code, results and times), on my
+server. I can read all of it; nobody else is given it. Tell me if you
+want it deleted.
+
+Thanks!</code></pre>
+<ul>
+  <li>Send the shared login's password by a different route from the code (another message, or tell them), so one leaked message isn't enough.</li>
+  <li>Replace <code>tester</code> with the username you chose in <code>docs/deploy-vps.md</code> §13, step 5, if it's different.</li>
+</ul>
+
+<h2 id="s6">6. They register</h2>
+<p>At <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a>, after the shared login: email, invite code and a password of their own (at least 12 characters). Registering signs them in, deletes the invite, and shows their list. Sessions last 360 days.</p>
+<p>Every refusal gives one message, “Registration isn't open for that email and invite code.”, whatever the reason: a wrong email, a wrong or expired code, a used one. That's deliberate (it reveals nothing to someone guessing). The usual causes: a different email from the one invited, or a code copied with a character missing. A too-short password gets its own message. After 5 refusals for one email, each try waits longer (up to 15 minutes); restarting the server clears that.</p>
+
+<h2 id="s7">7. Check it as them</h2>
+<p>For the rehearsal with your own second email, or to see what a tester sees: open <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a> in a <strong>private window</strong>. In a normal window the new sign-in would replace yours: browsers keep one cookie per site.</p>
+<ul>
+  <li>The header shows their email.</li>
+  <li>The list shows their chosen questions, in their languages, marked <strong>new</strong>.</li>
+  <li>The language menu offers only their languages.</li>
+  <li>There's no <strong>Test</strong> button: that's only yours (<code>MAXRECALL_USER</code>).</li>
+</ul>
+
+<h2 id="kubuntu">On Kubuntu (your own machine)</h2>
+<p>The same two commands, without <code>sudo</code> or <code>env</code>: on Kubuntu the folders are the checkout's own <code>users/</code> and <code>auth/</code>.</p>
+<pre><code>make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum"</code></pre>
+<pre><code>make invite EMAIL=tester@example.com</code></pre>
+<ul>
+  <li>Step 3 the same way, in <code>users/tester@example.com</code>, as yourself: <code>git init -b master</code>, the <code>.gitignore</code>, <code>git add .</code> and <code>git commit</code>. Your own git identity is used, so no <code>git config</code>. The app checkout's own <code>.gitignore</code> leaves <code>users/</code> out (<code>/users/</code>), so the checkout's git never sees the learner's repository inside it.</li>
+</ul>
+<pre><code>make dev</code></pre>
+<ul>
+  <li>Then register at <a href="http://localhost:3000/login.html#register">http://localhost:3000/login.html#register</a>. There's no shared login on Kubuntu: that's nginx's, on the VPS.</li>
+</ul>
+
+<h2 id="later">Later changes</h2>
+
+<h3>More questions</h3>
+<p>The server must be stopped for this (a Submit rewrites <code>backlog.json</code> too), so the site is down for everyone for those seconds:</p>
+<pre><code>systemctl stop maxrecall-dsa.test.service</code></pre>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=tester@example.com SLUGS="climbing-stairs" DRY_RUN=1</code></pre>
+<ul>
+  <li><code>AT=1</code> puts them at the front of the backlog instead of the end. If <code>Backlog after (…)</code> is right, run it again without <code>DRY_RUN=1</code>. <code>make backlog-remove</code> takes questions out the same way.</li>
+</ul>
+<pre><code>systemctl start maxrecall-dsa.test.service</code></pre>
+<p>What's added comes into their queue at their next Submit or Skip (<code>docs/deploy-vps.md</code> §10).</p>
+
+<h3>The invite ran out before they registered</h3>
+<p>Run step 4 again, and send the new code.</p>
+
+<h3>A forgotten password</h3>
+<p>There's no reset page. Delete their sign-in, <strong>sessions included</strong>, and invite them again. Their learning (queue, records) is untouched:</p>
+<pre><code>grep -l -F '"email":"tester@example.com"' /srv/maxrecall/data/auth/sessions/*.json | xargs -r rm --</code></pre>
+<ul>
+  <li>A session file holds its email as <code>"email":"…"</code> (<code>auth.js</code>, <code>createSession</code>). <code>grep -l</code> lists the files that contain it, <code>-F</code> takes the text literally (the dots aren't wildcards), and <code>xargs -r rm --</code> deletes them, doing nothing if there are none (<a href="https://manpages.ubuntu.com/manpages/noble/man1/grep.1.html">grep(1)</a>, <a href="https://manpages.ubuntu.com/manpages/noble/man1/xargs.1.html">xargs(1)</a>).</li>
+  <li>Why sessions too: deleting only the account leaves any browser already signed in as them working, for up to 360 days, because a session is checked against its own file, not the account (<code>readme.html</code>, “Known gaps”).</li>
+</ul>
+<pre><code>rm /srv/maxrecall/data/auth/accounts/tester@example.com.json</code></pre>
+<p>Then step 4 (a new invite) and steps 5–6 (they register again, with a new password).</p>
+
+<h3>Taking someone off</h3>
+<p>Sign them out and remove their account (the two commands just above), then put their learning folder aside rather than deleting it:</p>
+<pre><code>mv /srv/maxrecall/data/users/tester@example.com /srv/maxrecall/data/archive/tester@example.com.$(date -u +%Y%m%dT%H%M%SZ)</code></pre>
+<ul>
+  <li>Into <code>archive/</code>, outside <code>users/</code>: the server counts every folder in <code>users/</code> named like an email as a user. <code>date -u +…</code> adds the UTC time to the name (<code>docs/deploy-vps.md</code> §10).</li>
+  <li>No server stop needed: with their sessions and account gone, nothing can ask for their files any more.</li>
+  <li>If they asked for their data to be deleted, delete the archived folder too (and any copy on Kubuntu).</li>
+</ul>
+
+<h2 id="owner">Your own account</h2>
+<p>Through the SSH tunnel's trusted port you need none: every request there is you. On the public site you do, like anyone else. Your learning folder already exists, so skip step 2: <code>make invite EMAIL=daniel.pflager@gmail.com</code> (step 4), then register. Step 3 applies to your folder too; its first commit then holds your records so far. Being <code>MAXRECALL_USER</code> gives you the <strong>Test</strong> button there too.</p>
+
+<h2 id="shared">The shared login</h2>
+<p>One username and password, in <code>/etc/nginx/maxrecall.htpasswd</code>, keep strangers away from the app altogether while testing is limited (the limited-live plan's D3). It isn't per person: who someone is comes from their own sign-in.</p>
+<ul>
+  <li><strong>To change it</strong> (everyone then needs the new one): <code>docs/deploy-vps.md</code> §13, step 5 again.</li>
+  <li><strong>To give someone a login of their own</strong>, so you can take it away without changing everyone's, add a line rather than replacing the file:</li>
+</ul>
+<pre><code>printf 'alice:%s\n' "$(openssl passwd -6)" &gt;&gt; /etc/nginx/maxrecall.htpasswd</code></pre>
+<ul>
+  <li><code>&gt;&gt;</code> appends; <code>&gt;</code> would replace everyone's. <code>openssl passwd -6</code> asks for the password twice and prints its hash. Remove that line to take it away.</li>
+  <li>Either change works at once, with no reload: nginx reads the file at each request (tested with Ubuntu 24.04's nginx 1.24.0, 2026-11-05: a line added let that login in, the others kept working, and removing it shut it out again).</li>
+</ul>
+
+<h2 id="limits">What testers can and can't do</h2>
+<ul>
+  <li>They can use only their languages: the menu offers no others, and the server refuses Run and Submit in any other (403).</li>
+  <li>Their list and Next offer only their chosen questions, but a question opened by its address (<code>problem.html?slug=…</code>) is still accepted, and a Submit then puts it in their queue (<code>docs/deploy-vps.md</code> §11).</li>
+  <li>Only you can Test.</li>
+  <li>Their code runs in the judge's sandbox (<code>readme.html</code>, “Judging”). You decided to let testers you trust in before the remaining sandbox work (limited-live D4).</li>
+  <li>Until there's a backup (limited-live D5), their work exists only on the VPS.</li>
+</ul>
+
+<h2 id="checklist">Checklist</h2>
+<p class="status" id="checklist-status">Ticks are kept in this browser only.</p>
+<ul class="checklist" id="checklist">
+  <li><label><input type="checkbox" data-key="decided"><span> Decided their email, languages and first questions (1)</span></label></li>
+  <li><label><input type="checkbox" data-key="created"><span> <code>make learner-create</code>, dry run then for real, and <code>make backlog-show</code> checked (2)</span></label></li>
+  <li><label><input type="checkbox" data-key="git"><span> Their folder a git repository, first commit made, as <code>maxrecall</code> (3)</span></label></li>
+  <li><label><input type="checkbox" data-key="invite"><span> <code>make invite</code> run, code noted (4)</span></label></li>
+  <li><label><input type="checkbox" data-key="sent"><span> Sent the address, the shared login (password separately), the code and the email (5)</span></label></li>
+  <li><label><input type="checkbox" data-key="registered"><span> They've registered (6)</span></label></li>
+  <li><label><input type="checkbox" data-key="checked"><span> Checked as them, in a private window (7)</span></label></li>
+</ul>
+<button class="action" type="button" id="checklist-clear">Clear the ticks</button>
+
+</main>
+<script>
+'use strict';
+
+/**
+ * Copies text to the clipboard: the Clipboard API where the browser allows
+ * it (a page opened from disk may not count as secure), otherwise a hidden
+ * text area and the older copy command.
+ *
+ * @param {string} text - What to copy.
+ * @returns {Promise<boolean>} Whether it was copied.
+ */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+}
+
+/**
+ * Shows "Copied" (or "Select and copy") on a button for a moment.
+ *
+ * @param {HTMLButtonElement} button - The button.
+ * @param {boolean} ok - Whether the copy worked.
+ * @returns {void}
+ */
+function flash(button, ok) {
+  const label = button.textContent;
+  button.textContent = ok ? 'Copied' : 'Select and copy';
+  setTimeout(
+    /**
+     * Puts the button's label back.
+     *
+     * @returns {void}
+     */
+    () => {
+      button.textContent = label;
+    },
+    1500,
+  );
+}
+
+// A Copy button on every code block.
+document.querySelectorAll('pre').forEach(
+  /**
+   * Adds a Copy button to one code block.
+   *
+   * @param {HTMLPreElement} pre - The block.
+   * @returns {void}
+   */
+  (pre) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy';
+    button.textContent = 'Copy';
+    button.addEventListener(
+      'click',
+      /**
+       * Copies the block's text.
+       *
+       * @returns {Promise<void>} Resolves when done.
+       */
+      async () => {
+        const code = pre.querySelector('code');
+        flash(button, await copyText((code || pre).textContent || ''));
+      },
+    );
+    pre.appendChild(button);
+  },
+);
+
+// The checklist, kept in this browser's localStorage, if it can be: a page
+// opened from disk, a private window or blocked storage may not allow it,
+// and then the ticks just aren't kept.
+const CHECKLIST_KEY = 'maxrecall-dsa:how-to-add-a-new-user:checklist';
+const boxes = /** @type {HTMLInputElement[]} */ (Array.from(document.querySelectorAll('#checklist input')));
+const checklistStatus = /** @type {HTMLElement} */ (document.getElementById('checklist-status'));
+
+/**
+ * The ticks kept in this browser.
+ *
+ * @returns {Record<string, boolean> | null} By checkbox key, or null if
+ *   storage can't be used.
+ */
+function loadTicks() {
+  try {
+    return JSON.parse(localStorage.getItem(CHECKLIST_KEY) || '{}');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keeps the ticks, if storage allows.
+ *
+ * @returns {void}
+ */
+function saveTicks() {
+  /** @type {Record<string, boolean>} */
+  const ticks = {};
+  for (const box of boxes) ticks[/** @type {string} */ (box.dataset.key)] = box.checked;
+  try {
+    localStorage.setItem(CHECKLIST_KEY, JSON.stringify(ticks));
+  } catch {
+    checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+  }
+}
+
+const ticks = loadTicks();
+if (ticks === null) checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+for (const box of boxes) {
+  if (ticks && ticks[/** @type {string} */ (box.dataset.key)]) box.checked = true;
+  box.addEventListener('change', saveTicks);
+}
+/** @type {HTMLButtonElement} */ (document.getElementById('checklist-clear')).addEventListener(
+  'click',
+  /**
+   * Clears every tick.
+   *
+   * @returns {void}
+   */
+  () => {
+    for (const box of boxes) box.checked = false;
+    saveTicks();
+  },
+);
+
+/** @type {HTMLButtonElement} */ (document.getElementById('theme-toggle')).addEventListener(
+  'click',
+  /**
+   * Switches between light and dark, starting from what's shown now.
+   *
+   * @returns {void}
+   */
+  () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+  },
+);
+</script>
+</body>
+</html>
