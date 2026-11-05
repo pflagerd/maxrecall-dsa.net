@@ -12,15 +12,21 @@ This handoff is from the session that worked on **limited live testing**
 (`docs/plans/limited-live.md`). It replaces
 `session-handoff.20261104T200035-0800.md`, from this session the evening
 before, which predates the how-to-add-a-new-user page and D5's decisions.
-Another session works on questions and learners at the same time (spaced
-repetition, Test, how to add a problem); its state is in
-`docs/plans/spaced-repetition.md`, `docs/plans/playtest.md` and the readme.
+
+**Two sessions, two areas** (owner, 2026-11-05): the other session does
+**users and questions**; this one does **accesses, security and such**.
+The other session's handoff, written a minute earlier, is
+`session-handoff.20261105T072149-0800.md` (#67): read it too. It still
+calls this session's 20:00 handoff its latest; this one replaces that.
+Its state is also in `docs/plans/spaced-repetition.md`,
+`docs/plans/playtest.md` and the readme.
 
 ## State at this time
 
-- `master` at `c378b08`, plus this file. `make test`: 240 tests;
-  `make typecheck` and `make doc-check` pass (run on that commit for this
-  handoff). No pull request of this session's is open.
+- `master` at `4e2b2ef` (the other session's handoff, #67), plus this
+  file. `make test`: 240 tests; `make typecheck` and `make doc-check` pass
+  (run on `c378b08`; #67 added only a Markdown file). No pull request of
+  this session's is open.
 - **The site is live at <https://maxrecallcode.net>** (limited-live steps
   1–4 done, #52, #55, #62). `maxrecallcode.com` and `.org` redirect there;
   no `www`. A visitor gets nginx's shared Basic auth login first (D3), then
@@ -42,7 +48,9 @@ repetition, Test, how to add a problem); its state is in
   - Kernel `6.8.0-147-generic`, the newest offered (D4 holds); security
     updates install themselves daily; 187 ordinary updates wait.
 - **Adding a user or tester: `docs/how-to-add-a-new-user.html`** (#63),
-  in the style of `docs/how-to-add-a-new-problem.html`. Seven steps on the
+  in the style of `docs/how-to-add-a-new-question.html` (renamed from
+  `how-to-add-a-new-problem.html` in #66; its checklist's storage key
+  still says `new-problem`, the other session's call). Seven steps on the
   VPS, all with the server running: decide; `make learner-create`; make
   their folder a git repository (step 3); `make invite`; what to send them
   (a draft message that also says what's stored about them, D5's note to
@@ -72,7 +80,11 @@ repetition, Test, how to add a problem); its state is in
 
 - **Plan step 5:** the rehearsal tester, following the new page. Expect
   fixes to the page from it; the Kubuntu clone over SSH is its least
-  tested part.
+  tested part. **Both handoffs list this** (the other as "§11 on the VPS
+  … not tried yet"): it's the overlap between users and access. Whichever
+  session the owner uses for it, record the outcome in the plan and the
+  readme, so the other sees it. My suggestion: this session's, since the
+  page, the invite and the shared login are access.
 - **Issue #64**, then the rest of plan step 6 (backups), before real
   testers.
 - **Later, the owner's call:** HSTS from a day to a year; the 187 updates
@@ -118,6 +130,19 @@ repetition, Test, how to add a problem); its state is in
   - Headless Chromium checks for a docs page: wait for an asynchronous
     Copy before reading the clipboard (without the wait, 1 of 15 looked
     copied on a page that works).
+- The other session's rules, which hold here too:
+  - once a branch is pushed, **merge `master` into it, never rebase**
+    (rebasing needs a force-push; no `--force-with-lease` either);
+  - keep `git push` a separate step, never chained after a merge that
+    might stop on a conflict;
+  - before opening a PR, `git merge-tree --write-tree --name-only HEAD
+    origin/master` (exit 0 is clean);
+  - on the VPS, run git in `/srv/maxrecall/maxrecall-dsa.net` as
+    `maxrecall` (`sudo -u maxrecall git -C …`), as for the user
+    repositories; the VPS clock is UTC;
+  - exact replacements that assert one match, not `sed 's/…/…/'`;
+  - every inline function with a `{ … }` body gets a comment block, also
+    in an HTML page's script, which `make doc-check` doesn't read.
 - Two sessions push to `master` at once: **fetch `master` before every
   commit, and stop if it moved.** Conflicts so far: both sides adding a top
   row to the readme's Decisions table, "Last updated", a section at the end
