@@ -186,7 +186,10 @@ File owner: users. Reviewer: infrastructure and security.
   - the `/api/auth/*` routes (`register`, `login`, `logout`, `me`);
   - the gate: `PUBLIC_PATHS`, and the 401 or the redirect to the login
     page for everything else not signed in;
-  - what's served: `STATIC_FILES`, and the fallback to `index.html`;
+  - what's answered for a URL no route claims: the 404 with JSON for
+    any other `/api/` URL (`app.all('/api/*', …)`), `STATIC_FILES`, and
+    the fallback to `index.html`, in that order, after every feature
+    route;
   - listening: `PORT`, `HOST`, `TRUSTED_PORT` (`trustedServer`, bound to
     `127.0.0.1`), and `trust proxy`.
 - **Relied on**:
@@ -196,6 +199,8 @@ File owner: users. Reviewer: infrastructure and security.
   - Only `PUBLIC_PATHS` are reachable without signing in.
   - Only `STATIC_FILES` are served as files: never the server's source,
     `.env`, `users/` or `auth/`.
+  - An `/api/` URL no route claims gets a 404 with JSON, never the
+    fallback's `index.html` with a 200.
   - The trusted listener, where there's no sign-in, is reachable only
     from the machine itself.
 - **The rule**: a users change that touches the sign-in layer, or adds
