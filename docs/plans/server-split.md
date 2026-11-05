@@ -82,8 +82,9 @@ not the repo, unless the owner decides to keep it (see "Open").
 - `server.js` keeps `OWNER_EMAIL` (who the trusted port is) and
   `USERS_DIR` (the startup log) from `users.js`; these become contract
   7's.
-- Add `routes.js` to `tsconfig.json`'s `files` (see "Open": it's
-  infrastructure and security's file).
+- Add `routes.js` to `tsconfig.json`'s `files`. That's infrastructure
+  and security's file: the owner allows this one line in this pull
+  request as a one-time exception (see "Decided").
 - Infrastructure and security reviews the pull request (contract 9: it
   touches the sign-in layer).
 
@@ -118,20 +119,23 @@ is stricter than the end state, never looser.
 - `docs/contracts.md`'s check script, if kept: `server.js` and
   `routes.js` in the right roles.
 
-## Open, for the owner
+## Decided (owner, 2026-11-05)
 
-- **`tsconfig.json`** is infrastructure and security's, and step 2 can't
-  wait for it: TypeScript fails on a listed file that doesn't exist yet
-  (`TS6053`), and an unlisted `routes.js` breaks `CLAUDE.md`'s rule that
-  documented files are listed. Recommendation: let step 2's pull request
-  add the one line, as a one-time exception the owner states in its
-  review, with infrastructure and security reviewing it anyway
-  (contract 9).
-- **Keep the characterization check?** As a permanent test (e.g.
+- **`tsconfig.json`**, yes, a one-time exception. It's infrastructure
+  and security's, and step 2 can't wait for it: TypeScript fails on a
+  listed file that doesn't exist yet (`TS6053`), and an unlisted `routes.js` breaks `CLAUDE.md`'s rule that
+  documented files are listed. So step 2's pull request adds the one
+  line; the owner says so again in its review, and infrastructure and
+  security reviews it anyway (contract 9). This allows that one line,
+  not other changes to infrastructure and security's files.
+- **Keep the characterization check?** Decided later, after step 3,
+  once it's been useful once. As a permanent test (e.g.
   `server-routes.test.js`, run by `make test`) it would guard every later
   change to the routes; it needs a `Makefile` change (infrastructure and
-  security's) and an owner for the test file. Recommendation: decide
-  after step 3, once it's been useful once.
+  security's) and an owner for the test file.
+
+## Open
+
 - **The name** `routes.js`: fine as long as it's the only router; if
   questions later takes the judging routes (run, submit, test), they'd
   go to a second router of their own.
