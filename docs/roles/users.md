@@ -26,8 +26,9 @@ records, and the scripts that set up and adjust a learner.
 
 ## May read, must not edit
 - Everything the infrastructure-and-security and questions roles own, in
-  particular judge/** and auth.js (infrastructure and security),
-  question-files.js and questions/*.json (questions)
+  particular auth.js and the judge's sandbox (infrastructure and
+  security), judge/runner.js, question-files.js and questions/*.json
+  (questions)
 - Makefile and package.json (infrastructure and security): ask for a new
   `make` target there
 - docs/roles/**, other roles' handoffs, and the handoffs from before roles
