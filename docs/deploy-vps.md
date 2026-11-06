@@ -1175,7 +1175,12 @@ certbot renew --dry-run
   succeeded`.
 
 **Updating the configuration later:** copy the file again, then
-`nginx -t && systemctl reload nginx`.
+`nginx -t && systemctl reload nginx`. If the change gives an existing
+`limit_req_zone` a different key, use `systemctl restart nginx`
+instead: a reload refuses it, logs an `[emerg]` line in
+`/var/log/nginx/error.log`, and keeps the old configuration (step 8).
+After any reload, `tail -n 3 /var/log/nginx/error.log` shows whether it
+took.
 
 ### 7. Check it [Kubuntu]
 
@@ -1258,11 +1263,30 @@ systemctl show -p Environment maxrecall-dsa.test.service
 cp /root/maxrecall-dsa.net/deploy/nginx-maxrecallcode.conf /etc/nginx/sites-available/maxrecallcode.conf
 ```
 ```bash
-nginx -t && systemctl reload nginx
+nginx -t
 ```
-- `nginx -t` checks the configuration and stops the reload if it's wrong;
-  a reload keeps serving while it switches. From here the site has no
-  shared login.
+- Checks the configuration on disk. Should end `test is successful`.
+
+```bash
+systemctl restart nginx
+```
+- **A restart, not a reload, for this change.** The per-visitor zone,
+  `maxrecall_signin`, now has a different key (`$maxrecall_visitor`
+  rather than `$binary_remote_addr`), and a reload refuses to change an
+  existing zone's key: it logs `[emerg] limit_req "maxrecall_signin" uses
+  the "$maxrecall_visitor" key while previously it used the
+  "$binary_remote_addr" key` and keeps the old configuration running
+  ([`ngx_http_limit_req_module.c`](https://github.com/nginx/nginx/blob/release-1.24.0/src/http/modules/ngx_http_limit_req_module.c),
+  lines 713–719). `nginx -t` can't see this: it doesn't compare with the
+  running nginx's zones. A restart starts with new zones. The site is
+  down for about a second; the tunnel to 3001 doesn't go through nginx.
+  From here the site has no shared login.
+- **What happened when the owner ran it (2026-11-06 UTC):** this step was
+  `nginx -t && systemctl reload nginx`, the check that followed still got
+  `HTTP/2 401` with `www-authenticate: Basic`, and
+  `grep emerg /var/log/nginx/error.log` showed the line above. A restart
+  fixed it. Not found in the cloud tests, which always started nginx
+  fresh with the new file rather than reloading from the old one.
 
 **On Kubuntu**, before deleting anything:
 
@@ -1284,9 +1308,16 @@ for i in $(seq 8); do curl -s -o /dev/null -w '%{http_code} ' -X POST -H 'Conten
 ```bash
 curl -6 -sSI https://maxrecallcode.net/
 ```
-- `-6` uses IPv6 only. The same `HTTP/2 302` as before; if it says it
-  can't connect or resolve, Kubuntu has no IPv6 route, and this check is
-  skipped.
+- `-6` uses IPv6 only. The same `HTTP/2 302` as before. If it fails
+  within a few milliseconds (`Could not connect to server`), check
+  whether Kubuntu has IPv6 at all: `ip -6 route show default` printing
+  nothing means it doesn't, and this check can't be done from there. A
+  failure on the VPS's side would take a round trip or a timeout. On the
+  VPS, `ss -ltn 'sport = :443'` should list `[::]:443`, and
+  `ufw status verbose` a `443 (v6)` rule.
+- 2026-11-06 UTC: Kubuntu had no IPv6 route (failed after 2 ms), so the
+  site over IPv6 is still untested end to end. The VPS's side checked:
+  `ss` listed `[::]:443` and `ufw` a `443/tcp (v6)` rule.
 
 **In a private window**, <https://maxrecallcode.net> shows the app's login
 page with nothing asked first; sign in with your own account.
@@ -1303,13 +1334,14 @@ rm /etc/nginx/maxrecall.htpasswd
 ```
 
 **To put the shared login back** before that `rm` (the file is still
-there): the configuration as it was at `b832ad3`, then reload:
+there): the configuration as it was at `b832ad3`, then a restart (going
+back changes the zone's key back, which a reload refuses too):
 
 ```bash
 git -C /root/maxrecall-dsa.net show b832ad3:deploy/nginx-maxrecallcode.conf > /etc/nginx/sites-available/maxrecallcode.conf
 ```
 ```bash
-nginx -t && systemctl reload nginx
+nginx -t && systemctl restart nginx
 ```
 - After the `rm`, step 5's old commands would be needed first; they're
   in `git log -p docs/deploy-vps.md`.

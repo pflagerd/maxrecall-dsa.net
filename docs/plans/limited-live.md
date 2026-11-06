@@ -186,8 +186,22 @@ was hiding from strangers:
   tests): nginx's per-visitor key turned out to need three regular
   expressions, not two, after reading how nginx writes an IPv6 address
   (`ngx_inet6_ntop`), or `2001::5:…`-shaped addresses in different /64s
-  would share a limit. The owner runs it on the VPS with §13 step 8;
-  record the outcome here.
+  would share a limit.
+- **Done on the VPS (owner, 2026-11-06 UTC, §13 step 8)**, with #80 and
+  #82 deployed (`NODE_ENV=production` in the service). From Kubuntu:
+  `https://maxrecallcode.net/` answers `HTTP/2 302` to
+  `/login.html?next=%2F`, HSTS still set, no `www-authenticate`; eight
+  quick logins gave `400` ×6 then `429` ×2; a private window gets the
+  login page directly, and signing in works. `htpasswd` deleted.
+  - **The switch needed a restart, not a reload**: the reload failed
+    (`[emerg] limit_req "maxrecall_signin" uses the "$maxrecall_visitor"
+    key while previously it used the "$binary_remote_addr" key`) and nginx
+    kept the old configuration, still asking for Basic auth. `nginx -t`
+    passed, and the cloud tests never reloaded from the old configuration,
+    so neither caught it. §13 step 8, its rollback and step 6's note now
+    say restart.
+  - **IPv6 not tested end to end**: Kubuntu has no IPv6 route. The VPS's
+    side is ready (on the VPS, nginx listens on `[::]:443` and `ufw` allows `443/tcp (v6)`); what's left is a request from a machine with IPv6.
 - **Left as accepted**: anyone reaches the code that runs before
   sign-in (`npm audit` on the VPS, 2026-11-06: 0 vulnerabilities); a
   stolen session cookie no longer also needs the shared login (the
@@ -502,3 +516,4 @@ the same change.
 | 2026-11-05 | D5's remote decided (owner): **option B, Kubuntu pulls** over SSH; nothing pushed from the VPS, no credentials there. Kubuntu clones with `--upload-pack='sudo -u maxrecall git-upload-pack'` and `-c remote.origin.uploadpack=…` (the first alone doesn't last past the clone; tested over `file://` with a repository owned by another user, not yet over SSH), then `git pull --ff-only`. The owner will use git-nested, a tool of their own (unpublished); it must do the same on the VPS side. The periodic commit on the VPS is issue #64. |
 | 2026-11-06 | D3 revised (owner): remove Basic auth, in two pull requests: first `auth.js` and `server.js` (malformed and over-long emails refused first, throttling bounded at 10,000 entries, sign-in errors to the log), then nginx (a site-wide cap of 30 sign-in attempts a minute, the per-address limit by IPv6 /64, `auth_basic` removed, `NODE_ENV=production`). |
 | 2026-11-06 | D3, part 2 in the repo (infrastructure and security): `auth_basic` removed from `deploy/nginx-maxrecallcode.conf`; sign-in limited per visitor (an IPv6 /64 as one, approximately, by a three-line `map`) and site-wide (30 a minute, burst 10); `NODE_ENV=production` in the service. Tested in the cloud; the VPS steps are `docs/deploy-vps.md` §13 step 8, for the owner. |
+| 2026-11-06 | D3 done on the VPS (owner, `docs/deploy-vps.md` §13 step 8): no shared login; the gate's `302`, the per-visitor limit (`400` ×6, `429` ×2) and signing in checked from Kubuntu; `htpasswd` deleted. The reload failed on the changed zone key (`[emerg]`, old configuration kept); a restart fixed it, and the docs now say restart. IPv6 untested end to end (Kubuntu has no IPv6 route) (on the VPS, nginx listens on `[::]:443` and `ufw` allows `443/tcp (v6)`). |
