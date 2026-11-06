@@ -1,6 +1,8 @@
 // A stopwatch for the problem page's elapsed-time timer (issue #20,
-// docs/plans/elapsed-timer.md). It has no page code in it, so a countdown
-// (issue #21) can reuse it: time left is a limit minus elapsedMs().
+// docs/plans/elapsed-timer.md), and the idle timeout that leaves a
+// question nobody is working on (issue #102, at the end). The stopwatch
+// has no page code in it, so a countdown (issue #21) can reuse it: time
+// left is a limit minus elapsedMs().
 //
 // It counts only while running: pause() stops counting and resume()
 // carries on from there. freeze() stops it for good (the problem page
@@ -102,6 +104,98 @@ function formatElapsed(ms) {
   return hours > 0 ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`;
 }
 
-// The page loads this as a plain <script>, so the two functions above are
+// --- The idle timeout (issue #102) -----------------------------------------
+// Leaves a question nobody is working on: after warnAfterMs with no input, a
+// warning, then, warningMs later, time to leave. Unlike the stopwatch it
+// counts real time, hidden tab or not (owner, #102), so it reads Date.now(),
+// the wall clock, by default. One exception (owner): a warning is only
+// begun while the page is visible, so the learner always sees its whole
+// countdown before their code is lost. Once begun, it runs in real time.
+// Once begun, only stillHere() ends a warning, the learner's deliberate
+// "I'm still here" (owner): other input during it, a mouse nudged or a
+// key, changes nothing, so it can't be dismissed by accident.
+// It has no page code in it: the page tells it about input and asks it
+// what to show (check()).
+
+/**
+ * What IdleTimeout.check() says to show: nothing yet, the warning with the
+ * time left, or that it's time to leave.
+ *
+ * @typedef {{ state: 'active' } | { state: 'warning', leaveInMs: number } | { state: 'expired' }} IdleState
+ */
+
+/**
+ * What createIdleTimeout() returns.
+ *
+ * @typedef {object} IdleTimeout
+ * @property {() => void} activity - Input from the learner: idle time
+ *   starts again. A warning stays: only stillHere() ends one.
+ * @property {() => void} stillHere - The learner's "I'm still here": ends
+ *   a warning and starts the idle time again. Does nothing once expired.
+ * @property {(visible: boolean) => IdleState} check - What to show now;
+ *   visible says whether the page can be seen (a warning begins only then).
+ */
+
+/**
+ * Makes an idle timeout, starting now as if there had just been input.
+ *
+ * @param {{ warnAfterMs: number, warningMs: number, now?: () => number }} options -
+ *   warnAfterMs: idle time before the warning; warningMs: how long the
+ *   warning lasts before it's time to leave; now: the current time in
+ *   milliseconds, Date.now() by default (a test passes a fake clock).
+ * @returns {IdleTimeout} The new idle timeout.
+ */
+function createIdleTimeout({ warnAfterMs, warningMs, now = () => Date.now() }) {
+  let lastActivity = now();
+  /** now() when the warning began; null while there's none. @type {number | null} */
+  let warnedAt = null;
+  let expired = false;
+
+  return {
+    /**
+     * Notes input: idle time starts again. It leaves a warning as it is:
+     * only stillHere() ends one. (During a warning the new lastActivity is
+     * never read: check() reads it only while there's no warning, and a
+     * warning ends only in stillHere(), which sets it again, or expiry.)
+     *
+     * @returns {void}
+     */
+    activity() {
+      if (expired) return;
+      lastActivity = now();
+    },
+    /**
+     * Ends a warning, the learner having said they're still here, and
+     * starts the idle time again.
+     *
+     * @returns {void}
+     */
+    stillHere() {
+      if (expired) return;
+      lastActivity = now();
+      warnedAt = null;
+    },
+    /**
+     * Works out what to show now, beginning the warning if it's due and the
+     * page is visible.
+     *
+     * @param {boolean} visible - Whether the page can be seen now.
+     * @returns {IdleState} What to show.
+     */
+    check(visible) {
+      if (expired) return { state: 'expired' };
+      const t = now();
+      // A clock set back makes t - lastActivity negative: still active.
+      if (warnedAt === null && visible && t - lastActivity >= warnAfterMs) warnedAt = t;
+      if (warnedAt === null) return { state: 'active' };
+      const leaveInMs = warningMs - (t - warnedAt);
+      if (leaveInMs > 0) return { state: 'warning', leaveInMs };
+      expired = true;
+      return { state: 'expired' };
+    },
+  };
+}
+
+// The page loads this as a plain <script>, so the functions above are
 // globals there. Under Node (tests), they're exported instead.
-if (typeof module !== 'undefined') module.exports = { createStopwatch, formatElapsed };
+if (typeof module !== 'undefined') module.exports = { createStopwatch, formatElapsed, createIdleTimeout };

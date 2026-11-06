@@ -484,6 +484,27 @@ button.elapsed-timer.frozen {
   border-color: rgba(74, 222, 128, 0.5);
 }
 
+/* The idle timeout's warning (issue #102). No display here: the browser
+   hides a closed <dialog> with dialog:not([open]) { display: none }, and a
+   display set here would beat it, as .language-filter-row's did [hidden]. */
+.idle-dialog {
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.75rem;
+}
+.idle-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.7);
+}
+.idle-dialog h2 {
+  margin-top: 0;
+}
+#idle-dialog-countdown {
+  font-variant-numeric: tabular-nums;
+}
+
 #editor-host {
   flex: 1;
   min-height: 180px;
