@@ -29,13 +29,29 @@ learned it. A rule with no source is marked as a guess.
   same idea on the example's own values instead. (#86: the Java warning
   uses `result += 'h' + 'I'`, not the loop's `result += c + c`, whose
   fix would be the answer.)
-- **One new idea per question.** A second technique, however useful,
-  gets a question of its own, linked with "Learned earlier". (#86:
-  joining a list, and Java's `StringBuilder`, came out of Double Each
-  Character to go in a joining question.)
+- **One new concept per question** (owner, 2026-11-05). A question
+  teaches exactly one concept the learner hasn't met before. It may also
+  use a concept an earlier question taught: ideally at most one, though
+  in rare cases more are needed (Is Unique I builds on two). When a draft
+  needs two new concepts, split it: the one the other depends on gets a
+  question of its own, first, and the later one refers back to it.
+  (Double Each Character taught two, going through a string and building
+  a new one; the second became Build a New String. In #86, joining a
+  list and Java's `StringBuilder` came out of it to go in a joining
+  question.)
 - **Mind the chain.** Questions build on each other through their
   "Learned earlier" sections (`readme.html`, Decisions, 2026-10-30: Double
   Each Character → To Uppercase and Lowercase → Swap Case with Helpers).
+  The question file says the same in `alreadyLearned`, a list of the
+  slugs it builds on; `make test` checks that it names existing
+  questions, matches the "Learned earlier" links in every language's
+  Learning tab, and has no loop.
+- **Nothing yet shows an earlier question first** (owner, 2026-11-05:
+  `alreadyLearned` is there so that something can, later). A new
+  learner's backlog is ordered by `created` (spaced-repetition plan, D6),
+  so a prerequisite written after the question that needs it comes after
+  it. Don't backdate `created` to fix that: with a chosen backlog,
+  `make backlog-add … AT=` puts it first.
   Don't lean on what a later question teaches: Double Each Character's
   Java warning says a `char` "is stored as a number", not "its ASCII
   code", because character codes are To Uppercase and Lowercase's subject.
