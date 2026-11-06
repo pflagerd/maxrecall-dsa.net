@@ -11,8 +11,8 @@ The *procedure* (a branch, the template, the fields, `make test`, Run and
 Test, the pull request, deploying) is in
 [`docs/how-to-add-a-new-question.html`](../../how-to-add-a-new-question.html);
 the format is `readme.html` section 5, checked by `question-files.js`'s
-`checkQuestion`. This file doesn't repeat them. The planned
-`.claude/skills/author-question/` skill should link here rather than hold
+`checkQuestion`. This file doesn't repeat them. The
+`.claude/skills/author-question/` skill links here rather than holding
 these rules itself.
 
 Each rule says where it comes from: a question file, or a change where we
@@ -208,3 +208,4 @@ Not decided; settle them with the owner and move them up as rules.
 - 2026-11-06: counts in sections 5 and 6 brought up to date for the 15
   questions (Build a New String and Add to a String, #89 and #91),
   counted with a script over `questions/*.json`.
+- 2026-11-06: the `author-question` skill exists; it links here.
