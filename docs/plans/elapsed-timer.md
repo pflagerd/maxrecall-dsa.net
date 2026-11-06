@@ -149,13 +149,23 @@ Decided (owner, #102's comment and the users session):
   real time, hidden or not.
 - **Nothing recorded**, like navigating away (not a Skip); the code in the
   editor is lost, since nothing saves drafts.
+- **Only "I'm still here" ends the warning** (owner, after trying the
+  first version): clicked, tapped, or Enter or Space on the button, which
+  has the focus. Other input during the warning, a nudged mouse, a key, a
+  click elsewhere, Escape, leaves it showing and counting down, so it
+  can't be dismissed by accident. In `timer.js`: `activity()` never
+  ends a warning; `stillHere()` does.
 
 Decided while building (small choices, owner may overrule):
 - Input is `keydown`, `pointerdown`, `pointermove` and `wheel`
   (pointer events cover mouse, touch and pen), listened for on `window`
-  in the capture phase, so the editor can't hide them. Mouse movement
-  counts, so the warning closes as the mouse moves toward its "I'm still
-  here" button; the button is for a tap or the keyboard.
+  in the capture phase, so the editor can't hide them. Before the
+  warning, any of them, mouse movement included, starts the 55 minutes
+  again. (The first version also let any of them close the warning, so
+  moving the mouse toward its button closed it before the click.)
+- Escape is refused (the dialog's `cancel` event); a browser may still
+  close the dialog on a repeated Escape, and the next check, within a
+  second, opens it again with the countdown unchanged.
 - Checked once a second and on `visibilitychange`, comparing times
   rather than relying on one long `setTimeout`: browsers may run a
   hidden tab's timers only once a minute

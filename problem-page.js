@@ -747,8 +747,9 @@ setInterval(renderTimer, 250);
 // warning; 5 minutes later, still with none, the question closes and the
 // list opens. Real time, hidden tab or not, but the warning only begins
 // while the tab is visible, so its whole countdown is seen (timer.js,
-// createIdleTimeout). Leaving records nothing, as navigating away doesn't,
-// and the code in the editor is lost: nothing saves it.
+// createIdleTimeout). Only "I'm still here" ends the warning (owner): a
+// nudged mouse or a key doesn't. Leaving records nothing, as navigating
+// away doesn't, and the code in the editor is lost: nothing saves it.
 const IDLE_WARN_AFTER_MS = 55 * 60 * 1000;
 const IDLE_WARNING_MS = 5 * 60 * 1000;
 // The input that counts: keys, clicks, mouse movement and the wheel, from
@@ -768,13 +769,13 @@ const idleTimeout = makeIdleTimeout({ warnAfterMs: IDLE_WARN_AFTER_MS, warningMs
 let leavingForIdle = false;
 
 /**
- * Notes input: the idle time starts again, and an open warning closes.
+ * Notes input: the idle time starts again, unless the warning is showing,
+ * which only "I'm still here" ends (createIdleTimeout).
  *
  * @returns {void}
  */
 function onIdleInput() {
   idleTimeout.activity();
-  if (idleDialog.open) idleDialog.close();
 }
 
 /**
@@ -805,7 +806,33 @@ for (const type of IDLE_INPUT_EVENTS) {
   // Passive: it never calls preventDefault(), so scrolling isn't held up.
   window.addEventListener(type, onIdleInput, { capture: true, passive: true });
 }
-idleDialogBtn.addEventListener('click', onIdleInput);
+idleDialogBtn.addEventListener(
+  'click',
+  /**
+   * "I'm still here", by mouse, tap, or Enter or Space on the button
+   * (which has the focus once the warning opens): ends the warning.
+   *
+   * @returns {void}
+   */
+  () => {
+    idleTimeout.stillHere();
+    idleDialog.close();
+  },
+);
+idleDialog.addEventListener(
+  'cancel',
+  /**
+   * Escape would close a modal <dialog>; this one needs the button. A
+   * browser may still close it on a second Escape, and then checkIdle()
+   * opens it again within a second, the countdown unchanged.
+   *
+   * @param {Event} event - The cancel event.
+   * @returns {void}
+   */
+  (event) => {
+    event.preventDefault();
+  },
+);
 document.addEventListener('visibilitychange', checkIdle);
 // Once a second while the tab is shown. Hidden, a browser may run this as
 // rarely as once a minute, which is why the times are compared, not counted.

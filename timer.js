@@ -111,6 +111,9 @@ function formatElapsed(ms) {
 // the wall clock, by default. One exception (owner): a warning is only
 // begun while the page is visible, so the learner always sees its whole
 // countdown before their code is lost. Once begun, it runs in real time.
+// Once begun, only stillHere() ends a warning, the learner's deliberate
+// "I'm still here" (owner): other input during it, a mouse nudged or a
+// key, changes nothing, so it can't be dismissed by accident.
 // It has no page code in it: the page tells it about input and asks it
 // what to show (check()).
 
@@ -126,7 +129,9 @@ function formatElapsed(ms) {
  *
  * @typedef {object} IdleTimeout
  * @property {() => void} activity - Input from the learner: idle time
- *   starts again and a warning is withdrawn. Does nothing once expired.
+ *   starts again. A warning stays: only stillHere() ends one.
+ * @property {() => void} stillHere - The learner's "I'm still here": ends
+ *   a warning and starts the idle time again. Does nothing once expired.
  * @property {(visible: boolean) => IdleState} check - What to show now;
  *   visible says whether the page can be seen (a warning begins only then).
  */
@@ -148,11 +153,24 @@ function createIdleTimeout({ warnAfterMs, warningMs, now = () => Date.now() }) {
 
   return {
     /**
-     * Notes input: idle time starts again, and a warning is withdrawn.
+     * Notes input: idle time starts again. It leaves a warning as it is:
+     * only stillHere() ends one. (During a warning the new lastActivity is
+     * never read: check() reads it only while there's no warning, and a
+     * warning ends only in stillHere(), which sets it again, or expiry.)
      *
      * @returns {void}
      */
     activity() {
+      if (expired) return;
+      lastActivity = now();
+    },
+    /**
+     * Ends a warning, the learner having said they're still here, and
+     * starts the idle time again.
+     *
+     * @returns {void}
+     */
+    stillHere() {
       if (expired) return;
       lastActivity = now();
       warnedAt = null;

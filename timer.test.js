@@ -61,16 +61,37 @@ test('input starts the idle time again', () => {
   assert.deepEqual(idle.check(true), { state: 'active' });
 });
 
-test('input during the warning withdraws it, and the next one needs 55 more minutes', () => {
+test('other input during the warning changes nothing: it needs "I\'m still here" (owner)', () => {
+  const { idle, advance } = setUp();
+  advance(WARN_AFTER_MS);
+  assert.equal(idle.check(true).state, 'warning');
+  advance(MINUTE);
+  idle.activity(); // a nudged mouse, a key
+  assert.deepEqual(idle.check(true), { state: 'warning', leaveInMs: WARNING_MS - MINUTE }, 'not withdrawn, not restarted');
+  advance(WARNING_MS - MINUTE);
+  idle.activity();
+  assert.deepEqual(idle.check(true), { state: 'expired' }, 'it still leaves on time');
+});
+
+test('"I\'m still here" ends the warning, and the next one needs 55 more minutes', () => {
   const { idle, advance } = setUp();
   advance(WARN_AFTER_MS + MINUTE);
   assert.equal(idle.check(true).state, 'warning');
-  idle.activity();
+  idle.stillHere();
   assert.deepEqual(idle.check(true), { state: 'active' });
   advance(WARN_AFTER_MS - 1);
   assert.deepEqual(idle.check(true), { state: 'active' });
   advance(1);
   assert.deepEqual(idle.check(true), { state: 'warning', leaveInMs: WARNING_MS });
+});
+
+test('input before the warning has begun still counts, even past 55 minutes', () => {
+  // Hidden at 55 minutes: no warning yet, so nothing to dismiss.
+  const { idle, advance } = setUp();
+  advance(WARN_AFTER_MS + MINUTE);
+  assert.equal(idle.check(false).state, 'active');
+  idle.activity();
+  assert.deepEqual(idle.check(true), { state: 'active' });
 });
 
 test('hidden time counts: real time, not the stopwatch\'s visible time', () => {
@@ -95,13 +116,14 @@ test('once begun, the warning runs in real time even if the page is hidden again
   assert.deepEqual(idle.check(false), { state: 'expired' });
 });
 
-test('expired stays expired: input afterwards doesn\'t bring the question back', () => {
+test('expired stays expired: neither input nor "I\'m still here" afterwards brings the question back', () => {
   const { idle, advance } = setUp();
   advance(WARN_AFTER_MS);
   idle.check(true);
   advance(WARNING_MS);
   assert.equal(idle.check(true).state, 'expired');
   idle.activity();
+  idle.stillHere();
   assert.deepEqual(idle.check(true), { state: 'expired' });
 });
 
