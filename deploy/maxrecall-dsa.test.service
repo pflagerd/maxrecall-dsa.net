@@ -30,6 +30,11 @@ Environment=TRUSTED_PORT=3001
 Environment=MAXRECALL_USER=daniel.pflager@gmail.com
 Environment=MAXRECALL_USERS_DIR=/srv/maxrecall/data/users
 Environment=MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth
+# Express's default error handler (finalhandler) sends the error's stack,
+# with paths on this machine, to the browser unless NODE_ENV is
+# "production"; with it, only the status's name. Nothing else in this app
+# reads NODE_ENV (limited-live plan, D3 revised, 2026-11-06).
+Environment=NODE_ENV=production
 # No secrets: registering needs an invite from `make invite` (docs/plans/
 # limited-live.md, step 1). Until 2026-11-04 an EnvironmentFile here,
 # /etc/maxrecall-dsa/test.env, gave the server MAXRECALL_PASSWORD; that file

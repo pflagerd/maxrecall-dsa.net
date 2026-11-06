@@ -4,8 +4,9 @@ Written 2026-10-29; sign-in added 2026-10-30. This is option A from the
 2026-10-29 discussion: the app listens only on the VPS's own loopback address
 (`127.0.0.1`), and you reach it through an SSH tunnel. **Since 2026-11-05
 (§13, limited-live step 3) nginx also serves it at
-<https://maxrecallcode.net>**, behind a shared Basic auth login and the app's
-own sign-in, and only to port 3000. Until §13 is done, nothing is exposed to
+<https://maxrecallcode.net>**, behind the app's own sign-in (and, until
+2026-11-06, a shared Basic auth login in front of it: §13, step 8), and
+only to port 3000. Until §13 is done, nothing is exposed to
 the internet.
 
 It listens on two ports, both on `127.0.0.1`:
@@ -799,11 +800,14 @@ code and a password of at least 12 characters. The header should show the
 tester's email (no trusted marker), and the list their chosen questions in
 Python, marked **new**. The language menu shows only Python.
 
+**By design:** a chosen backlog limits what Next and the list offer, not
+what can be opened. A tester who types another question's address
+(`problem.html?slug=…`) can do it, and a Submit or Skip then puts it in
+their queue: a feature (owner, 2026-11-06; readme, Decisions), described
+in `docs/how-to-put-a-question-directly-into-my-queue-by-slug.html`.
+Their profile still limits the languages (403 for the others).
+
 **What this doesn't do:**
-- A chosen backlog limits what Next and the list offer, not what can be
-  opened: a tester who types another question's address
-  (`problem.html?slug=…`) can do it, and a Submit then puts it in their
-  queue. Their profile still limits the languages (403 for the others).
 - Each later change to a backlog (`make backlog-add`, `backlog-remove`)
   stops the site for everyone for a few seconds (limited-live plan, "What
   spaced-repetition step 13 changes here"). Setting a learner up with
@@ -948,10 +952,13 @@ allowed in both. For step 3, 80 and 443 then need opening there too.
 Added 2026-11-05: step 3 of `docs/plans/limited-live.md`. It puts nginx in
 front of the app, so the site is at **<https://maxrecallcode.net>**, with
 `maxrecallcode.com` and `maxrecallcode.org` redirecting there (owner,
-2026-11-05; no `www`). Testers first get nginx's shared Basic auth login,
-then the app's own sign-in (an invite, §11). The configuration is
-`deploy/nginx-maxrecallcode.conf`; read its comments for what each part
-does.
+2026-11-05; no `www`). Visitors get the app's own sign-in (an invite,
+§11). Until 2026-11-06 a shared Basic auth login came first (plan, D3);
+an installation that has it removes it with **step 8**. The
+configuration is `deploy/nginx-maxrecallcode.conf`; read its comments for
+what each part does, including the sign-in limits: 10 attempts a minute
+per visitor (an IPv6 /64 counting as one, approximately) and 30 a
+minute for the whole site.
 
 **What doesn't change:** the app still listens on `127.0.0.1` only, nginx
 connects to it there, and only to port 3000, which needs signing in. The
@@ -977,6 +984,23 @@ a self-signed certificate in the certbot path, and the app behind it:
 
 Not testable there: the `listen [::]` lines (the cloud has no IPv6; the VPS
 has), and Let's Encrypt itself.
+
+**Tested again in a cloud session, 2026-11-06**, after removing Basic auth
+(nginx 1.24.0, the real file with only its `listen`, certificate and
+`proxy_pass` lines changed, `nginx -t` passing):
+- a page loads with no login prompt, HSTS still set, and an
+  `Authorization` header sent by the visitor doesn't reach the app;
+- one visitor's 16 quick logins: 6 answered (1 plus the burst of 5), then
+  429;
+- 20 visitors' one login each: 11 answered (1 plus the site-wide burst of
+  10), then 429; `/api/auth/me` straight after: 30 of 30 answered;
+- the per-visitor key, checked on 8,000 random IPv6 addresses written as
+  nginx writes `$remote_addr` (a port of `ngx_inet6_ntop`, nginx's
+  `src/core/ngx_inet.c`): no key empty, no key standing for two /64s, at
+  most 2 keys for one /64. Without the map's middle line, 5 keys stood
+  for several /64s each, so the check finds that mistake. The cloud has
+  no IPv6, so the map was given the addresses as a query parameter
+  rather than as real connections.
 
 **Before you start:**
 - This section's pull request is merged (the configuration file comes from
@@ -1116,25 +1140,13 @@ twice a day (`/usr/lib/systemd/system/certbot.timer`), which renews when
 the certificate has 30 days or fewer left (`"renew_before_expiry": "30
 days"`, certbot 2.9.0's `_internal/constants.py`, line 160).
 
-### 5. The testers' shared login (Basic auth, D3)
+### 5. (No longer done) The testers' shared login
 
-```bash
-printf 'tester:%s\n' "$(openssl passwd -6)" > /etc/nginx/maxrecall.htpasswd
-```
-- `openssl passwd -6` asks for the password twice (`Password:`,
-  `Verifying - Password:`) without showing it, and prints its SHA-512
-  crypt hash; the file stores `tester:` and that hash, never the password.
-- `tester` is the username testers type; choose another if you like.
-- Give testers the username and password with their invite.
-
-```bash
-chown root:www-data /etc/nginx/maxrecall.htpasswd
-```
-```bash
-chmod 640 /etc/nginx/maxrecall.htpasswd
-```
-- nginx's workers run as `www-data`; this lets them read the file, and
-  nobody else.
+Until 2026-11-06 this step made `/etc/nginx/maxrecall.htpasswd`, a shared
+Basic auth login nginx asked for before the app (plan, D3). The
+configuration no longer reads it, so a new installation skips this step;
+an existing one deletes the file in step 8. Kept so the steps keep their
+numbers.
 
 ### 6. The real site
 
@@ -1181,9 +1193,11 @@ curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' https://maxrecallcode.
 ```bash
 curl -sSI https://maxrecallcode.net/
 ```
-- `-I` shows only the headers. Should be `HTTP/2 401`, with
-  `strict-transport-security: max-age=86400` and
-  `www-authenticate: Basic realm="MaxRecall testing"`.
+- `-I` shows only the headers. Should be `HTTP/2 302` with
+  `location: /login.html?next=%2F` (the app's gate) and
+  `strict-transport-security: max-age=86400`, and no `www-authenticate`
+  line. (Until step 8, it was `HTTP/2 401` with
+  `www-authenticate: Basic realm="MaxRecall testing"`.)
 
 ```bash
 curl --max-time 5 http://maxrecallcode.net:3000/
@@ -1191,8 +1205,8 @@ curl --max-time 5 http://maxrecallcode.net:3000/
 - Should still time out: only 80 and 443 are open (§12).
 
 **In a browser**, open <https://maxrecallcode.net> in a private window:
-the browser asks for the Basic auth username and password, then the app's
-login page appears. The padlock should name Let's Encrypt.
+the app's login page appears, with nothing asked before it. The padlock
+should name Let's Encrypt.
 
 **Your own account.** Through the tunnel you never needed one, so you may
 not have one on the VPS (registration was closed there before invites):
@@ -1208,3 +1222,94 @@ sudo -u maxrecall env MAXRECALL_AUTH_DIR=/srv/maxrecall/data/auth make invite EM
 
 **To take the site offline again:** `rm /etc/nginx/sites-enabled/maxrecallcode.conf`,
 then `systemctl reload nginx`. The tunnel keeps working.
+
+### 8. Removing the shared login (2026-11-06, plan D3 revised) [VPS, then Kubuntu]
+
+For an installation made before 2026-11-06, which has the shared Basic
+auth login. Two pull requests come first, both merged: #80 (`auth.js`
+and `server.js`: what Basic auth was hiding from strangers) and the one
+that removes `auth_basic` from the configuration. The app is deployed
+before nginx changes, so the fixes are running before strangers can
+reach them. All commands as root on the VPS until "On Kubuntu".
+
+```bash
+git -C /root/maxrecall-dsa.net pull --ff-only
+```
+- Updates the checkout you run `make` from (step 1).
+
+```bash
+cd /root/maxrecall-dsa.net
+```
+```bash
+make deploy-server
+```
+- Deploys `master` to the service ("The quick way", above): the fixes
+  from #80, and the service file's new `NODE_ENV=production`, which the
+  script installs because the file changed. Should end with `Deployed:`.
+
+```bash
+systemctl show -p Environment maxrecall-dsa.test.service
+```
+- `show -p` prints one of the unit's properties
+  ([systemctl](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)).
+  The line should include `NODE_ENV=production`.
+
+```bash
+cp /root/maxrecall-dsa.net/deploy/nginx-maxrecallcode.conf /etc/nginx/sites-available/maxrecallcode.conf
+```
+```bash
+nginx -t && systemctl reload nginx
+```
+- `nginx -t` checks the configuration and stops the reload if it's wrong;
+  a reload keeps serving while it switches. From here the site has no
+  shared login.
+
+**On Kubuntu**, before deleting anything:
+
+```bash
+curl -sSI https://maxrecallcode.net/
+```
+- Should be `HTTP/2 302`, `location: /login.html?next=%2F`, HSTS, and no
+  `www-authenticate` line (step 7).
+
+```bash
+for i in $(seq 8); do curl -s -o /dev/null -w '%{http_code} ' -X POST -H 'Content-Type: application/json' -d '{}' https://maxrecallcode.net/api/auth/login; done; echo
+```
+- Eight logins at once with an empty body. `-X POST` and `-H` make each a
+  JSON POST, `-d '{}'` its body, and `-w '%{http_code} '` prints only the
+  status. Should print `400 400 400 400 400 400 429 429`: the app refuses
+  the first six itself (no email or password, so no scrypt), and nginx
+  refuses the rest. Your address can sign in again a few seconds later.
+
+```bash
+curl -6 -sSI https://maxrecallcode.net/
+```
+- `-6` uses IPv6 only. The same `HTTP/2 302` as before; if it says it
+  can't connect or resolve, Kubuntu has no IPv6 route, and this check is
+  skipped.
+
+**In a private window**, <https://maxrecallcode.net> shows the app's login
+page with nothing asked first; sign in with your own account.
+
+**Then, on the VPS**, the shared login's file, which nothing reads now:
+
+```bash
+grep -rn maxrecall.htpasswd /etc/nginx/
+```
+- Should print nothing: no configuration still refers to the file.
+
+```bash
+rm /etc/nginx/maxrecall.htpasswd
+```
+
+**To put the shared login back** before that `rm` (the file is still
+there): the configuration as it was at `b832ad3`, then reload:
+
+```bash
+git -C /root/maxrecall-dsa.net show b832ad3:deploy/nginx-maxrecallcode.conf > /etc/nginx/sites-available/maxrecallcode.conf
+```
+```bash
+nginx -t && systemctl reload nginx
+```
+- After the `rm`, step 5's old commands would be needed first; they're
+  in `git log -p docs/deploy-vps.md`.
