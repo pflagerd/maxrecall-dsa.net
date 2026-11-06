@@ -51,6 +51,7 @@
     "learner.test.js",
     "scripts/learner-create.js",
     "playtest.js",
-    "playtest.test.js"
+    "playtest.test.js",
+    "timer.test.js"
   ]
 }
