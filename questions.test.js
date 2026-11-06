@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, checkQuestion, findLearnedLoop } = require('./question-files');
+const { isQuestionFile, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -44,6 +44,7 @@ test('no question builds on itself through alreadyLearned (no loop)', () => {
     learnedBySlug[name.replace(/\.json$/, '')] = question.alreadyLearned || [];
   }
   assert.equal(findLearnedLoop(learnedBySlug), null);
+  assert.deepEqual(findRedundantLearned(learnedBySlug), [], 'alreadyLearned lists only the questions each builds on directly');
 });
 
 // --- docs/question-template.json -------------------------------------------
@@ -135,6 +136,13 @@ test('findLearnedLoop finds a loop, and only a loop', () => {
   assert.deepEqual(findLearnedLoop({ a: ['a'] }), ['a', 'a']);
   assert.equal(findLearnedLoop({ a: ['b', 'c'], b: ['c'], c: [] }), null, 'two paths to one question are not a loop');
   assert.equal(findLearnedLoop({ a: ['missing'] }), null, 'an unknown question is checkQuestion\'s to report');
+});
+
+test('findRedundantLearned finds an entry already reached through another', () => {
+  assert.deepEqual(findRedundantLearned({ a: ['b', 'c'], b: ['c'], c: [] }), ['a: alreadyLearned lists c, which it already builds on through b: list only the questions it builds on directly']);
+  assert.deepEqual(findRedundantLearned({ a: ['b', 'd'], b: ['c'], c: ['d'], d: [] }), ['a: alreadyLearned lists d, which it already builds on through b: list only the questions it builds on directly'], 'through more than one step');
+  assert.deepEqual(findRedundantLearned({ a: ['b', 'c'], b: [], c: [] }), [], 'two direct prerequisites are fine');
+  assert.deepEqual(findRedundantLearned({ a: ['b'], b: ['c'], c: [] }), [], 'a chain is fine');
 });
 
 /** A Learning tab's "Learned earlier" link to two-sum. @type {string} */

@@ -346,4 +346,50 @@ function findLearnedLoop(learnedBySlug) {
   return null;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, QUESTION_FIELDS };
+/**
+ * Entries of alreadyLearned that a question already reaches through
+ * another of its entries: alreadyLearned lists only the questions it builds
+ * on directly, and the ones they build on come with them (owner,
+ * 2026-11-06). Run it after findLearnedLoop finds no loop.
+ *
+ * @param {Record<string, readonly string[]>} learnedBySlug - Each question's
+ *   slug and its alreadyLearned ([] for none). Entries naming a question
+ *   not in it are ignored.
+ * @returns {string[]} A message for each redundant entry, naming the
+ *   question, the entry and the entry it comes through; empty if none.
+ */
+function findRedundantLearned(learnedBySlug) {
+  /** Every question reachable from a slug, itself excluded, once worked out. @type {Map<string, Set<string>>} */
+  const reachable = new Map();
+  /**
+   * The questions a question builds on, directly or not.
+   *
+   * @param {string} slug - The question.
+   * @returns {Set<string>} Them.
+   */
+  const reach = (slug) => {
+    const known = reachable.get(slug);
+    if (known) return known;
+    /** @type {Set<string>} */
+    const found = new Set();
+    reachable.set(slug, found); // no loops (findLearnedLoop), so this can't be read half-built
+    for (const next of learnedBySlug[slug] || []) {
+      if (!(next in learnedBySlug)) continue;
+      found.add(next);
+      for (const further of reach(next)) found.add(further);
+    }
+    return found;
+  };
+  /** @type {string[]} */
+  const problems = [];
+  for (const slug of Object.keys(learnedBySlug).sort()) {
+    const entries = (learnedBySlug[slug] || []).filter((e) => e in learnedBySlug);
+    for (const entry of entries) {
+      const via = entries.find((other) => other !== entry && reach(other).has(entry));
+      if (via) problems.push(`${slug}: alreadyLearned lists ${entry}, which it already builds on through ${via}: list only the questions it builds on directly`);
+    }
+  }
+  return problems;
+}
+
+module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS };

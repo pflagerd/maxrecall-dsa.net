@@ -52,6 +52,12 @@ learned it. A rule with no source is marked as a guess.
   slugs it builds on; `make test` checks that it names existing
   questions, matches the "Learned earlier" links in every language's
   Learning tab, and has no loop.
+- **List only the questions it builds on directly** (owner, 2026-11-06).
+  The ones those build on come with them: To Uppercase and Lowercase
+  lists Double Each Character, not also Build a New String, which Double
+  Each Character builds on. `make test` refuses an entry already reached
+  through another (`findRedundantLearned`). It also keeps most lists to
+  the one already-learned concept the rule above asks for.
 - **Nothing yet shows an earlier question first** (owner, 2026-11-05:
   `alreadyLearned` is there so that something can, later). A new
   learner's backlog is ordered by `created` (spaced-repetition plan, D6),
