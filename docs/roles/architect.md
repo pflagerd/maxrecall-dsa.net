@@ -5,7 +5,8 @@ Keep the multi-instance separation coherent: ownership, contracts, and
 the overall picture. Act as the human's lieutenant; the human decides.
 
 ## Owns
-- docs/roles/**, docs/contracts.md
+- docs/roles/** (except docs/roles/questions/, questions': owner,
+  2026-11-05, #87), docs/contracts.md
 - docs/plans/documentation-standard.md, docs/plans/server-split.md
 - docs/session-handoff/architect/*.md
 

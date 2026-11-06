@@ -23,6 +23,8 @@ records, and the scripts that set up and adjust a learner.
   problem-page.js, timer.js, style.css
 - docs/how-to-add-a-new-user.html (adding a user or tester, start to
   finish)
+- docs/how-to-put-a-question-directly-into-my-queue-by-slug.html
+  (queueing a question of the learner's choice, by its slug: #81)
 - Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
   docs/plans/elapsed-timer.md
 - The format of users/<email>/ (gitignored, on each machine)

@@ -91,6 +91,18 @@ Provider: questions (`question-files.js`, `questions/**`). Used by: users
   - The problem file format, `readme.html` section 5, in particular
     `created`, `title`, `difficulty`, `topics`, `sources` and the
     languages of `starterCode`, which `questionInfos()` passes on.
+  - `difficulty`'s values, matched as strings: users' pages make it the
+    CSS class `difficulty-<value in lowercase>` (`problems-list.js`'s
+    `difficultyClass`, `problem-page.js`), and `style.css` colours
+    `difficulty-easy`, `-medium` and `-hard`. A new value (#93) passes
+    `make test` once `question-files.js` allows it, and shows as an
+    uncoloured badge until `style.css` has a rule for it.
+  - `alreadyLearned` (optional; #89, direct prerequisites only since
+    #91) is in the format, but not in what `questionInfos()` passes on.
+    It does reach the problem page: `routes.js`'s `toPublicProblem`
+    sends every field but `testCases`. Nothing of users' reads it yet.
+    Starting to (ordering a backlog by it, or #88's links) is a change
+    to this contract, named here when it's made.
   - `questions/renames.json`, the rename log, is questions' file but
     users' `consistency.js` parses it (`parseRenames`, `updateRenames`):
     its format is part of this contract both ways.
@@ -171,8 +183,9 @@ Provider and user: infrastructure and security (`server.js`;
     and every page asks `/api/auth/me`; `account.js` posts
     `/api/auth/logout`.
   - nginx rate-limits `location = /api/auth/login` and
-    `location = /api/auth/register` by exact path: renaming either route
-    silently drops its rate limit.
+    `location = /api/auth/register` by exact path, with two limits each
+    since D3 (#82): per visitor (`maxrecall_signin`) and site-wide
+    (`maxrecall_signin_all`). Renaming either route silently drops both.
   - `server.js` listens on `PORT` (sign-in) and `TRUSTED_PORT` (no
     sign-in, the SSH tunnel only), which the service file sets to 3000
     and 3001.
