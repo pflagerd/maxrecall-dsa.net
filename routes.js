@@ -397,7 +397,7 @@ async function handleExecution(req, res, { mode }) {
       } catch (err) {
         console.error(`Failed to save submission for ${problem.slug}:`, err);
         result.saved = false;
-        result.saveError = /** @type {Error} */ (err).message;
+        result.saveError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
       }
       // Only a saved Submit moves the queue (D3). Like a failed save, a
       // failed update doesn't cost the learner their result (step 6,
@@ -409,7 +409,7 @@ async function handleExecution(req, res, { mode }) {
         } catch (err) {
           console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
           result.queueUpdated = false;
-          result.queueError = /** @type {Error} */ (err).message;
+          result.queueError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
         }
       }
     }
@@ -422,7 +422,9 @@ async function handleExecution(req, res, { mode }) {
     const judgeError = /** @type {JudgeError} */ (err);
     const httpStatus = judgeError.code === 'SANDBOX_UNAVAILABLE' || judgeError.code === 'JUDGE_BUSY' ? 503 : 500;
     if (judgeError.code === 'JUDGE_BUSY') res.set('Retry-After', String(judgeError.retryAfterSeconds));
-    res.status(httpStatus).json({ error: judgeError.message || 'Execution failed' });
+    if (httpStatus === 503) return res.status(503).json({ error: judgeError.message });
+    console.error(`Judging failed for ${problem.slug} in ${language}: ${judgeError.message}`);
+    res.status(500).json({ error: `Execution failed: ${SERVER_PROBLEM}` });
   }
 }
 
@@ -516,7 +518,7 @@ async function handleSkip(req, res) {
     answer.saved = true;
   } catch (err) {
     console.error(`Failed to save skip for ${problem.slug}:`, err);
-    answer.saveError = /** @type {Error} */ (err).message;
+    answer.saveError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
     return res.json(answer); // nothing changed: the page stays (detail 3a)
   }
   // From here to the response, no await (updateQueue()).
@@ -526,12 +528,13 @@ async function handleSkip(req, res) {
   } catch (err) {
     console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
     answer.queueUpdated = false;
-    answer.queueError = /** @type {Error} */ (err).message;
+    answer.queueError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
   }
   try {
     answer.next = workOutNext(email);
   } catch (err) {
-    answer.nextError = /** @type {Error} */ (err).message;
+    console.error(`Next not worked out after a Skip of ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
+    answer.nextError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
   }
   res.json(answer);
 }
@@ -592,7 +595,8 @@ router.get(
           .map(toSubmissionSummary)
       );
     } catch (err) {
-      res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submissions' });
+      console.error(`Submissions not listed: ${/** @type {Error} */ (err).message}`);
+      res.status(500).json({ error: `Could not read submissions: ${SERVER_PROBLEM}` });
     }
   },
 );
@@ -613,7 +617,8 @@ router.get(
       if (!record) return res.status(404).json({ error: 'Submission not found' });
       res.json(record);
     } catch (err) {
-      res.status(500).json({ error: /** @type {Error} */ (err).message || 'Could not read submission' });
+      console.error(`Submission not read: ${/** @type {Error} */ (err).message}`);
+      res.status(500).json({ error: `Could not read submission: ${SERVER_PROBLEM}` });
     }
   },
 );
@@ -646,6 +651,31 @@ function profileForPage(email, profile) {
   return { ...profile, canTestQuestions: canTestQuestions(email, OWNER_EMAIL) };
 }
 
+// What the browser is told when something fails on the server for a reason
+// other than a learner's invalid file: never the error's own message, which
+// can carry a path on the server (a file that can't be read or written).
+// The details go to the server's log instead (OWASP, Error Handling Cheat
+// Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html).
+const SERVER_PROBLEM = 'a problem on the server (its log has the details)';
+
+// Error codes whose message the browser may see: each describes what's wrong
+// in the learner's own profile.json, order.json or backlog.json (profile.js,
+// order.js), which they or the owner must fix, and names no path.
+const SHOWN_CODES = new Set(['INVALID_PROFILE', 'INVALID_QUEUE']);
+
+/**
+ * What an error may tell the browser: its own message if its code is one
+ * of SHOWN_CODES, otherwise `fallback`. Log the full message where it's
+ * caught.
+ *
+ * @param {Error & { code?: string }} err - The error.
+ * @param {string} fallback - What to say instead, for any other error.
+ * @returns {string} The message to send.
+ */
+function publicMessage(err, fallback) {
+  return err.code !== undefined && SHOWN_CODES.has(err.code) ? err.message : fallback;
+}
+
 /**
  * Answers a request that a profile problem stopped: 500 for an invalid
  * profile.json (the server's data, not the request, is wrong) or one that
@@ -658,7 +688,7 @@ function profileForPage(email, profile) {
  */
 function sendProfileError(res, err) {
   console.error(`Profile problem: ${err.message}`);
-  return res.status(500).json({ error: err.message, code: err.code === 'INVALID_PROFILE' ? 'INVALID_PROFILE' : undefined });
+  return res.status(500).json({ error: publicMessage(err, `Your profile couldn't be read: ${SERVER_PROBLEM}`), code: err.code === 'INVALID_PROFILE' ? 'INVALID_PROFILE' : undefined });
 }
 
 // The effective profile: allowedLanguages, languages (turned on, in order),
@@ -845,7 +875,7 @@ function sendViewError(res, err, what) {
   if (err.code === 'INVALID_PROFILE') return sendProfileError(res, err);
   if (err.code === 'INVALID_QUEUE') return sendQueueError(res, err);
   console.error(`${what}: ${err.message}`);
-  return res.status(500).json({ error: err.message });
+  return res.status(500).json({ error: `${what}: ${SERVER_PROBLEM}` });
 }
 
 // --- The learner's queue and backlog (spaced-repetition plan, D1, D5, D6) ---
@@ -873,7 +903,7 @@ function loadQueueFiles(email) {
  */
 function sendQueueError(res, err) {
   console.error(`Queue problem: ${err.message}`);
-  return res.status(500).json({ error: err.message, code: err.code === 'INVALID_QUEUE' ? 'INVALID_QUEUE' : undefined });
+  return res.status(500).json({ error: publicMessage(err, `Your queue couldn't be read: ${SERVER_PROBLEM}`), code: err.code === 'INVALID_QUEUE' ? 'INVALID_QUEUE' : undefined });
 }
 
 /** @typedef {import('./question-files').QuestionListing} QuestionListing */
