@@ -1,0 +1,189 @@
+{
+  "slug": "add-to-a-string",
+  "created": "2026-11-06T05:06:41Z",
+  "title": "Add to a String",
+  "difficulty": "Easy",
+  "topics": ["String"],
+  "sources": [],
+  "alreadyLearned": ["build-a-new-string"],
+  "learning": {
+    "javascript": "<h3>Adding to the end of a string</h3><p><code>result += x</code> is short for <code>result = result + x</code>: it builds a new string from <code>result</code> and <code>x</code>, and makes <code>result</code> name the new one. The old string isn't changed (strings can't be), but <code>result</code> no longer refers to it. It's how a string is built up in steps:</p><div class=\"example\"><pre>let result = \"h\";\nresult += \"I\";            // result is now \"hI\"\nresult += \"!\";            // \"hI!\"</pre></div><p>Declare it with <code>let</code>: <code>+=</code> gives the variable a new value, and a <code>const</code> can't be given one (<code>TypeError: Assignment to constant variable.</code>).</p><p>See <a href=\"https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Addition_assignment\" target=\"_blank\" rel=\"noopener\">Addition assignment (+=)</a> on MDN.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=build-a-new-string\" target=\"_blank\" rel=\"noopener\">Build a New String</a>: putting two strings together into a new one with <code>+</code>.</li></ul>",
+    "python": "<h3>Adding to the end of a string</h3><p><code>result += x</code> is short for <code>result = result + x</code>: it builds a new string from <code>result</code> and <code>x</code>, and makes <code>result</code> name the new one. The old string isn't changed (strings can't be), but <code>result</code> no longer refers to it. It's how a string is built up in steps:</p><div class=\"example\"><pre>result = \"h\"\nresult += \"I\"             # result is now \"hI\"\nresult += \"!\"             # \"hI!\"</pre></div><p>See <a href=\"https://docs.python.org/3/reference/simple_stmts.html#augmented-assignment-statements\" target=\"_blank\" rel=\"noopener\">Augmented assignment statements</a> in the Python documentation.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=build-a-new-string\" target=\"_blank\" rel=\"noopener\">Build a New String</a>: putting two strings together into a new one with <code>+</code>.</li></ul>",
+    "cpp": "<h3>Adding to the end of a string</h3><p><code>result += x</code> adds <code>x</code> to the end of <code>result</code> itself: a <code>std::string</code> can be changed, so, unlike in the other languages, no new string is made. It's how a string is built up in steps:</p><div class=\"example\"><pre>string result = \"h\";\nresult += \"I\";            // result is now \"hI\"\nresult += \"!\";            // \"hI!\"</pre></div><p>See <a href=\"https://en.cppreference.com/w/cpp/string/basic_string/operator%2B%3D\" target=\"_blank\" rel=\"noopener\">operator+=</a> on cppreference.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=build-a-new-string\" target=\"_blank\" rel=\"noopener\">Build a New String</a>: putting two strings together into a new one with <code>+</code>.</li></ul>",
+    "java": "<h3>Adding to the end of a string</h3><p><code>result += x</code> is short for <code>result = result + x</code>: it builds a new <code>String</code> from <code>result</code> and <code>x</code>, and makes <code>result</code> name the new one. The old <code>String</code> isn't changed (<code>String</code>s can't be), but <code>result</code> no longer refers to it. It's how a <code>String</code> is built up in steps:</p><div class=\"example\"><pre>String result = \"h\";\nresult += \"I\";                  // result is now \"hI\"\nresult += \"!\";                  // \"hI!\"</pre></div><p>See <a href=\"https://docs.oracle.com/javase/specs/jls/se21/html/jls-15.html#jls-15.26.2\" target=\"_blank\" rel=\"noopener\">Compound Assignment Operators</a> in the Java Language Specification.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=build-a-new-string\" target=\"_blank\" rel=\"noopener\">Build a New String</a>: putting two strings together into a new one with <code>+</code>.</li></ul>",
+    "d": "<h3>Adding to the end of a string</h3><p><code>result ~= x</code> appends <code>x</code> to the end of <code>result</code>. The characters already in <code>result</code> aren't changed (they can't be); <code>x</code>'s are added after them. It's how a string is built up in steps:</p><div class=\"example\"><pre>string result = \"h\";\nresult ~= \"I\";            // result is now \"hI\"\nresult ~= \"!\";            // \"hI!\"</pre></div><p>See <a href=\"https://dlang.org/spec/arrays.html\" target=\"_blank\" rel=\"noopener\">Arrays</a> in the D language specification: a <code>string</code> is an array.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=build-a-new-string\" target=\"_blank\" rel=\"noopener\">Build a New String</a>: putting two strings together into a new one with <code>~</code>.</li></ul>"
+  },
+  "description": {
+    "javascript": "<p>Given a string <code>s</code>, return <code>s</code> three times, with a single space between one and the next.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers adding to the end of a string.</p>",
+    "python": "<p>Given a string <code>s</code>, return <code>s</code> three times, with a single space between one and the next.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers adding to the end of a string.</p>",
+    "cpp": "<p>Given a string <code>s</code>, return <code>s</code> three times, with a single space between one and the next.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers adding to the end of a string.</p>",
+    "java": "<p>Given a string <code>s</code>, return <code>s</code> three times, with a single space between one and the next.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers adding to the end of a string.</p>",
+    "d": "<p>Given a string <code>s</code>, return <code>s</code> three times, with a single space between one and the next.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers adding to the end of a string.</p>"
+  },
+  "examples": {
+    "javascript": [
+      {
+        "input": "s = \"hey\"",
+        "output": "\"hey hey hey\""
+      },
+      {
+        "input": "s = \"a\"",
+        "output": "\"a a a\""
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"  \"",
+        "explanation": "Three empty strings, with the two spaces between them."
+      },
+      {
+        "input": "s = \"hi there\"",
+        "output": "\"hi there hi there hi there\""
+      }
+    ],
+    "python": [
+      {
+        "input": "s = 'hey'",
+        "output": "'hey hey hey'"
+      },
+      {
+        "input": "s = 'a'",
+        "output": "'a a a'"
+      },
+      {
+        "input": "s = ''",
+        "output": "'  '",
+        "explanation": "Three empty strings, with the two spaces between them."
+      },
+      {
+        "input": "s = 'hi there'",
+        "output": "'hi there hi there hi there'"
+      }
+    ],
+    "cpp": [
+      {
+        "input": "s = \"hey\"",
+        "output": "\"hey hey hey\""
+      },
+      {
+        "input": "s = \"a\"",
+        "output": "\"a a a\""
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"  \"",
+        "explanation": "Three empty strings, with the two spaces between them."
+      },
+      {
+        "input": "s = \"hi there\"",
+        "output": "\"hi there hi there hi there\""
+      }
+    ],
+    "java": [
+      {
+        "input": "s = \"hey\"",
+        "output": "\"hey hey hey\""
+      },
+      {
+        "input": "s = \"a\"",
+        "output": "\"a a a\""
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"  \"",
+        "explanation": "Three empty strings, with the two spaces between them."
+      },
+      {
+        "input": "s = \"hi there\"",
+        "output": "\"hi there hi there hi there\""
+      }
+    ],
+    "d": [
+      {
+        "input": "s = \"hey\"",
+        "output": "\"hey hey hey\""
+      },
+      {
+        "input": "s = \"a\"",
+        "output": "\"a a a\""
+      },
+      {
+        "input": "s = \"\"",
+        "output": "\"  \"",
+        "explanation": "Three empty strings, with the two spaces between them."
+      },
+      {
+        "input": "s = \"hi there\"",
+        "output": "\"hi there hi there hi there\""
+      }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "$0 \\le \\texttt{s.length} \\le 100$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "python": [
+      "$0 \\le \\texttt{len(s)} \\le 100$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "cpp": [
+      "$0 \\le \\texttt{s.size()} \\le 100$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "java": [
+      "$0 \\le \\texttt{s.length()} \\le 100$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ],
+    "d": [
+      "$0 \\le \\texttt{s.length} \\le 100$",
+      "<code>s</code> contains only printable ASCII characters (codes 32 to 126)"
+    ]
+  },
+  "functionName": {
+    "javascript": "echo",
+    "python": "echo",
+    "cpp": "echo",
+    "java": "echo",
+    "d": "echo"
+  },
+  "starterCode": {
+    "javascript": "/**\n * @param {string} s\n * @return {string}\n */\nfunction echo(s) {\n    \n}\n",
+    "python": "def echo(s):\n    pass\n",
+    "cpp": "string echo(string s) {\n    \n}\n",
+    "java": "class Solution {\n    public String echo(String s) {\n        \n    }\n}\n",
+    "d": "string echo(string s) {\n    \n}\n"
+  },
+  "signature": {
+    "cpp": {
+      "params": [
+        "string"
+      ],
+      "returns": "string"
+    },
+    "java": {
+      "params": [
+        "String"
+      ],
+      "returns": "String"
+    },
+    "d": {
+      "params": [
+        "string"
+      ],
+      "returns": "string"
+    }
+  },
+  "testCases": [
+    {"args": ["hey"], "expected": "hey hey hey", "hidden": false},
+    {"args": ["a"], "expected": "a a a", "hidden": false},
+    {"args": [""], "expected": "  ", "hidden": false},
+    {"args": ["hi there"], "expected": "hi there hi there hi there", "hidden": false},
+    {"args": [" "], "expected": "     ", "hidden": true},
+    {"args": ["!"], "expected": "! ! !", "hidden": true},
+    {"args": ["\"q\""], "expected": "\"q\" \"q\" \"q\"", "hidden": true},
+    {"args": ["\\"], "expected": "\\ \\ \\", "hidden": true},
+    {"args": ["  x  "], "expected": "  x     x     x  ", "hidden": true},
+    {"args": [" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"], "expected": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~  !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~  !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", "hidden": true},
+    {"args": ["abababababababababababababababababababababababababababababababababababababababababababababababababab"], "expected": "abababababababababababababababababababababababababababababababababababababababababababababababababab abababababababababababababababababababababababababababababababababababababababababababababababababab abababababababababababababababababababababababababababababababababababababababababababababababababab", "hidden": true}
+  ]
+}
