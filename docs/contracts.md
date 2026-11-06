@@ -148,9 +148,11 @@ Provider: infrastructure and security (`paths.js`). Used by: users
 `USERS_DIR` to `server.js` (infrastructure and security).
 
 - **What crosses**: from `paths.js`, `resolveInside`; from `users.js`,
-  `EMAIL_PATTERN`, `OWNER_EMAIL`, `USERS_DIR`. (`auth.js`'s `register`,
-  `login`, `sessionEmail` and the rest are used only by `server.js` since
-  the split: both infrastructure and security's.)
+  `EMAIL_PATTERN`, `OWNER_EMAIL`, `USERS_DIR`; from `auth.js`,
+  `createInvite`, for users' `routes.test.js` and `scripts/characterize.js`
+  only (#106). (`auth.js`'s
+  `register`, `login`, `sessionEmail` and the rest are used only by
+  `server.js` since the split: both infrastructure and security's.)
 - **Relied on**:
   - `resolveInside(baseDir, ...parts)` gives `null` for anything outside
     `baseDir` (path traversal), and for `baseDir` itself.
@@ -161,6 +163,11 @@ Provider: infrastructure and security (`paths.js`). Used by: users
     `canTestQuestions`): the same person in both.
   - `USERS_DIR` is where learners' files are; `server.js` only names it in
     its start-up log.
+  - `createInvite(email)` resolves to an object with the invite's `code`,
+    and writes under `MAXRECALL_AUTH_DIR` when that's set. Both of
+    users' files call it in a child process, through `require('./auth')`
+    **inside a `node -e` string** (each one's `makeInvites`), so a
+    `require` scan doesn't find it: search for `'./auth'` as text too.
 
 ## 8. The sign-in routes and ports (retired)
 
@@ -227,11 +234,26 @@ infrastructure and security. That review is what #76 itself had.
     `logConsistency()`, and loading the module starts nothing else.
   - A new page or file to serve is a request to infrastructure and
     security to add it to `STATIC_FILES`.
-- **Checking it**: the characterization check (a code block in
-  `docs/session-handoff/users/20261105T141751-0800.md`) catches a router
-  mounted in front of the gate: in infrastructure and security's
-  negative test, 13 lines differed, signed out `/api/questions` giving
-  the question bank.
+- **Checking it** (owner, 2026-11-06, #106; both users'):
+  - `routes.test.js`, in `make test`, asserts both sides through a real
+    `node server.js`: the gate (signed out, 401 for every feature route),
+    `PUBLIC_PATHS`, `STATIC_FILES`, the JSON-only rule, the trusted port,
+    the `/api/*` 404, and that `start()` ran. Its gate test fails with
+    the router mounted in front of the gate (one of #106's seven
+    deliberate breaks).
+  - `scripts/characterize.js`, by hand: a snapshot of 244 requests and
+    the log, before and after a refactor meant to change nothing, then
+    `diff`. It was the code block in
+    `docs/session-handoff/users/20261105T141751-0800.md`; in
+    infrastructure and security's negative test, 13 lines differed,
+    signed out `/api/questions` giving the question bank.
+- **Relied on, by `routes.test.js`** (strings no type checker sees):
+  `server.js`'s start-up lines begin `Server listening` and `Trusted
+  listener`, and it listens on `PORT` and `TRUSTED_PORT` (as in
+  contract 8). Rewording either line makes the test wait 60 s and fail
+  ("didn't listen"), though nothing is broken. A deliberate change to
+  `server.js`'s side may need the test changed: infrastructure and
+  security says so in its pull request, and users changes the test.
 
 ## 10. The topic and source bubbles
 

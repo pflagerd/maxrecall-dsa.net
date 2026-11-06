@@ -5,8 +5,9 @@ and security under contract 9; step 3 checked by the owner on Kubuntu
 and the VPS); step 4, the architect's ownership change, in the pull
 request after it. `server.js` is now infrastructure and security's and
 `routes.js` users' (`docs/roles/`); `docs/contracts.md` contract 9 is now
-"the router behind the gate". Still open: whether to keep the
-characterization check as a permanent test (owner).
+"the router behind the gate". The characterization check is kept
+(owner, 2026-11-06, option C, #106): `routes.test.js` in `make test`, and
+`scripts/characterize.js` by hand, both users'.
 
 Owner's decision, 2026-11-05 (option A in the architect's discussion):
 `server.js` keeps the sign-in layer and goes to **infrastructure and
@@ -148,7 +149,10 @@ is stricter than the end state, never looser.
   once it's been useful once. As a permanent test (e.g.
   `server-routes.test.js`, run by `make test`) it would guard every later
   change to the routes; it needs a `Makefile` change (infrastructure and
-  security's) and an owner for the test file.
+  security's) and an owner for the test file. **Decided** (owner,
+  2026-11-06, option C, #106): both, users': `routes.test.js` in
+  `make test` (its `*.test.js` wildcard picked it up, so no `Makefile`
+  change was needed) and `scripts/characterize.js` by hand.
 
 ## Open
 
