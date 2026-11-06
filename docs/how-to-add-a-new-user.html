@@ -56,7 +56,7 @@
 <p class="subtitle">How to give someone, a tester included, an account on MaxRecall DSA: their languages and first questions, their invite, what to send them, and what to do later (more questions, a forgotten password, taking them off). Open this file straight from disk; it needs no server.</p>
 
 <div class="note">
-  <p><strong>Status:</strong> written 2026-11-05, for the first testers of <a href="https://maxrecallcode.net">https://maxrecallcode.net</a> (limited-live plan, steps 5 and 6). The first time through is a rehearsal, with a second email address of your own.</p>
+  <p><strong>Status:</strong> written 2026-11-05, for the first testers of <a href="https://maxrecallcode.net">https://maxrecallcode.net</a> (limited-live plan, steps 5 and 6). The first time through is a rehearsal, with a second email address of your own. <strong>Rehearsed</strong> 2026-11-06 in a copy of the VPS in the cloud (its <code>maxrecall</code> user, folders and service settings; no nginx, systemd or sandbox): steps 1 to 7 and every later change worked as written, after two fixes, the language menu (step 7) and <code>archive/</code> (taking someone off).</p>
   <p>The authorities are <code>docs/deploy-vps.md</code> (§4 invites, §11 a new tester, §13 the site and its shared login) and <code>readme.html</code>, “Where data lives”; the code is <code>auth.js</code> (invites, registering), <code>learner.js</code> and <code>scripts/learner-create.js</code> (a new learner's files). This page explains them; where they disagree, they win.</p>
 </div>
 
@@ -264,6 +264,7 @@ Thanks!</code></pre>
 <pre><code>mv /srv/maxrecall/data/users/tester@example.com /srv/maxrecall/data/archive/tester@example.com.$(date -u +%Y%m%dT%H%M%SZ)</code></pre>
 <ul>
   <li>Into <code>archive/</code>, outside <code>users/</code>: the server counts every folder in <code>users/</code> named like an email as a user. <code>date -u +…</code> adds the UTC time to the name (<code>docs/deploy-vps.md</code> §10).</li>
+  <li><code>archive/</code> must exist. It does on the VPS (made in <code>docs/deploy-vps.md</code> §10), but <code>make deploy-server</code> doesn't make it, and without it <code>mv</code> stops with “No such file or directory”, moving nothing. On a new machine, make it first, owned by the service's user and closed to others: <code>install -d -o maxrecall -g maxrecall -m 750 /srv/maxrecall/data/archive</code> (<a href="https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html">install(1)</a>: <code>-d</code> makes the folder, <code>-o</code>/<code>-g</code> its owner and group, <code>-m</code> its permissions).</li>
   <li>No server stop needed: with their sessions and account gone, nothing can ask for their files any more.</li>
   <li>If they asked for their data to be deleted, delete the archived folder too (and any copy on Kubuntu).</li>
 </ul>
