@@ -41,8 +41,8 @@ learned it. A rule with no source is marked as a guess.
   question.)
 - **Count concepts finely.** Two operators that do different things are
   two concepts, even when they look alike (owner, 2026-11-06: Build a New
-  String taught both `+` and `+=`; it now teaches `+` alone, and `+=` gets
-  a question of its own). Before calling a draft done, list what each
+  String taught both `+` and `+=`; it now teaches `+` alone, and `+=` has
+  a question of its own, Add to a String). Before calling a draft done, list what each
   example shows the learner for the first time: each item on the list is
   a concept.
 - **Mind the chain.** Questions build on each other through their

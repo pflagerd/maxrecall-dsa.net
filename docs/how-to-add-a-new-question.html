@@ -213,7 +213,7 @@
   <tr><td><code>title</code></td><td>yes</td><td>As the list shows it.</td></tr>
   <tr><td><code>difficulty</code></td><td>yes</td><td><code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</td></tr>
   <tr><td><code>topics</code>, <code>sources</code></td><td>yes</td><td>Lists of names, may be empty; colours from <code>labels.json</code>.</td></tr>
-  <tr><td><code>alreadyLearned</code></td><td>no</td><td>The slugs of the questions it builds on, e.g. <code>["double-each-character"]</code>; left out if none. Every Learning tab links each of them, and no others, in its “Learned earlier” section; <code>make test</code> checks both, and that no question builds on itself.</td></tr>
+  <tr><td><code>alreadyLearned</code></td><td>no</td><td>The slugs of the questions it builds on directly, e.g. <code>["add-to-a-string"]</code>; left out if none. Not the ones those build on: they come with them. Every Learning tab links each of them, and no others, in its “Learned earlier” section; <code>make test</code> checks both, that no question builds on itself, and that none lists a question it already reaches through another.</td></tr>
   <tr><td><code>judgeMode</code></td><td>no</td><td><code>"function"</code> (left out means this) or <code>"program"</code>.</td></tr>
   <tr><td><code>starterCode</code></td><td>yes</td><td>By language: the editor's starting code. Its languages are the question's languages.</td></tr>
   <tr><td><code>description</code></td><td>yes</td><td>By language: HTML.</td></tr>
