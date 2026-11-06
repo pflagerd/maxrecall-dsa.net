@@ -12,11 +12,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, checkQuestion } = require('./question-files');
+const { isQuestionFile, checkQuestion, findLearnedLoop } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
 const files = fs.readdirSync(QUESTIONS_DIR).filter(isQuestionFile).sort(); // not renames.json, the rename log
+/** Every question's slug, for checking alreadyLearned's entries. @type {string[]} */
+const slugs = files.map((name) => name.replace(/\.json$/, ''));
 
 test('there are question files to check', () => {
   assert.ok(files.length > 0);
@@ -30,9 +32,19 @@ for (const name of files) {
     } catch (err) {
       assert.fail(`not valid JSON: ${/** @type {Error} */ (err).message}`);
     }
-    assert.deepEqual(checkQuestion(question, name), []);
+    assert.deepEqual(checkQuestion(question, name, slugs), []);
   });
 }
+
+test('no question builds on itself through alreadyLearned (no loop)', () => {
+  /** @type {Record<string, string[]>} */
+  const learnedBySlug = {};
+  for (const name of files) {
+    const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    learnedBySlug[name.replace(/\.json$/, '')] = question.alreadyLearned || [];
+  }
+  assert.equal(findLearnedLoop(learnedBySlug), null);
+});
 
 // --- docs/question-template.json -------------------------------------------
 // The file to copy to start a question (docs/how-to-add-a-new-question.html,
@@ -108,7 +120,25 @@ test('the valid samples pass, and so does one with learning text', () => {
   assert.deepEqual(checkQuestion(valid(), 'sample.json'), []);
   assert.deepEqual(checkQuestion(validProgram(), 'sample.json'), []);
   assert.deepEqual(checkQuestion({ ...valid(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), [], 'learning may cover only some languages');
+  assert.deepEqual(checkQuestion({ ...valid(), alreadyLearned: ['two-sum'], learning: { python: LINK_TO_TWO_SUM, cpp: LINK_TO_TWO_SUM } }, 'sample.json', ['two-sum']), [], 'alreadyLearned with its links');
+  assert.deepEqual(checkQuestion({ ...valid(), alreadyLearned: ['two-sum'] }, 'sample.json', ['two-sum']), [], 'alreadyLearned with no Learning tab to link from');
 });
+
+test('alreadyLearned must name questions that exist, when the slugs are given', () => {
+  const question = { ...valid(), alreadyLearned: ['no-such-question'] };
+  assert.ok(checkQuestion(question, 'sample.json', ['two-sum']).some((p) => /alreadyLearned: there's no question "no-such-question"/.test(p)));
+  assert.deepEqual(checkQuestion(question, 'sample.json'), [], 'without the slugs, existence isn\'t checked');
+});
+
+test('findLearnedLoop finds a loop, and only a loop', () => {
+  assert.deepEqual(findLearnedLoop({ a: ['b'], b: ['c'], c: ['a'] }), ['a', 'b', 'c', 'a']);
+  assert.deepEqual(findLearnedLoop({ a: ['a'] }), ['a', 'a']);
+  assert.equal(findLearnedLoop({ a: ['b', 'c'], b: ['c'], c: [] }), null, 'two paths to one question are not a loop');
+  assert.equal(findLearnedLoop({ a: ['missing'] }), null, 'an unknown question is checkQuestion\'s to report');
+});
+
+/** A Learning tab's "Learned earlier" link to two-sum. @type {string} */
+const LINK_TO_TWO_SUM = '<h3>Learned earlier</h3><ul><li><a href="/problem.html?slug=two-sum" target="_blank" rel="noopener">Two Sum</a>: adding.</li></ul>';
 
 /** Given as a value to withChange(): delete the field instead. @type {symbol} */
 const DELETE = Symbol('delete');
@@ -145,6 +175,12 @@ const BROKEN = [
   ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Easy, Medium, Hard/],
   ['topics not a list', withChange(valid(), 'topics', 'Linked List'), /topics must be a list of names/],
   ['sources missing', withChange(valid(), 'sources', DELETE), /sources must be a list of names/],
+  ['alreadyLearned not a list', withChange(valid(), 'alreadyLearned', 'two-sum'), /alreadyLearned must be a list of question slugs/],
+  ['alreadyLearned empty (leave it out instead)', withChange(valid(), 'alreadyLearned', []), /alreadyLearned must be a list of question slugs/],
+  ['alreadyLearned listing the question itself', withChange(valid(), 'alreadyLearned', ['sample']), /alreadyLearned can't list the question itself/],
+  ['alreadyLearned listing one twice', withChange(valid(), 'alreadyLearned', ['two-sum', 'two-sum']), /alreadyLearned lists "two-sum" twice/],
+  ['a Learning link alreadyLearned doesn\'t list', withChange(valid(), 'learning', { python: LINK_TO_TWO_SUM }), /learning\.python links to "two-sum".*alreadyLearned doesn't list it/],
+  ['alreadyLearned with no link in one language', withChange(withChange(valid(), 'alreadyLearned', ['two-sum']), 'learning', { python: LINK_TO_TWO_SUM, cpp: '<p>No link.</p>' }), /learning\.cpp: no "Learned earlier" link to "two-sum"/],
   ['an unknown judgeMode', withChange(valid(), 'judgeMode', 'functions'), /judgeMode must be "function" or "program"/],
   ['no starterCode', withChange(valid(), 'starterCode', {}), /starterCode must give the starting code for at least one language/],
   ['an unknown language', withChange(valid(), 'starterCode.Python', 'x'), /starterCode\.Python: not a language the judge knows/],
