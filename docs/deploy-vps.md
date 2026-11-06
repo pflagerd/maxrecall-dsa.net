@@ -1316,7 +1316,8 @@ curl -6 -sSI https://maxrecallcode.net/
   VPS, `ss -ltn 'sport = :443'` should list `[::]:443`, and
   `ufw status verbose` a `443 (v6)` rule.
 - 2026-11-06 UTC: Kubuntu had no IPv6 route (failed after 2 ms), so the
-  site over IPv6 is still untested end to end.
+  site over IPv6 is still untested end to end. The VPS's side checked:
+  `ss` listed `[::]:443` and `ufw` a `443/tcp (v6)` rule.
 
 **In a private window**, <https://maxrecallcode.net> shows the app's login
 page with nothing asked first; sign in with your own account.
