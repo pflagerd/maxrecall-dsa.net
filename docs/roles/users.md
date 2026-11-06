@@ -19,6 +19,10 @@ records, and the scripts that set up and adjust a learner.
   recalculate.test.js, consistency.test.js)
 - Scripts: scripts/backlog.js, scripts/learner-create.js,
   scripts/recalculate-queue.js, scripts/consistency-check.js
+- The characterization check (owner, 2026-11-06, #106): routes.test.js
+  (in make test) and scripts/characterize.js (by hand, before and after
+  a refactor meant to change nothing). Both also exercise server.js and
+  auth.js, infrastructure and security's (docs/contracts.md, 7 and 9)
 - The learner's pages: index.html, problems-list.js, problem.html,
   problem-page.js, timer.js, style.css
 - docs/how-to-add-a-new-user.html (adding a user or tester, start to
