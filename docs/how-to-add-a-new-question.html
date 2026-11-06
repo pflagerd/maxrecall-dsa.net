@@ -77,7 +77,7 @@
 <h2 id="s1">1. Decide what the question is</h2>
 <p>Before any file, decide:</p>
 <ul>
-  <li><strong>What it teaches.</strong> One idea, stated in a sentence. A question that needs two new ideas is two questions.</li>
+  <li><strong>What it teaches.</strong> One new concept, stated in a sentence. It may build on a concept an earlier question taught, ideally at most one: list that question in <code>alreadyLearned</code>, and link it in the Learning tab's “Learned earlier”. A question that needs two new concepts is two questions, the one the other depends on first.</li>
   <li><strong>Its name</strong> (the <em>slug</em>): lowercase letters and digits, joined by single hyphens, e.g. <code>linked-list-from-values</code>. It's the file name (<code>questions/&lt;name&gt;.json</code>), part of the page's address (<code>problem.html?slug=…</code>), and how every learner's queue refers to it, so pick one you won't want to change. (If you must, <code>make rename-question</code> does it safely.)</li>
   <li><strong>Its title</strong>, as the problem list shows it.</li>
   <li><strong>Its difficulty</strong>: <code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</li>
@@ -213,6 +213,7 @@
   <tr><td><code>title</code></td><td>yes</td><td>As the list shows it.</td></tr>
   <tr><td><code>difficulty</code></td><td>yes</td><td><code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</td></tr>
   <tr><td><code>topics</code>, <code>sources</code></td><td>yes</td><td>Lists of names, may be empty; colours from <code>labels.json</code>.</td></tr>
+  <tr><td><code>alreadyLearned</code></td><td>no</td><td>The slugs of the questions it builds on, e.g. <code>["double-each-character"]</code>; left out if none. Every Learning tab links each of them, and no others, in its “Learned earlier” section; <code>make test</code> checks both, and that no question builds on itself.</td></tr>
   <tr><td><code>judgeMode</code></td><td>no</td><td><code>"function"</code> (left out means this) or <code>"program"</code>.</td></tr>
   <tr><td><code>starterCode</code></td><td>yes</td><td>By language: the editor's starting code. Its languages are the question's languages.</td></tr>
   <tr><td><code>description</code></td><td>yes</td><td>By language: HTML.</td></tr>

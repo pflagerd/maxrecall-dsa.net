@@ -104,7 +104,7 @@ function readRenamesText() {
 }
 
 /** A question file's fields (readme.html, "Problem file format"). @type {readonly string[]} */
-const QUESTION_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']);
+const QUESTION_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']);
 /** The difficulties the list shows. @type {readonly string[]} */
 const DIFFICULTIES = Object.freeze(['Easy', 'Medium', 'Hard']);
 /** The languages whose judge harness needs a signature (judge/runner.js). @type {readonly string[]} */
@@ -113,6 +113,10 @@ const TYPED_LANGUAGES = Object.freeze(['cpp', 'java', 'd']);
 // comparing two as text gives the same order as comparing them as times
 // (RFC 3339, section 5.1).
 const CREATED_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+// A link from a Learning tab to another question, as "Learned earlier"
+// writes it: <a href="/problem.html?slug=double-each-character" ...>. The
+// slug is everything up to the closing quote, so a misspelt one is caught.
+const QUESTION_LINK_PATTERN = /\/problem\.html\?slug=([^"'&#\s<>]+)/g;
 
 /**
  * Whether value is a plain object (not null, not an array).
@@ -137,9 +141,12 @@ function isPlainObject(value) {
  *
  * @param {unknown} question - The file's contents, parsed.
  * @param {string} fileName - Its name in questions/, e.g. "two-sum.json".
+ * @param {readonly string[]} [slugs] - Every question's slug, the file
+ *   names in questions/ without .json. If given, each of alreadyLearned's
+ *   entries must be one of them; if left out, that isn't checked.
  * @returns {string[]} The problems, each naming the field; empty if none.
  */
-function checkQuestion(question, fileName) {
+function checkQuestion(question, fileName, slugs) {
   if (!isPlainObject(question)) return ['must be a JSON object'];
   /** @type {string[]} */
   const problems = [];
@@ -158,6 +165,25 @@ function checkQuestion(question, fileName) {
   if (!DIFFICULTIES.includes(q.difficulty)) problems.push(`difficulty must be one of ${DIFFICULTIES.join(', ')}`);
   for (const field of ['topics', 'sources']) {
     if (!Array.isArray(q[field]) || !q[field].every((x) => typeof x === 'string' && x.trim())) problems.push(`${field} must be a list of names (it may be empty)`);
+  }
+  // alreadyLearned: the questions this one builds on (owner, 2026-11-05;
+  // docs/roles/questions/how-to-write-a-question.md), left out if none.
+  /** @type {string[]} */
+  let learned = [];
+  if (q.alreadyLearned !== undefined) {
+    if (!Array.isArray(q.alreadyLearned) || !q.alreadyLearned.length || !q.alreadyLearned.every((s) => typeof s === 'string' && s.trim())) {
+      problems.push('alreadyLearned must be a list of question slugs, e.g. ["double-each-character"] (leave it out if the question builds on none)');
+    } else {
+      learned = q.alreadyLearned;
+      const own = fileName.replace(/\.json$/, '');
+      const seen = new Set();
+      for (const slug of learned) {
+        if (seen.has(slug)) problems.push(`alreadyLearned lists ${JSON.stringify(slug)} twice`);
+        seen.add(slug);
+        if (slug === own) problems.push(`alreadyLearned can't list the question itself, ${JSON.stringify(own)}`);
+        else if (slugs && !slugs.includes(slug)) problems.push(`alreadyLearned: there's no question ${JSON.stringify(slug)} in questions/`);
+      }
+    }
   }
   const mode = q.judgeMode === undefined ? 'function' : q.judgeMode;
   if (mode !== 'function' && mode !== 'program') problems.push('judgeMode must be "function" or "program" (or left out, meaning "function")');
@@ -212,6 +238,21 @@ function checkQuestion(question, fileName) {
   perLanguage('examples', (v) => Array.isArray(v) && v.every((ex) => isPlainObject(ex) && typeof ex.input === 'string' && typeof ex.output === 'string' && (ex.explanation === undefined || typeof ex.explanation === 'string')), 'a list of { input, output, explanation? }, each text');
   perLanguage('constraints', (v) => Array.isArray(v) && v.every((c) => typeof c === 'string'), 'a list of text (it may be empty)');
   perLanguage('learning', text, 'HTML text', true);
+  // Each Learning tab's "Learned earlier" links are alreadyLearned, no more
+  // and no fewer, so the page and the field can't drift apart.
+  if (isPlainObject(q.learning)) {
+    for (const language of languages) {
+      const html = q.learning[language];
+      if (typeof html !== 'string') continue;
+      const linked = new Set(Array.from(html.matchAll(QUESTION_LINK_PATTERN), (m) => m[1]));
+      for (const slug of linked) {
+        if (!learned.includes(slug)) problems.push(`learning.${language} links to ${JSON.stringify(slug)} (/problem.html?slug=${slug}), but alreadyLearned doesn't list it`);
+      }
+      for (const slug of learned) {
+        if (!linked.has(slug)) problems.push(`learning.${language}: no "Learned earlier" link to ${JSON.stringify(slug)}, which alreadyLearned lists`);
+      }
+    }
+  }
 
   if (mode === 'function') {
     perLanguage('functionName', text, 'the function\'s name, which the judge calls');
@@ -258,4 +299,51 @@ function checkQuestion(question, fileName) {
   return problems;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, QUESTION_FIELDS };
+/**
+ * A loop in what questions build on (alreadyLearned): a question that,
+ * through the ones it builds on, builds on itself. Then no order could show
+ * every question after the ones it builds on. Needs every question at once,
+ * so it isn't part of checkQuestion.
+ *
+ * @param {Record<string, readonly string[]>} learnedBySlug - Each question's
+ *   slug and its alreadyLearned ([] for none). An entry naming a question
+ *   not in it is ignored: checkQuestion reports that.
+ * @returns {string[] | null} A loop, as the slugs in order with the first
+ *   repeated at the end (["a", "b", "a"]), or null if there's none.
+ */
+function findLearnedLoop(learnedBySlug) {
+  /** Where each question is: absent (not visited), 'open' (on the current path) or 'done'. @type {Map<string, 'open' | 'done'>} */
+  const state = new Map();
+  /** @type {string[]} */
+  const pathSoFar = [];
+  /**
+   * Depth-first search from one question.
+   *
+   * @param {string} slug - The question.
+   * @returns {string[] | null} A loop through it or after it, or null.
+   */
+  const visit = (slug) => {
+    state.set(slug, 'open');
+    pathSoFar.push(slug);
+    for (const next of learnedBySlug[slug] || []) {
+      if (!(next in learnedBySlug)) continue;
+      if (state.get(next) === 'open') return [...pathSoFar.slice(pathSoFar.indexOf(next)), next];
+      if (!state.has(next)) {
+        const loop = visit(next);
+        if (loop) return loop;
+      }
+    }
+    pathSoFar.pop();
+    state.set(slug, 'done');
+    return null;
+  };
+  for (const slug of Object.keys(learnedBySlug).sort()) {
+    if (!state.has(slug)) {
+      const loop = visit(slug);
+      if (loop) return loop;
+    }
+  }
+  return null;
+}
+
+module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, QUESTION_FIELDS };
