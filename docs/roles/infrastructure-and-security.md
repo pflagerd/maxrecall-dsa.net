@@ -35,7 +35,7 @@ TypeScript, `doc-check`).
   (users: the feature routes server.js mounts), users.js (users),
   questions/*.json and judge/runner.js (questions)
 - docs/how-to-add-a-new-user.html (users): ask there for changes to its
-  invite, shared login and backup steps
+  invite and backup steps
 - docs/roles/**, other roles' handoffs, and the handoffs from before roles
   (docs/session-handoff/*.md)
 - TODO, THOUGHTS (the human's notes)
