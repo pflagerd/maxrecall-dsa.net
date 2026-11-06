@@ -233,8 +233,10 @@ router.get(
  * be opened by its slug, and its Submit or Skip puts it straight into the
  * queue (order.js, recordSubmit, rule 1): that's how a learner queues a
  * question they choose (docs/how-to-put-a-question-directly-into-my-queue-by-slug.html).
- * Don't add such a check. A chosen backlog limits what the list and Next
- * offer; the profile's languages are what's enforced (403 above).
+ * Don't add such a check: routes.test.js fails if one is added (its test
+ * "a feature: a question not in a chosen backlog, ..."). A chosen backlog
+ * limits what the list and Next offer; the profile's languages are what's
+ * enforced (403 above).
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
