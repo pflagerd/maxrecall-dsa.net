@@ -759,13 +759,8 @@ const idleDialog = /** @type {HTMLDialogElement} */ (document.getElementById('id
 const idleCountdownEl = /** @type {HTMLElement} */ (document.getElementById('idle-dialog-countdown'));
 const idleDialogBtn = /** @type {HTMLButtonElement} */ (document.getElementById('idle-dialog-btn'));
 // createIdleTimeout is a global, from timer.js's <script>, like
-// createStopwatch; read from window with a cast because
-// browser-globals.d.ts (infrastructure and security's) doesn't declare it
-// yet. Once it does, this can be the plain name.
-const makeIdleTimeout = /** @type {typeof import('./timer').createIdleTimeout} */ (
-  /** @type {any} */ (window).createIdleTimeout
-);
-const idleTimeout = makeIdleTimeout({ warnAfterMs: IDLE_WARN_AFTER_MS, warningMs: IDLE_WARNING_MS });
+// createStopwatch (declared for make typecheck in browser-globals.d.ts).
+const idleTimeout = createIdleTimeout({ warnAfterMs: IDLE_WARN_AFTER_MS, warningMs: IDLE_WARNING_MS });
 let leavingForIdle = false;
 
 /**
