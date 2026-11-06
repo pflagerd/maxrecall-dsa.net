@@ -39,6 +39,12 @@ learned it. A rule with no source is marked as a guess.
   a new one; the second became Build a New String. In #86, joining a
   list and Java's `StringBuilder` came out of it to go in a joining
   question.)
+- **Count concepts finely.** Two operators that do different things are
+  two concepts, even when they look alike (owner, 2026-11-06: Build a New
+  String taught both `+` and `+=`; it now teaches `+` alone, and `+=` has
+  a question of its own, Add to a String). Before calling a draft done, list what each
+  example shows the learner for the first time: each item on the list is
+  a concept.
 - **Mind the chain.** Questions build on each other through their
   "Learned earlier" sections (`readme.html`, Decisions, 2026-10-30: Double
   Each Character → To Uppercase and Lowercase → Swap Case with Helpers).
@@ -46,6 +52,12 @@ learned it. A rule with no source is marked as a guess.
   slugs it builds on; `make test` checks that it names existing
   questions, matches the "Learned earlier" links in every language's
   Learning tab, and has no loop.
+- **List only the questions it builds on directly** (owner, 2026-11-06).
+  The ones those build on come with them: To Uppercase and Lowercase
+  lists Double Each Character, not also Build a New String, which Double
+  Each Character builds on. `make test` refuses an entry already reached
+  through another (`findRedundantLearned`). It also keeps most lists to
+  the one already-learned concept the rule above asks for.
 - **Nothing yet shows an earlier question first** (owner, 2026-11-05:
   `alreadyLearned` is there so that something can, later). A new
   learner's backlog is ordered by `created` (spaced-repetition plan, D6),
@@ -158,7 +170,7 @@ Source: the Learning tabs of `questions/build-a-new-string.json` and
   column.
 - The description ends with "New to this? The `<button type="button"
   class="tab-ref-link" data-tab="learning">Learning</button>` tab
-  covers …" in 4 of the 6 questions with a Learning tab (not Hello World
+  covers …" in 5 of the 7 questions with a Learning tab (not Hello World
   or Singly Linked List Hello World). Whether that should be the rule is
   open (section 6).
 - "Learned earlier", where there is one, is the Learning tab's last
@@ -177,7 +189,7 @@ Not decided; settle them with the owner and move them up as rules.
   Unique I write `'abc'` (what Python's `repr` prints); Swap Case with
   Helpers, To Uppercase and Lowercase and Valid Parentheses write
   `"Hello World"`. Pick one.
-- **Should every question have a Learning tab?** 6 of the 13 do; the
+- **Should every question have a Learning tab?** 7 of the 14 do; the
   other seven (Two Sum, Climbing Stairs and others) don't.
 - **"New to this?" in every description with a Learning tab**, or only
   where the Learning tab teaches something the description relies on.
