@@ -741,6 +741,75 @@ timerBtn.addEventListener(
 document.addEventListener('visibilitychange', updateClocks);
 // A quarter second, so the display never skips a second.
 setInterval(renderTimer, 250);
+
+// --- The idle timeout (issue #102; owner's decisions in the issue) ---------
+// After 55 minutes with no keyboard or mouse input, a "Still there?"
+// warning; 5 minutes later, still with none, the question closes and the
+// list opens. Real time, hidden tab or not, but the warning only begins
+// while the tab is visible, so its whole countdown is seen (timer.js,
+// createIdleTimeout). Leaving records nothing, as navigating away doesn't,
+// and the code in the editor is lost: nothing saves it.
+const IDLE_WARN_AFTER_MS = 55 * 60 * 1000;
+const IDLE_WARNING_MS = 5 * 60 * 1000;
+// The input that counts: keys, clicks, mouse movement and the wheel, from
+// the mouse, a touch screen or a pen (pointer events cover all three).
+const IDLE_INPUT_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'];
+const idleDialog = /** @type {HTMLDialogElement} */ (document.getElementById('idle-dialog'));
+const idleCountdownEl = /** @type {HTMLElement} */ (document.getElementById('idle-dialog-countdown'));
+const idleDialogBtn = /** @type {HTMLButtonElement} */ (document.getElementById('idle-dialog-btn'));
+// createIdleTimeout is a global, from timer.js's <script>, like
+// createStopwatch; read from window with a cast because
+// browser-globals.d.ts (infrastructure and security's) doesn't declare it
+// yet. Once it does, this can be the plain name.
+const makeIdleTimeout = /** @type {typeof import('./timer').createIdleTimeout} */ (
+  /** @type {any} */ (window).createIdleTimeout
+);
+const idleTimeout = makeIdleTimeout({ warnAfterMs: IDLE_WARN_AFTER_MS, warningMs: IDLE_WARNING_MS });
+let leavingForIdle = false;
+
+/**
+ * Notes input: the idle time starts again, and an open warning closes.
+ *
+ * @returns {void}
+ */
+function onIdleInput() {
+  idleTimeout.activity();
+  if (idleDialog.open) idleDialog.close();
+}
+
+/**
+ * Shows what the idle timeout says: nothing, the warning with its
+ * countdown, or, once it's expired, the list of questions.
+ *
+ * @returns {void}
+ */
+function checkIdle() {
+  if (leavingForIdle) return;
+  const idle = idleTimeout.check(!document.hidden);
+  if (idle.state === 'active') return;
+  if (idle.state === 'warning') {
+    // Rounded up, so it reads 0:01 in its last second, not 0:00.
+    idleCountdownEl.textContent = formatElapsed(Math.ceil(idle.leaveInMs / 1000) * 1000);
+    if (!idleDialog.open) idleDialog.showModal();
+    return;
+  }
+  // Expired: stop the timer and leave, as the back link does. Back returns
+  // to the question, opened afresh.
+  leavingForIdle = true;
+  if (currentLanguage) clockFor(currentLanguage).pause();
+  window.location.assign('/');
+}
+
+for (const type of IDLE_INPUT_EVENTS) {
+  // Capturing, on window: seen first, even if the editor stops it there.
+  // Passive: it never calls preventDefault(), so scrolling isn't held up.
+  window.addEventListener(type, onIdleInput, { capture: true, passive: true });
+}
+idleDialogBtn.addEventListener('click', onIdleInput);
+document.addEventListener('visibilitychange', checkIdle);
+// Once a second while the tab is shown. Hidden, a browser may run this as
+// rarely as once a minute, which is why the times are compared, not counted.
+setInterval(checkIdle, 1000);
 // --- The learner's profile (spaced-repetition plan, D2; step 4c) -------------
 // Which languages the learner has, their default, and what they may change
 // come from the server (GET /api/profile), and changes are saved there

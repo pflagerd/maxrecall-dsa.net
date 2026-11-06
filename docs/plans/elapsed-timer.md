@@ -131,3 +131,38 @@ Decided while building (small choices, owner may overrule):
   green once frozen.
 - The Submissions tab's "Time" column is now "Runtime", next to the new
   "Your time".
+
+## The idle timeout (issue #102, 2026-11-06)
+
+A question nobody is working on closes, and the list of questions opens.
+It sits beside the stopwatch in `timer.js` (`createIdleTimeout`), with
+the page's side in `problem-page.js` (`checkIdle`, `onIdleInput`).
+
+Decided (owner, #102's comment and the users session):
+- **An hour in all**: a "Still there?" warning after 55 minutes with no
+  keyboard or mouse input, counting down 5 minutes, then leaving.
+- **Real time**, unlike the stopwatch: time with the tab hidden counts, so
+  it reads `Date.now()` (the wall clock), not `performance.now()`.
+- **A warning begins only while the tab is visible.** A tab hidden past
+  55 minutes shows the warning, with its whole 5 minutes, when it's next
+  shown, so the countdown can't run out unseen. Once begun, it runs in
+  real time, hidden or not.
+- **Nothing recorded**, like navigating away (not a Skip); the code in the
+  editor is lost, since nothing saves drafts.
+
+Decided while building (small choices, owner may overrule):
+- Input is `keydown`, `pointerdown`, `pointermove` and `wheel`
+  (pointer events cover mouse, touch and pen), listened for on `window`
+  in the capture phase, so the editor can't hide them. Mouse movement
+  counts, so the warning closes as the mouse moves toward its "I'm still
+  here" button; the button is for a tap or the keyboard.
+- Checked once a second and on `visibilitychange`, comparing times
+  rather than relying on one long `setTimeout`: browsers may run a
+  hidden tab's timers only once a minute
+  (https://developer.chrome.com/blog/timer-throttling-in-chrome-88).
+- Leaving is `location.assign('/')`, like the back link, so Back
+  returns to the question, opened afresh.
+
+For #21's countdown: the idle timeout is separate from the stopwatch, so
+a countdown can pause with the stopwatch while the idle timeout keeps
+real time.

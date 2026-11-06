@@ -141,6 +141,14 @@
     </section>
   </main>
 
+  <!-- The idle timeout's warning (issue #102): problem-page.js opens it after
+       55 minutes with no keyboard or mouse input, and any input closes it. -->
+  <dialog id="idle-dialog" class="idle-dialog" aria-labelledby="idle-dialog-title" aria-describedby="idle-dialog-text">
+    <h2 id="idle-dialog-title">Still there?</h2>
+    <p id="idle-dialog-text">There's been no typing or mouse movement for 55 minutes. In <strong id="idle-dialog-countdown">5:00</strong> this question closes and the list of questions opens. Your code here isn't saved and will be lost, and nothing is recorded.</p>
+    <button id="idle-dialog-btn" class="primary" type="button">I'm still here</button>
+  </dialog>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
