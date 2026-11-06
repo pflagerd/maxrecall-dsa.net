@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(make test)",
+      "Bash(make typecheck)",
+      "Bash(make doc-check)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

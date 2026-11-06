@@ -8,6 +8,7 @@
 
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -178,4 +179,33 @@ test('throttling remembers at most MAX_TRACKED_FAILURES emails, forgetting the o
   // The victim's failures were the oldest, so they're forgotten: a plain
   // refusal again, not a wait.
   assert.deepEqual(await register(victim, 'wrong', PASSWORD), { ok: false, error: REFUSED });
+});
+
+/**
+ * Where a session token's file is: named by the token's SHA-256, as
+ * auth.js names it.
+ *
+ * @param {string} token - The session token.
+ * @returns {string} Its path in the temporary folder.
+ */
+function sessionFileOf(token) {
+  return path.join(AUTH, 'sessions', `${crypto.createHash('sha256').update(token).digest('hex')}.json`);
+}
+
+test("a deleted account's sessions stop working, and their files are deleted", async () => {
+  const { code } = await createInvite('gone@example.com');
+  const result = await register('gone@example.com', code, PASSWORD);
+  assert.ok(result.ok && (await sessionEmail(result.token)) === 'gone@example.com');
+  fs.rmSync(path.join(AUTH, 'accounts', 'gone@example.com.json'));
+  assert.ok(result.ok && (await sessionEmail(result.token)) === null);
+  assert.ok(result.ok && !fs.existsSync(sessionFileOf(result.token)));
+});
+
+test('an account registered again (a reset) does not bring back the old account\'s sessions', async () => {
+  const first = await register('reset@example.com', (await createInvite('reset@example.com')).code, PASSWORD);
+  assert.ok(first.ok);
+  fs.rmSync(path.join(AUTH, 'accounts', 'reset@example.com.json'));
+  const second = await register('reset@example.com', (await createInvite('reset@example.com')).code, PASSWORD);
+  assert.ok(second.ok && (await sessionEmail(second.token)) === 'reset@example.com');
+  assert.ok(first.ok && (await sessionEmail(first.token)) === null);
 });
