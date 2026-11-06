@@ -56,8 +56,8 @@
 <p class="subtitle">How to give someone, a tester included, an account on MaxRecall DSA: their languages and first questions, their invite, what to send them, and what to do later (more questions, a forgotten password, taking them off). Open this file straight from disk; it needs no server.</p>
 
 <div class="note">
-  <p><strong>Status:</strong> written 2026-11-05, for the first testers of <a href="https://maxrecallcode.net">https://maxrecallcode.net</a> (limited-live plan, steps 5 and 6). The first time through is a rehearsal, with a second email address of your own. <strong>Rehearsed</strong> 2026-11-06 in a copy of the VPS in the cloud (its <code>maxrecall</code> user, folders and service settings; no nginx, systemd or sandbox): steps 1 to 7 and every later change worked as written, after two fixes, the language menu (step 7) and <code>archive/</code> (taking someone off).</p>
-  <p>The authorities are <code>docs/deploy-vps.md</code> (§4 invites, §11 a new tester, §13 the site and its shared login) and <code>readme.html</code>, “Where data lives”; the code is <code>auth.js</code> (invites, registering), <code>learner.js</code> and <code>scripts/learner-create.js</code> (a new learner's files). This page explains them; where they disagree, they win.</p>
+  <p><strong>Status:</strong> written 2026-11-05, for the first testers of <a href="https://maxrecallcode.net">https://maxrecallcode.net</a> (limited-live plan, steps 5 and 6). The first time through is a rehearsal, with a second email address of your own. <strong>Rehearsed</strong> 2026-11-06 in a copy of the VPS in the cloud (its <code>maxrecall</code> user, folders and service settings; no nginx, systemd or sandbox): steps 1 to 7 and every later change worked as written, after two fixes, the language menu (step 7) and <code>archive/</code> (taking someone off). <strong>Updated</strong> 2026-11-06 for the shared login's removal (limited-live D3): step 5's message and what keeps strangers out.</p>
+  <p>The authorities are <code>docs/deploy-vps.md</code> (§4 invites, §11 a new tester, §13 the site and its sign-in limits) and <code>readme.html</code>, “Where data lives”; the code is <code>auth.js</code> (invites, registering), <code>learner.js</code> and <code>scripts/learner-create.js</code> (a new learner's files). This page explains them; where they disagree, they win.</p>
 </div>
 
 <h2 id="what">What a user is</h2>
@@ -67,7 +67,7 @@
   <tr><td><strong>Their learning</strong>: languages, queue, backlog, Submit records</td><td><code>/srv/maxrecall/data/users/&lt;email&gt;/</code></td><td>You, with <code>make learner-create</code> (step 2), before they've done anything; a git repository from step 3</td></tr>
   <tr><td><strong>Their sign-in</strong>: a password hash, and sessions</td><td><code>/srv/maxrecall/data/auth/accounts/&lt;email&gt;.json</code>, <code>auth/sessions/</code></td><td>Them, registering with your invite (steps 4 and 6)</td></tr>
 </table>
-<p>Both are named by their email <strong>in lower case</strong>: registering lower-cases it (<code>auth.js</code>, <code>normalizeEmail</code>), and so does <code>make learner-create</code>. In front of both, every visitor first gets nginx's <strong>shared</strong> login (Basic auth, <code>docs/deploy-vps.md</code> §13), the same username and password for everyone, while testing is limited.</p>
+<p>Both are named by their email <strong>in lower case</strong>: registering lower-cases it (<code>auth.js</code>, <code>normalizeEmail</code>), and so does <code>make learner-create</code>. Nothing comes before the app's own login page: the shared login nginx used to ask for first is gone (<a href="#shared">below</a>).</p>
 <p>Without step 2 a new user still works, but with no <code>profile.json</code> they get every question in all five languages waiting for them (<code>"backlog": "all"</code>). Step 2 gives them only the languages and questions you choose.</p>
 
 <h2 id="steps">The steps, for a tester on the VPS</h2>
@@ -80,7 +80,7 @@
   <li><a href="#s6">They register</a></li>
   <li><a href="#s7">Check it as them</a></li>
 </ol>
-<p>Then: <a href="#kubuntu">on Kubuntu</a>, <a href="#later">later changes</a>, <a href="#owner">your own account</a>, <a href="#shared">the shared login</a>, <a href="#limits">what testers can and can't do</a> and the <a href="#checklist">checklist</a>.</p>
+<p>Then: <a href="#kubuntu">on Kubuntu</a>, <a href="#later">later changes</a>, <a href="#owner">your own account</a>, <a href="#shared">what keeps strangers out</a>, <a href="#limits">what testers can and can't do</a> and the <a href="#checklist">checklist</a>.</p>
 <p>All the VPS commands are run as root on the VPS, <code>srv702017.hstgr.cloud</code>, from the service's checkout:</p>
 <pre><code>cd /srv/maxrecall/maxrecall-dsa.net</code></pre>
 <p>The server keeps running for all seven steps.</p>
@@ -179,23 +179,19 @@
 </ul>
 
 <h2 id="s5">5. Send them what they need</h2>
-<p>Four things: the address, the shared login, their code, and the email to register with. A draft, to edit before sending. It also says what's stored about them (the limited-live plan's D5: a note to testers). That's a courtesy, not legal advice: whether anything more is needed depends on where they live.</p>
+<p>Three things: the address, their code, and the email to register with. A draft, to edit before sending. It also says what's stored about them (the limited-live plan's D5: a note to testers). That's a courtesy, not legal advice: whether anything more is needed depends on where they live.</p>
 <pre><code>Hello,
 
 You're invited to try MaxRecall DSA, a practice site for data
 structures and algorithms that I'm building. It's early, so expect
 rough edges, and please tell me about them.
 
-1. Open https://maxrecallcode.net
-2. Your browser asks for a username and password first. That's a
-   shared login for everyone testing:
-     username: tester
-     password: (I'll send it separately)
-3. On the site's own page, choose Register and enter:
+1. Open https://maxrecallcode.net and choose Register.
+2. Enter:
      email:       tester@example.com   (exactly this one)
      invite code: PASTE-THE-CODE-HERE  (works once, for 7 days)
      password:    one of your own, at least 12 characters
-4. You'll see your list of questions. Where a question has a
+3. You'll see your list of questions. Where a question has a
    Learning tab, read it first.
 
 What's kept: your email, a hash of your password (never the password
@@ -205,12 +201,12 @@ want it deleted.
 
 Thanks!</code></pre>
 <ul>
-  <li>Send the shared login's password by a different route from the code (another message, or tell them), so one leaked message isn't enough.</li>
-  <li>Replace <code>tester</code> with the username you chose in <code>docs/deploy-vps.md</code> §13, step 5, if it's different.</li>
+  <li>The code is the only secret in it, and it's limited: it works once, only with this email, for 7 days. If it may have leaked before they used it, make a new one (step 4): that replaces it.</li>
+  <li>Testers sent the older message, before 2026-11-06, were told of a shared username and password first: there's no such prompt any more, and nothing to do about it.</li>
 </ul>
 
 <h2 id="s6">6. They register</h2>
-<p>At <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a>, after the shared login: email, invite code and a password of their own (at least 12 characters). Registering signs them in, deletes the invite, and shows their list. Sessions last 360 days.</p>
+<p>At <a href="https://maxrecallcode.net/login.html#register">https://maxrecallcode.net/login.html#register</a>: email, invite code and a password of their own (at least 12 characters). Registering signs them in, deletes the invite, and shows their list. Sessions last 360 days.</p>
 <p>Every refusal gives one message, “Registration isn't open for that email and invite code.”, whatever the reason: a wrong email, a wrong or expired code, a used one. That's deliberate (it reveals nothing to someone guessing). The usual causes: a different email from the one invited, or a code copied with a character missing. A too-short password gets its own message. After 5 refusals for one email, each try waits longer (up to 15 minutes); restarting the server clears that.</p>
 
 <h2 id="s7">7. Check it as them</h2>
@@ -231,7 +227,7 @@ Thanks!</code></pre>
 </ul>
 <pre><code>make dev</code></pre>
 <ul>
-  <li>Then register at <a href="http://localhost:3000/login.html#register">http://localhost:3000/login.html#register</a>. There's no shared login on Kubuntu: that's nginx's, on the VPS.</li>
+  <li>Then register at <a href="http://localhost:3000/login.html#register">http://localhost:3000/login.html#register</a>. Nothing comes before the login page, on Kubuntu as on the VPS.</li>
 </ul>
 
 <h2 id="later">Later changes</h2>
@@ -272,17 +268,14 @@ Thanks!</code></pre>
 <h2 id="owner">Your own account</h2>
 <p>Through the SSH tunnel's trusted port you need none: every request there is you. On the public site you do, like anyone else. Your learning folder already exists, so skip step 2: <code>make invite EMAIL=daniel.pflager@gmail.com</code> (step 4), then register. Step 3 applies to your folder too; its first commit then holds your records so far. Being <code>MAXRECALL_USER</code> gives you the <strong>Test</strong> button there too.</p>
 
-<h2 id="shared">The shared login</h2>
-<p>One username and password, in <code>/etc/nginx/maxrecall.htpasswd</code>, keep strangers away from the app altogether while testing is limited (the limited-live plan's D3). It isn't per person: who someone is comes from their own sign-in.</p>
+<h2 id="shared">What keeps strangers out: no shared login since 2026-11-06</h2>
+<p>Until 2026-11-06 nginx asked every visitor for one shared username and password before the app (the limited-live plan's D3). It's gone, from the configuration and from the VPS (<code>docs/deploy-vps.md</code> §13, step 8): anyone can reach the login page. What stops a stranger now:</p>
 <ul>
-  <li><strong>To change it</strong> (everyone then needs the new one): <code>docs/deploy-vps.md</code> §13, step 5 again.</li>
-  <li><strong>To give someone a login of their own</strong>, so you can take it away without changing everyone's, add a line rather than replacing the file:</li>
+  <li><strong>Registering needs an invite</strong>: only an email you ran <code>make invite</code> for, with its code, once, within 7 days (<code>auth.js</code>; step 4).</li>
+  <li><strong>Failed sign-ins slow down per email</strong>: after 5, each try waits longer, up to 15 minutes (<code>auth.js</code>; step 6).</li>
+  <li><strong>nginx limits login and register attempts</strong> per visitor (an IPv6 <code>/64</code> counts, roughly, as one) and for the whole site (<code>deploy/nginx-maxrecallcode.conf</code>, <code>docs/deploy-vps.md</code> §13).</li>
 </ul>
-<pre><code>printf 'alice:%s\n' "$(openssl passwd -6)" &gt;&gt; /etc/nginx/maxrecall.htpasswd</code></pre>
-<ul>
-  <li><code>&gt;&gt;</code> appends; <code>&gt;</code> would replace everyone's. <code>openssl passwd -6</code> asks for the password twice and prints its hash. Remove that line to take it away.</li>
-  <li>Either change works at once, with no reload: nginx reads the file at each request (tested with Ubuntu 24.04's nginx 1.24.0, 2026-11-05: a line added let that login in, the others kept working, and removing it shut it out again).</li>
-</ul>
+<p>So there's no username or password to send, change or take away besides each person's own sign-in. To take someone off: <a href="#later">later changes</a>, “Taking someone off”.</p>
 
 <h2 id="limits">What testers can and can't do</h2>
 <ul>
@@ -300,7 +293,7 @@ Thanks!</code></pre>
   <li><label><input type="checkbox" data-key="created"><span> <code>make learner-create</code>, dry run then for real, and <code>make backlog-show</code> checked (2)</span></label></li>
   <li><label><input type="checkbox" data-key="git"><span> Their folder a git repository, first commit made, as <code>maxrecall</code> (3)</span></label></li>
   <li><label><input type="checkbox" data-key="invite"><span> <code>make invite</code> run, code noted (4)</span></label></li>
-  <li><label><input type="checkbox" data-key="sent"><span> Sent the address, the shared login (password separately), the code and the email (5)</span></label></li>
+  <li><label><input type="checkbox" data-key="sent"><span> Sent the address, the code and the email (5)</span></label></li>
   <li><label><input type="checkbox" data-key="registered"><span> They've registered (6)</span></label></li>
   <li><label><input type="checkbox" data-key="checked"><span> Checked as them, in a private window (7)</span></label></li>
 </ul>
