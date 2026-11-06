@@ -253,6 +253,13 @@ code {
   font-size: 0.85rem;
 }
 
+/* A language the profile doesn't allow (problem-page.js sets hidden).
+   Without this, display: flex above beats the browser's own
+   [hidden] { display: none }, and the row shows anyway. */
+.language-filter-row[hidden] {
+  display: none;
+}
+
 .language-filter-row:hover {
   background: rgba(56, 189, 248, 0.1);
 }
