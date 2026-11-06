@@ -1,4 +1,4 @@
-.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue backlog-show backlog-add backlog-remove learner-create invite sandbox-test line-numbers-test deploy-server open-ssh-3005
+.PHONY: all install toolchain-deps sandbox-deps build run dev clean test typecheck doc-check consistency-check delete-question rename-question recalculate-queue backlog-show backlog-add backlog-remove learner-create invite characterize sandbox-test line-numbers-test deploy-server open-ssh-3005
 
 PORT ?= 3000
 # Seconds `make run`/`make dev` wait for the server to answer before giving up on opening a browser
@@ -54,9 +54,12 @@ dev: build
 # Unit tests: every *.test.js in the top folder, with Node's built-in test
 # runner. The files are named, not left to node --test's defaults, which
 # would also pick up judge/line-numbers-test.js (it matches *-test.js) and so
-# need the sandbox and every compiler. Needs no sandbox itself.
+# need the sandbox and every compiler. Needs no sandbox itself, but needs
+# node_modules: routes.test.js starts server.js, which needs Express (in a
+# fresh checkout its 23 tests failed with "Cannot find module 'express'").
+# node_modules runs toolchain-deps first.
 TEST_FILES := $(wildcard *.test.js)
-test: toolchain-deps
+test: node_modules
 	node --test $(TEST_FILES)
 
 # Checks the JSDoc types with TypeScript (a development dependency, so it
@@ -153,6 +156,21 @@ backlog-remove:
 # script through its environment, as for backlog-add.
 learner-create:
 	node scripts/learner-create.js
+
+# The characterization check (docs/plans/server-split.md, step 1; kept by
+# the owner, 2026-11-06): make characterize OUT=before.txt starts this
+# checkout's server.js twice, with throwaway users/ and auth/ folders, and
+# records how it answers about 244 requests, and what it logs, in OUT.
+# REPO=<another checkout> records that one instead; its own node_modules
+# must be installed. Record before and after a change meant to change no
+# behaviour, on the same machine, then diff the two files. Run by hand, not
+# by make test: any change at all, a new question included, shows up.
+# OUT and REPO reach the script as quoted shell variables, from the
+# environment GNU make puts command-line variables in, never pasted into
+# this recipe, so a file name can't run as shell code.
+characterize: node_modules
+	@test -n "$$OUT" || { echo 'usage: make characterize OUT=<output-file> [REPO=<checkout>]' >&2; exit 2; }
+	node scripts/characterize.js "$${REPO:-.}" "$$OUT"
 
 # Escape test for the judge (docs/plans/sandboxing.md step 0): submits hostile
 # code and reports each probe as contained, ESCAPED, skipped (this machine
