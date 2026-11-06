@@ -489,13 +489,15 @@ async function createSession(email) {
 
 /**
  * The email a session token belongs to, or null if it's missing, malformed,
- * unknown or expired (expired sessions are deleted when found).
+ * unknown or expired, or its account is gone or newer than the session
+ * (such sessions are deleted when found).
  *
  * @param {string | null} token - From the session cookie; null if there
  *   was none. (Checked all the same: anything that isn't a well-formed
  *   token gives null.)
  * @returns {Promise<string | null>} The session's email, or null.
- * @throws {Error} If the session file exists but can't be read or parsed.
+ * @throws {Error} If the session or account file exists but can't be read
+ *   or parsed.
  */
 async function sessionEmail(token) {
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return null;
@@ -508,6 +510,15 @@ async function sessionEmail(token) {
     throw err;
   }
   if (Date.parse(session.expiresAt) <= Date.now()) {
+    await endSession(token);
+    return null;
+  }
+  // Deleting an account signs it out everywhere: without this, its
+  // sessions kept working until they expired (360 days). And a session
+  // older than its account belongs to an account deleted and registered
+  // again (a reset in docs/how-to-add-a-new-user.html), so it ends too.
+  const account = await readAccount(session.email);
+  if (!account || Date.parse(session.createdAt) < Date.parse(account.createdAt)) {
     await endSession(token);
     return null;
   }
