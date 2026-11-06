@@ -89,9 +89,14 @@ Teaching them what you're doing comes first. Speed comes second.
   changing behaviour. See `docs/plans/documentation-standard.md`.
 
 ### Continuity between machines
-- Work happens in both Claude Code cloud sessions and a local
-  Kubuntu/WebStorm instance. Write plans and decisions to `docs/` in the
-  repo, not only in chat, so the other environment can pick them up.
+- Work happens in Claude Code cloud sessions, a local Kubuntu/WebStorm
+  instance, and Claude sessions on the VPS (so far one running as root,
+  through Remote Control; #96 proposes a user of its own). Write plans
+  and decisions to `docs/` in the repo, not only in chat, so the other
+  environments can pick them up. Sessions on different machines can't
+  always message each other (#96: the VPS session's `send_message` was
+  refused), so `docs/` and GitHub issues are how work passes between
+  them.
 - Before finishing, make sure work is committed and pushed, and say which
   branch it's on.
 

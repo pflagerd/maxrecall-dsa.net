@@ -11,8 +11,8 @@ The *procedure* (a branch, the template, the fields, `make test`, Run and
 Test, the pull request, deploying) is in
 [`docs/how-to-add-a-new-question.html`](../../how-to-add-a-new-question.html);
 the format is `readme.html` section 5, checked by `question-files.js`'s
-`checkQuestion`. This file doesn't repeat them. The planned
-`.claude/skills/author-question/` skill should link here rather than hold
+`checkQuestion`. This file doesn't repeat them. The
+`.claude/skills/author-question/` skill links here rather than holding
 these rules itself.
 
 Each rule says where it comes from: a question file, or a change where we
@@ -170,11 +170,11 @@ Source: the Learning tabs of `questions/build-a-new-string.json` and
   column.
 - The description ends with "New to this? The `<button type="button"
   class="tab-ref-link" data-tab="learning">Learning</button>` tab
-  covers …" in 5 of the 7 questions with a Learning tab (not Hello World
+  covers …" in 6 of the 8 questions with a Learning tab (not Hello World
   or Singly Linked List Hello World). Whether that should be the rule is
   open (section 6).
 - "Learned earlier", where there is one, is the Learning tab's last
-  section (in all three that have one; Singly Linked List Hello World
+  section (in all five that have one; Singly Linked List Hello World
   ends with "References"): "This question builds on:" and a list of
   `<a href="/problem.html?slug=…" target="_blank" rel="noopener">Title</a>:
   what it taught.` (`swap-case-with-helpers.json`, `is-unique-i.json`).
@@ -185,16 +185,17 @@ Source: the Learning tabs of `questions/build-a-new-string.json` and
 
 Not decided; settle them with the owner and move them up as rules.
 
-- **Python string quotes in examples.** Double Each Character and Is
-  Unique I write `'abc'` (what Python's `repr` prints); Swap Case with
+- **Python string quotes in examples.** Build a New String, Add to a
+  String, Double Each Character and Is Unique I write `'abc'` (what
+  Python's `repr` prints); Swap Case with
   Helpers, To Uppercase and Lowercase and Valid Parentheses write
   `"Hello World"`. Pick one.
-- **Should every question have a Learning tab?** 7 of the 14 do; the
+- **Should every question have a Learning tab?** 8 of the 15 do; the
   other seven (Two Sum, Climbing Stairs and others) don't.
 - **"New to this?" in every description with a Learning tab**, or only
   where the Learning tab teaches something the description relies on.
 - **How many hidden test cases.** From 2 of 5 (Two Sum) to 18 of 22 (Swap
-  Case with Helpers). A guess: as many as the edges need, but no rule yet.
+  Case with Helpers, To Uppercase and Lowercase). A guess: as many as the edges need, but no rule yet.
 - **The joining question** (owner, 2026-11-05): collecting pieces and
   joining them, with Java's `StringBuilder` and each language's analogue.
   `to-uppercase-lowercase.json` uses both (Python `.join(parts)`, Java
@@ -204,3 +205,7 @@ Not decided; settle them with the owner and move them up as rules.
 
 - 2026-11-05: first draft (owner's request), from Double Each
   Character's changes in #86 and a survey of the 13 questions.
+- 2026-11-06: counts in sections 5 and 6 brought up to date for the 15
+  questions (Build a New String and Add to a String, #89 and #91),
+  counted with a script over `questions/*.json`.
+- 2026-11-06: the `author-question` skill exists; it links here.
