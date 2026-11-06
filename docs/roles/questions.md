@@ -11,6 +11,9 @@ template for writing one.
 
 ## Owns (files/directories the role owns)
 - docs/session-handoff/questions/
+- docs/roles/questions/: how-to-write-a-question.md, how this role
+  writes and edits a question's content (owner, 2026-11-05: an exception
+  to the architect's docs/roles/**)
 - questions/** (the question files and renames.json, the rename log)
 - question-files.js, questions.test.js (the problem file format and its
   check)
@@ -33,9 +36,16 @@ template for writing one.
   (users)
 - Makefile and package.json (infrastructure and security): ask for a new
   `make` target there
-- docs/roles/**, other roles' handoffs, and the handoffs from before roles
-  (docs/session-handoff/*.md)
+- docs/roles/** (except docs/roles/questions/, above), other roles'
+  handoffs, and the handoffs from before roles (docs/session-handoff/*.md)
 - TODO, THOUGHTS (the human's notes)
+
+## Writing or editing a question
+- Read docs/roles/questions/how-to-write-a-question.md first. It's the
+  craft (teaching, the five languages kept parallel, checking claims by
+  running them); docs/how-to-add-a-new-question.html is the procedure.
+- Keep it with the owner: when a change teaches a new rule, or settles
+  one of its open questions, update it in the same pull request.
 
 ## Shared files (propose changes; owner approves/merges them)
 - readme.html: owner is the human (with the architect supporting the human)
