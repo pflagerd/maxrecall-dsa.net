@@ -1,5 +1,13 @@
 # Plan: split `server.js`, the sign-in layer from the feature routes
 
+**Status: done.** Steps 1–3 by users in #76 (reviewed by infrastructure
+and security under contract 9; step 3 checked by the owner on Kubuntu
+and the VPS); step 4, the architect's ownership change, in the pull
+request after it. `server.js` is now infrastructure and security's and
+`routes.js` users' (`docs/roles/`); `docs/contracts.md` contract 9 is now
+"the router behind the gate". Still open: whether to keep the
+characterization check as a permanent test (owner).
+
 Owner's decision, 2026-11-05 (option A in the architect's discussion):
 `server.js` keeps the sign-in layer and goes to **infrastructure and
 security**; the feature routes move to a new `routes.js`, an Express
