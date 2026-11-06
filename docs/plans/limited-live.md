@@ -408,6 +408,9 @@ Each is small and can be checked before the next.
    working (`sessionEmail` doesn't check the account), so a reset by hand
    should also delete that email's files in `auth/sessions/`. Listed in
    the readme's Known gaps.
+   **Fixed 2026-11-06** (infrastructure and security): `sessionEmail`
+   now refuses a session whose account is gone or newer than it, so
+   deleting the account is enough.
 2. **VPS: firewall.** `ufw` allowing only SSH
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
