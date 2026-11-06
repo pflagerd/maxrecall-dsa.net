@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queue a Question by Slug</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --panel: #f6f8fa; --code-bg: #eff2f5; --accent: #0b5cad; --ok: #1a7f37; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+      --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #3d444d;
+    --panel: #151b23; --code-bg: #1f2630; --accent: #4493f8; --ok: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif; }
+  main { max-width: 52rem; margin: 0 auto; padding: 1.5rem 16px 4rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .25rem; }
+  h2 { margin-top: 2.5rem; padding-top: .5rem; border-top: 1px solid var(--border); }
+  h3 { margin-top: 1.6rem; }
+  a { color: var(--accent); }
+  .subtitle { color: var(--muted); margin: 0 0 1.5rem; }
+  code { font: .9em/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; background: var(--code-bg); padding: .1em .3em; border-radius: 4px; }
+  pre { position: relative; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: .8rem 1rem; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .copy { position: absolute; top: .4rem; right: .4rem; font: 12px system-ui, sans-serif; padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: .6rem 1rem; margin: 1rem 0; }
+  .warn { border-left-color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  ol.steps > li { margin: .3rem 0; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: .35rem 0; }
+  .checklist label { cursor: pointer; }
+  .checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+  button.action { font: inherit; padding: .25rem .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
+  .status { font-size: .9rem; color: var(--muted); }
+  .theme { float: right; }
+</style>
+</head>
+<body>
+<main>
+
+<button class="action theme" type="button" id="theme-toggle" aria-label="Switch between light and dark">Light / dark</button>
+<h1>Putting a question directly into your queue, by its slug</h1>
+<p class="subtitle">How to get a question you choose into your queue now, rather than waiting for it in your backlog or adding it to your backlog first: open it by its slug, then Submit or Skip it. For you or any learner, with the server running. Open this file straight from disk; it needs no server.</p>
+
+<div class="note">
+  <p><strong>Status:</strong> written 2026-11-06. Every step was tried in a copy of the VPS in the cloud (its <code>maxrecall</code> user, folders and service settings; no nginx, systemd or sandbox), in a browser, as the owner: the results under <a href="#lands">Where it lands</a> are from that run.</p>
+  <p><strong>A feature, not a gap</strong> (owner, 2026-11-06): opening any question by its slug, chosen backlog or not, and its Submit or Skip putting it into the queue, are meant to work. Don't make the server refuse a question outside the queue or backlog; the profile's languages are what's enforced. Recorded in <code>readme.html</code>'s Decisions, <code>routes.js</code> (<code>checkExecutionRequest</code>) and <code>order.js</code> (<code>recordSubmit</code>), and guarded by a test in <code>order.test.js</code>.</p>
+  <p>The authorities are <code>readme.html</code> (“Where data lives”: the queue and backlog; “Front end”: <code>?language=</code>, Submit and Skip) and the code: <code>order.js</code> (<code>recordSubmit</code>, what a Submit or Skip does to the queue), <code>advance.js</code> and <code>introduce.js</code>. This page explains them; where they disagree, they win.</p>
+</div>
+
+<h2 id="what">Your queue, and a question's slug</h2>
+<p>Your queue holds <strong>a question in a language</strong>: Two Sum in Python and Two Sum in Java are two entries (the code calls each a <em>pair</em>). Two files in your learning folder, <code>users/&lt;your email&gt;/</code>, hold them:</p>
+<table>
+  <tr><th>File</th><th>What's in it</th><th>How a question gets there</th></tr>
+  <tr><td><code>order.json</code>, your <strong>queue</strong></td><td>What you're practising, the next one first. Each has <code>passesInARow</code>, and <code>pass</code> once you've submitted it.</td><td>A Submit or Skip of it (this page), or from the backlog at a Submit or Skip</td></tr>
+  <tr><td><code>backlog.json</code>, your <strong>backlog</strong></td><td>Questions waiting to come in, in order.</td><td><code>make backlog-add</code> (a chosen backlog), or the server (a backlog of <code>"all"</code>)</td></tr>
+</table>
+<p>A question's <strong>slug</strong> is its file name in <code>questions/</code> without <code>.json</code>: <code>two-sum</code> for <code>questions/two-sum.json</code>. It's in the address of every question page: <code>problem.html?slug=two-sum&amp;language=python</code>.</p>
+<p>The key fact: a <strong>Submit or Skip</strong> of a question that isn't in your queue, whether it's in your backlog or in neither file, puts it straight into the queue (<code>order.js</code>, <code>recordSubmit</code>, rule 1). <strong>Run</strong> changes nothing. And you can open any question by its slug, even one you haven't chosen: a chosen backlog limits what the list and Next offer, not what can be opened (<code>docs/deploy-vps.md</code> §11).</p>
+
+<h2 id="steps">The steps</h2>
+<ol class="steps">
+  <li><a href="#s1">Find its slug</a></li>
+  <li><a href="#s2">Open it by its slug</a></li>
+  <li><a href="#s3">Submit or Skip it</a></li>
+  <li><a href="#s4">Check it's in your queue</a></li>
+</ol>
+<p>Then: <a href="#lands">where it lands</a> (not always first), <a href="#costs">what it costs</a>, <a href="#other">other ways</a>, <a href="#kubuntu">on Kubuntu</a> and the <a href="#checklist">checklist</a>. The server keeps running throughout.</p>
+
+<h2 id="s1">1. Find its slug</h2>
+<ul>
+  <li>From a question page you've had open: the <code>slug=</code> part of the address.</li>
+  <li>Every question, with where each is for you (queue, backlog or not chosen), on the VPS as root. It only reads, so the server can keep running:</li>
+</ul>
+<pre><code>cd /srv/maxrecall/maxrecall-dsa.net</code></pre>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-show EMAIL=daniel.pflager@gmail.com</code></pre>
+<ul>
+  <li><code>sudo -u maxrecall</code>: as the service's user, who owns the files (<a href="https://www.sudo.ws/docs/man/sudo.man/">sudo(8)</a>).</li>
+  <li><code>env MAXRECALL_USERS_DIR=…</code>: the service's users folder, not the checkout's own <code>users/</code>.</li>
+  <li><code>EMAIL</code>: whose queue and backlog to show; the list of every question after them is the same for anyone. The slug is the first column.</li>
+</ul>
+
+<h2 id="s2">2. Open it by its slug</h2>
+<p>Put the slug, and the language you want, in the question page's address:</p>
+<pre><code>https://maxrecallcode.net/problem.html?slug=two-sum&amp;language=python</code></pre>
+<ul>
+  <li><code>slug=</code>: the question, from step 1.</li>
+  <li><code>language=</code>: one of <code>javascript</code>, <code>python</code>, <code>cpp</code>, <code>java</code>, <code>d</code>. It must be one your profile allows, that you've turned on, and that the question has; otherwise an alert says which, and the question opens in your usual language. Left out, the question opens in your default language. It doesn't change your default (<code>readme.html</code>, “Front end”).</li>
+  <li>Through the SSH tunnel (<code>make open-ssh-3005</code>, no sign-in): <code>http://localhost:3005/problem.html?slug=two-sum&amp;language=python</code>.</li>
+</ul>
+
+<h2 id="s3">3. Submit or Skip it</h2>
+<p>Either one puts it into your queue; they differ in what they record:</p>
+<table>
+  <tr><th>Button</th><th>Saves</th><th>In the queue it gets</th></tr>
+  <tr><td><strong>Submit</strong> an answer</td><td>A Submit record, judged against every test case</td><td><code>pass</code> <code>"yes"</code> and 1 pass in a row if every case passed; <code>"no"</code> and 0 otherwise</td></tr>
+  <tr><td><strong>Skip</strong></td><td>A Skip record: the editor's code, nothing judged</td><td><code>pass</code> <code>"no"</code>, 0 passes in a row: a Skip counts as a fail</td></tr>
+</table>
+<ul>
+  <li>Skip asks first only if you have passes in a row on that question in that language, which a question not yet in your queue doesn't. After a saved Submit the button reads <strong>Next</strong> and Skip is hidden.</li>
+  <li><strong>Run</strong> doesn't put it into the queue: Run records nothing.</li>
+</ul>
+
+<h2 id="s4">4. Check it's in your queue</h2>
+<ul>
+  <li>The problem list (<code>https://maxrecallcode.net/</code>) shows the queue first: it's there with ✓ ×1 (passed) or ✗ (failed or skipped).</li>
+  <li>Or <code>make backlog-show</code> as in step 1: it's under “Queue”, and no longer “not chosen” or in the backlog.</li>
+</ul>
+
+<h2 id="lands">Where it lands: in the queue, not always first</h2>
+<p>A Submit or Skip treats a question from outside the queue as if it had been at the front, then moves it down as any Submit does (<code>order.js</code>, <code>recordSubmit</code>):</p>
+<ul>
+  <li><strong>Moved down</strong> <code>advance(passesInARow)</code> places: 1.3 × passes in a row × a random factor from 0.9 to 1.1, rounded at random, at least 1 (<code>advance.js</code>). A Skip or a fail: <strong>1 place</strong>, so one question is ahead of it. A first pass: <strong>usually 1, sometimes 2</strong>. Never further than the end.</li>
+  <li><strong>Then the backlog tops the queue up</strong>, at the front: enough to keep at least 3 in the queue, or 1 every 5 Submits, whichever is more (<code>introduce.js</code>). Those come in ahead of it.</li>
+</ul>
+<p>From the test run, the owner with an empty queue and one question in the backlog:</p>
+<table>
+  <tr><th>Did</th><th>Queue after (next first)</th><th>Backlog after</th></tr>
+  <tr><td>(start)</td><td>empty</td><td>Singly Linked List: Hello World</td></tr>
+  <tr><td>Opened <code>slug=two-sum&amp;language=python</code>, pressed <strong>Skip</strong></td><td>1. Singly Linked List: Hello World<br>2. Two Sum ✗</td><td>empty</td></tr>
+  <tr><td>Opened <code>slug=climbing-stairs&amp;language=python</code>, <strong>Submit</strong>, Accepted</td><td>1. Singly Linked List: Hello World<br>2. Two Sum ✗<br>3. Climbing Stairs ✓ ×1</td><td>empty</td></tr>
+</table>
+<p>Two Sum went 1 place down from the front, and then the backlog's question came in ahead of it, since the queue had fewer than 3. Climbing Stairs went 2 places down, which here was the end.</p>
+<div class="note">
+  <p><strong>To practise it now, you don't need it in the queue.</strong> It's open in front of you from step 2: answer it then. To have it be what <strong>Next</strong> offers first, put it at the front by hand, without a record (<a href="#by-hand">below</a>).</p>
+</div>
+
+<h2 id="costs">What it costs</h2>
+<ul>
+  <li><strong>A record</strong>, in your Submissions tab and your learning folder: a Submit or a Skip. The app can't take one back.</li>
+  <li><strong>A Skip counts as a fail</strong>. On a question new to your queue there are no passes to lose, so it only means its first result is ✗.</li>
+  <li>A Submit's result counts as it is: a pass starts its passes in a row at 1.</li>
+</ul>
+
+<h2 id="other">Other ways</h2>
+
+<h3 id="by-hand">By hand, with no record, anywhere in the queue</h3>
+<p>Edit <code>order.json</code> with the server stopped: it rewrites the file at every Submit, so the site is down for everyone for those minutes. On the VPS, as root:</p>
+<pre><code>systemctl stop maxrecall-dsa.test.service</code></pre>
+<pre><code>SUDO_EDITOR=vi sudoedit -u maxrecall /srv/maxrecall/data/users/daniel.pflager@gmail.com/order.json</code></pre>
+<ul>
+  <li><code>sudoedit -u maxrecall</code>: edits a copy, then writes it back as <code>maxrecall</code>, so the file stays the service's. Editing it with <code>vi</code> directly as root could leave it root's, and the server couldn't write it any more (<a href="https://www.sudo.ws/docs/man/sudo.man/">sudo(8)</a>, <code>-e</code>).</li>
+  <li><code>SUDO_EDITOR=vi</code>: the editor <code>sudoedit</code> runs.</li>
+</ul>
+<p>Add one line to <code>"queue"</code>, where you want it; first means it's next:</p>
+<pre><code>{"question": "two-sum", "language": "python", "passesInARow": 0},</code></pre>
+<ul>
+  <li><code>question</code>: the slug. <code>language</code>: as in step 2. <code>passesInARow</code>: <code>0</code>. No <code>pass</code>: it's added at its first Submit.</li>
+  <li>Mind the commas: JSON allows none after the last element.</li>
+  <li>If it's in <code>backlog.json</code>, take it out there the same way. <strong>A question in a language listed in both files, or twice, makes both files invalid</strong>, and the server then refuses your Run and Submit until it's fixed (<code>order.js</code>, <code>parseQueueFiles</code>).</li>
+</ul>
+<p>Check before starting the server; it only reads:</p>
+<pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make consistency-check</code></pre>
+<ul>
+  <li>“nothing found” for you: done. An <code>error</code> names the problem in the file: fix it and check again. A <code>warning</code> about the question means its slug or language is wrong: it would stay in the queue but never be offered.</li>
+</ul>
+<pre><code>systemctl start maxrecall-dsa.test.service</code></pre>
+<p>In the test run, the file stayed <code>maxrecall</code>'s, the check found nothing, and Next then offered the question added first.</p>
+
+<h3>Through your backlog: <code>make backlog-add … AT=1</code></h3>
+<p>Puts it at the front of the backlog, with the server stopped (<code>readme.html</code>, “Running it”; <code>how-to-add-a-new-user.html</code>, “More questions”). It moves into the queue only when a Submit or Skip brings backlog questions in, at least 3 in the queue or 1 every 5 Submits (<a href="#lands">above</a>): not necessarily at once.</p>
+
+<h3>Not built: <code>make queue-add</code></h3>
+<p>One command that would do the hand edit safely, like <code>make backlog-add</code> does for the backlog. It doesn't exist yet.</p>
+
+<h2 id="kubuntu">On Kubuntu (your own machine)</h2>
+<p>With <code>make dev</code> running, the same address on your own server:</p>
+<pre><code>http://localhost:3000/problem.html?slug=two-sum&amp;language=python</code></pre>
+<p>By hand: stop <code>make dev</code> (Ctrl-C), edit <code>users/&lt;your email&gt;/order.json</code> in the checkout with <code>vi</code> (your own files, so no <code>sudoedit</code>), then:</p>
+<pre><code>make consistency-check</code></pre>
+
+<h2 id="checklist">Checklist</h2>
+<p class="status" id="checklist-status">Ticks are kept in this browser only.</p>
+<ul class="checklist" id="checklist">
+  <li><label><input type="checkbox" data-key="slug"><span> Found its slug (1)</span></label></li>
+  <li><label><input type="checkbox" data-key="opened"><span> Opened it by its slug, in the language wanted (2)</span></label></li>
+  <li><label><input type="checkbox" data-key="submitted"><span> Submitted or Skipped it (3)</span></label></li>
+  <li><label><input type="checkbox" data-key="checked"><span> Checked it's in the queue, and where (4)</span></label></li>
+</ul>
+<button class="action" type="button" id="checklist-clear">Clear the ticks</button>
+
+</main>
+<script>
+'use strict';
+
+/**
+ * Copies text to the clipboard: the Clipboard API where the browser allows
+ * it (a page opened from disk may not count as secure), otherwise a hidden
+ * text area and the older copy command.
+ *
+ * @param {string} text - What to copy.
+ * @returns {Promise<boolean>} Whether it was copied.
+ */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
+  }
+}
+
+/**
+ * Shows "Copied" (or "Select and copy") on a button for a moment.
+ *
+ * @param {HTMLButtonElement} button - The button.
+ * @param {boolean} ok - Whether the copy worked.
+ * @returns {void}
+ */
+function flash(button, ok) {
+  const label = button.textContent;
+  button.textContent = ok ? 'Copied' : 'Select and copy';
+  setTimeout(
+    /**
+     * Puts the button's label back.
+     *
+     * @returns {void}
+     */
+    () => {
+      button.textContent = label;
+    },
+    1500,
+  );
+}
+
+// A Copy button on every code block.
+document.querySelectorAll('pre').forEach(
+  /**
+   * Adds a Copy button to one code block.
+   *
+   * @param {HTMLPreElement} pre - The block.
+   * @returns {void}
+   */
+  (pre) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy';
+    button.textContent = 'Copy';
+    button.addEventListener(
+      'click',
+      /**
+       * Copies the block's text.
+       *
+       * @returns {Promise<void>} Resolves when done.
+       */
+      async () => {
+        const code = pre.querySelector('code');
+        flash(button, await copyText((code || pre).textContent || ''));
+      },
+    );
+    pre.appendChild(button);
+  },
+);
+
+// The checklist, kept in this browser's localStorage, if it can be: a page
+// opened from disk, a private window or blocked storage may not allow it,
+// and then the ticks just aren't kept.
+const CHECKLIST_KEY = 'maxrecall-dsa:how-to-put-a-question-directly-into-my-queue-by-slug:checklist';
+const boxes = /** @type {HTMLInputElement[]} */ (Array.from(document.querySelectorAll('#checklist input')));
+const checklistStatus = /** @type {HTMLElement} */ (document.getElementById('checklist-status'));
+
+/**
+ * The ticks kept in this browser.
+ *
+ * @returns {Record<string, boolean> | null} By checkbox key, or null if
+ *   storage can't be used.
+ */
+function loadTicks() {
+  try {
+    return JSON.parse(localStorage.getItem(CHECKLIST_KEY) || '{}');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keeps the ticks, if storage allows.
+ *
+ * @returns {void}
+ */
+function saveTicks() {
+  /** @type {Record<string, boolean>} */
+  const ticks = {};
+  for (const box of boxes) ticks[/** @type {string} */ (box.dataset.key)] = box.checked;
+  try {
+    localStorage.setItem(CHECKLIST_KEY, JSON.stringify(ticks));
+  } catch {
+    checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+  }
+}
+
+const ticks = loadTicks();
+if (ticks === null) checklistStatus.textContent = "This browser won't keep the ticks here (storage isn't available for this page).";
+for (const box of boxes) {
+  if (ticks && ticks[/** @type {string} */ (box.dataset.key)]) box.checked = true;
+  box.addEventListener('change', saveTicks);
+}
+/** @type {HTMLButtonElement} */ (document.getElementById('checklist-clear')).addEventListener(
+  'click',
+  /**
+   * Clears every tick.
+   *
+   * @returns {void}
+   */
+  () => {
+    for (const box of boxes) box.checked = false;
+    saveTicks();
+  },
+);
+
+/** @type {HTMLButtonElement} */ (document.getElementById('theme-toggle')).addEventListener(
+  'click',
+  /**
+   * Switches between light and dark, starting from what's shown now.
+   *
+   * @returns {void}
+   */
+  () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+  },
+);
+</script>
+</body>
+</html>

@@ -287,7 +287,7 @@ Thanks!</code></pre>
 <h2 id="limits">What testers can and can't do</h2>
 <ul>
   <li>They can use only their languages: the menu offers no others, and the server refuses Run and Submit in any other (403).</li>
-  <li>Their list and Next offer only their chosen questions, but a question opened by its address (<code>problem.html?slug=…</code>) is still accepted, and a Submit then puts it in their queue (<code>docs/deploy-vps.md</code> §11).</li>
+  <li>Their list and Next offer only their chosen questions, but they can open any question by its address (<code>problem.html?slug=…</code>), and a Submit or Skip then puts it in their queue. <strong>That's a feature</strong> (owner, 2026-11-06): how a learner queues a question of their choice (<a href="how-to-put-a-question-directly-into-my-queue-by-slug.html">how-to-put-a-question-directly-into-my-queue-by-slug.html</a>). Their profile still limits the languages.</li>
   <li>Only you can Test.</li>
   <li>Their code runs in the judge's sandbox (<code>readme.html</code>, “Judging”). You decided to let testers you trust in before the remaining sandbox work (limited-live D4).</li>
   <li>Until there's a backup (limited-live D5), their work exists only on the VPS.</li>

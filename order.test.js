@@ -180,9 +180,25 @@ test('a backlog pair leaves the backlog and starts at the front (detail 1)', () 
   assert.deepEqual(backlog.backlog, [PY('x')]);
 });
 
-test('a pair in neither file joins the queue the same way (detail 2)', () => {
+test('a pair in neither file joins the queue the same way (detail 2; also a feature, the test below)', () => {
   const { order } = recordSubmit(queueOf(['a', 'b', 'c']), backlogOf([]), { question: 'new', language: 'cpp' }, 'no', { canIntroduce: ANY, random: HALF });
   assert.deepEqual(show(order), ['a/python yes 1', 'new/cpp no 0', 'b/python yes 1', 'c/python yes 1']);
+});
+
+// A feature, not a gap (owner, 2026-11-06): a learner puts a question of
+// their choice into their queue by opening it by its slug and Submitting or
+// Skipping it, chosen backlog or not
+// (docs/how-to-put-a-question-directly-into-my-queue-by-slug.html, whose
+// example this is). If this fails, the feature is gone: don't "fix" the test.
+test('a feature: a question never chosen, opened by its slug, joins the queue at its Skip or Submit', () => {
+  const start = backlogOf(['singly-linked-list-hello-world/python']);
+  const skipped = recordSubmit(queueOf([]), start, PY('two-sum'), 'no', { canIntroduce: ANY, random: HALF });
+  // 1 place down from the front, then the backlog tops the queue up ahead of it.
+  assert.deepEqual(show(skipped.order), ['singly-linked-list-hello-world/python - 0', 'two-sum/python no 0']);
+  assert.deepEqual(skipped.backlog.backlog, []);
+  const passed = recordSubmit(skipped.order, skipped.backlog, PY('climbing-stairs'), 'yes', { canIntroduce: ANY, random: HALF });
+  // A first pass moves advance(1) places: 1 with this fixed random number.
+  assert.deepEqual(show(passed.order), ['singly-linked-list-hello-world/python - 0', 'climbing-stairs/python yes 1', 'two-sum/python no 0']);
 });
 
 test('the counter goes up by 1, and the 5th Submit brings one pair in, to the front, resetting it', () => {
