@@ -800,11 +800,14 @@ code and a password of at least 12 characters. The header should show the
 tester's email (no trusted marker), and the list their chosen questions in
 Python, marked **new**. The language menu shows only Python.
 
+**By design:** a chosen backlog limits what Next and the list offer, not
+what can be opened. A tester who types another question's address
+(`problem.html?slug=…`) can do it, and a Submit or Skip then puts it in
+their queue: a feature (owner, 2026-11-06; readme, Decisions), described
+in `docs/how-to-put-a-question-directly-into-my-queue-by-slug.html`.
+Their profile still limits the languages (403 for the others).
+
 **What this doesn't do:**
-- A chosen backlog limits what Next and the list offer, not what can be
-  opened: a tester who types another question's address
-  (`problem.html?slug=…`) can do it, and a Submit then puts it in their
-  queue. Their profile still limits the languages (403 for the others).
 - Each later change to a backlog (`make backlog-add`, `backlog-remove`)
   stops the site for everyone for a few seconds (limited-live plan, "What
   spaced-repetition step 13 changes here"). Setting a learner up with
