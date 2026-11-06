@@ -109,8 +109,9 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   your role's file name in the table below, without `.md`, e.g.
   `infrastructure-and-security`.
 - Never edit files outside your role's ownership list, except the shared
-  files below. If you need such a change, write it as a request in your
-  handoff doc instead.
+  files below, or under an exception the owner grants for one change
+  (your role file says whether and how your role may ask). If you need
+  such a change, write it as a request in your handoff doc instead.
 - Shared files: any role may edit `readme.html`, and any role may propose a
   change to `CLAUDE.md` (in its own pull request, saying so in the
   description). The human approves and merges both.
