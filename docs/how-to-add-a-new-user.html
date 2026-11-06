@@ -246,22 +246,21 @@ Thanks!</code></pre>
 <p>Run step 4 again, and send the new code.</p>
 
 <h3>A forgotten password</h3>
-<p>There's no reset page. Delete their sign-in, <strong>sessions included</strong>, and invite them again. Their learning (queue, records) is untouched:</p>
-<pre><code>grep -l -F '"email":"tester@example.com"' /srv/maxrecall/data/auth/sessions/*.json | xargs -r rm --</code></pre>
-<ul>
-  <li>A session file holds its email as <code>"email":"…"</code> (<code>auth.js</code>, <code>createSession</code>). <code>grep -l</code> lists the files that contain it, <code>-F</code> takes the text literally (the dots aren't wildcards), and <code>xargs -r rm --</code> deletes them, doing nothing if there are none (<a href="https://manpages.ubuntu.com/manpages/noble/man1/grep.1.html">grep(1)</a>, <a href="https://manpages.ubuntu.com/manpages/noble/man1/xargs.1.html">xargs(1)</a>).</li>
-  <li>Why sessions too: deleting only the account leaves any browser already signed in as them working, for up to 360 days, because a session is checked against its own file, not the account (<code>readme.html</code>, “Known gaps”).</li>
-</ul>
+<p>There's no reset page. Delete their account, and invite them again. Their learning (queue, records) is untouched:</p>
 <pre><code>rm /srv/maxrecall/data/auth/accounts/tester@example.com.json</code></pre>
+<ul>
+  <li>That signs them out everywhere, at once: a session counts only while its account exists, and only if it's newer than the account, so registering again doesn't bring old sessions back either (<code>auth.js</code>, <code>sessionEmail</code>; since 2026-11-06, #104). Each old session's file is deleted the next time a browser presents it; one never presented again stays in <code>auth/sessions/</code>, unusable.</li>
+  <li>Until #104 this step also deleted their session files, because a deleted account's sessions kept working, for up to 360 days. That's no longer needed.</li>
+</ul>
 <p>Then step 4 (a new invite) and steps 5–6 (they register again, with a new password).</p>
 
 <h3>Taking someone off</h3>
-<p>Sign them out and remove their account (the two commands just above), then put their learning folder aside rather than deleting it:</p>
+<p>Remove their account (the <code>rm</code> just above), which signs them out everywhere, then put their learning folder aside rather than deleting it:</p>
 <pre><code>mv /srv/maxrecall/data/users/tester@example.com /srv/maxrecall/data/archive/tester@example.com.$(date -u +%Y%m%dT%H%M%SZ)</code></pre>
 <ul>
   <li>Into <code>archive/</code>, outside <code>users/</code>: the server counts every folder in <code>users/</code> named like an email as a user. <code>date -u +…</code> adds the UTC time to the name (<code>docs/deploy-vps.md</code> §10).</li>
   <li><code>archive/</code> must exist. It does on the VPS (made in <code>docs/deploy-vps.md</code> §10), but <code>make deploy-server</code> doesn't make it, and without it <code>mv</code> stops with “No such file or directory”, moving nothing. On a new machine, make it first, owned by the service's user and closed to others: <code>install -d -o maxrecall -g maxrecall -m 750 /srv/maxrecall/data/archive</code> (<a href="https://www.gnu.org/software/coreutils/manual/html_node/install-invocation.html">install(1)</a>: <code>-d</code> makes the folder, <code>-o</code>/<code>-g</code> its owner and group, <code>-m</code> its permissions).</li>
-  <li>No server stop needed: with their sessions and account gone, nothing can ask for their files any more.</li>
+  <li>No server stop needed: with their account gone, none of their sessions works, so nothing can ask for their files any more.</li>
   <li>If they asked for their data to be deleted, delete the archived folder too (and any copy on Kubuntu).</li>
 </ul>
 
