@@ -14,7 +14,7 @@ const path = require('path');
 
 const AUTH = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-test-'));
 process.env.MAXRECALL_AUTH_DIR = AUTH;
-const { createInvite, register, login, sessionEmail, INVITE_LIFETIME_MS, MIN_PASSWORD_LENGTH } = require('./auth');
+const { createInvite, register, login, sessionEmail, INVITE_LIFETIME_MS, MIN_PASSWORD_LENGTH, MAX_EMAIL_LENGTH, MAX_TRACKED_FAILURES } = require('./auth');
 
 after(() => fs.rmSync(AUTH, { recursive: true, force: true }));
 
@@ -121,4 +121,61 @@ test('wrong codes count towards throttling, per email', async () => {
   const throttled = await register('h@example.com', 'wrong', PASSWORD);
   assert.equal(throttled.ok, false);
   assert.ok(!throttled.ok && throttled.retryAfterMs && throttled.retryAfterMs > 0);
+});
+
+const LOGIN_REFUSED = 'Invalid email or password.';
+
+/**
+ * A well-formed email of exactly the given length, at example.com.
+ *
+ * @param {number} length - How many characters it should have.
+ * @returns {string} The email.
+ */
+function emailOfLength(length) {
+  const domain = '@example.com';
+  return 'a'.repeat(length - domain.length) + domain;
+}
+
+test('an email of MAX_EMAIL_LENGTH (238) characters can be invited and register; one longer cannot', async () => {
+  assert.equal(MAX_EMAIL_LENGTH, 238);
+  const longest = emailOfLength(MAX_EMAIL_LENGTH);
+  // Its invite's temporary file, <email>.json.tmp-<pid>, must fit in a
+  // Linux file name (255 bytes): this writes it for real.
+  const { code } = await createInvite(longest);
+  assert.equal((await register(longest, code, PASSWORD)).ok, true);
+  await assert.rejects(createInvite(emailOfLength(MAX_EMAIL_LENGTH + 1)), /Not an email address the server accepts/);
+});
+
+test('a too-long or malformed email is refused like any other, without throwing', async () => {
+  // Before 2026-11-06 a well-formed 300-character email made opening its
+  // file fail with ENAMETOOLONG, and the error, with its path, reached the
+  // browser.
+  for (const email of [emailOfLength(300), 'x'.repeat(100 * 1024), 'not an email']) {
+    assert.deepEqual(await login(email, PASSWORD), { ok: false, error: LOGIN_REFUSED });
+    assert.deepEqual(await register(email, 'any code', PASSWORD), { ok: false, error: REFUSED });
+  }
+});
+
+test('a malformed email is never throttled: it leaves nothing in memory', async () => {
+  // Six times is past FREE_ATTEMPTS (5): a recorded failure would be
+  // throttled by now, and a throttled answer has retryAfterMs.
+  for (let i = 0; i < 6; i++) {
+    assert.deepEqual(await login('no at sign', PASSWORD), { ok: false, error: LOGIN_REFUSED });
+    assert.deepEqual(await register('no at sign', 'code', PASSWORD), { ok: false, error: REFUSED });
+  }
+});
+
+test('throttling remembers at most MAX_TRACKED_FAILURES emails, forgetting the oldest first', async () => {
+  // Register failures need no scrypt (only an invite lookup), so this is quick.
+  const victim = 'oldest@example.com';
+  for (let i = 0; i < 5; i++) await register(victim, 'wrong', PASSWORD);
+  const throttled = await register(victim, 'wrong', PASSWORD);
+  assert.ok(!throttled.ok && throttled.retryAfterMs, 'throttled after 5 failures');
+
+  for (let i = 0; i < MAX_TRACKED_FAILURES; i++) {
+    assert.deepEqual(await register(`filler${i}@example.com`, 'wrong', PASSWORD), { ok: false, error: REFUSED });
+  }
+  // The victim's failures were the oldest, so they're forgotten: a plain
+  // refusal again, not a wait.
+  assert.deepEqual(await register(victim, 'wrong', PASSWORD), { ok: false, error: REFUSED });
 });

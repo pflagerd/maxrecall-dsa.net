@@ -93,6 +93,27 @@ function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
+// The longest email that can sign in. Each email becomes a file name, and
+// the longest auth.js writes is "<email>.json.tmp-<pid>" (createInvite): a
+// Linux file name is at most 255 bytes (NAME_MAX), and a pid at most 7
+// digits (pid_max), so 255 - 17 = 238. That's under RFC 5321's 254
+// (section 4.5.3.1.3). Longer, opening the file failed with ENAMETOOLONG
+// and the error, with its path, went back to the browser.
+const MAX_EMAIL_LENGTH = 238;
+
+/**
+ * Whether a normalized email can have an account: it matches EMAIL_PATTERN
+ * (users.js, the one definition of an email this app accepts) and is at
+ * most MAX_EMAIL_LENGTH characters. Checked before anything else, so a
+ * malformed email costs no scrypt, no file access and no throttling entry.
+ *
+ * @param {string} email - Normalized (normalizeEmail()).
+ * @returns {boolean} True if it's an email an account can have.
+ */
+function acceptableEmail(email) {
+  return email.length <= MAX_EMAIL_LENGTH && EMAIL_PATTERN.test(email);
+}
+
 /**
  * Compares two strings in time that doesn't depend on where they differ.
  * Hashing first gives timingSafeEqual the equal-length inputs it requires.
@@ -128,6 +149,15 @@ function hashPassword(password, salt, params = SCRYPT_PARAMS) {
 // from 127.0.0.1. Kept in memory, so a restart clears it.
 const FREE_ATTEMPTS = 5;
 const MAX_DELAY_MS = 15 * 60 * 1000;
+// At most this many keys are remembered; past it, the one whose last
+// failure is oldest is forgotten. Without a limit, failures for made-up
+// emails grew the server's memory until a restart (measured 2026-11-06:
+// 108 KiB kept per attempt with a 100 KB "email", before MAX_EMAIL_LENGTH).
+// Now a key is at most "register:" plus 238 characters: measured about
+// 440 bytes a key, so about 4 MiB when full. Forgetting a key restarts its free attempts; with nginx's
+// site-wide cap on sign-in attempts (30 a minute, D3) it takes 5 hours of
+// made-up failures to push one real email out, worth 5 free guesses.
+const MAX_TRACKED_FAILURES = 10_000;
 /** Failed attempts so far, by key (e.g. "login:<email>"). @type {Map<string, { count: number, waitUntil: number }>} */
 const failures = new Map();
 
@@ -145,7 +175,8 @@ function waitRemainingMs(key) {
 /**
  * Counts one more failure for a key, and sets how long its next attempt must
  * wait: nothing for the first FREE_ATTEMPTS - 1, then 1 s, doubling each
- * time, up to MAX_DELAY_MS.
+ * time, up to MAX_DELAY_MS. Keeps at most MAX_TRACKED_FAILURES keys,
+ * forgetting the one that failed longest ago.
  *
  * @param {string} key - "register:<email>" or "login:<email>".
  * @returns {void}
@@ -153,7 +184,15 @@ function waitRemainingMs(key) {
 function recordFailure(key) {
   const count = (failures.get(key)?.count || 0) + 1;
   const delay = count < FREE_ATTEMPTS ? 0 : Math.min(1000 * 2 ** (count - FREE_ATTEMPTS), MAX_DELAY_MS);
+  // A Map keeps insertion order, so deleting before setting moves the key
+  // to the end, and the first key is always the one that failed longest ago.
+  failures.delete(key);
   failures.set(key, { count, waitUntil: Date.now() + delay });
+  if (failures.size > MAX_TRACKED_FAILURES) {
+    // The cast: TypeScript types an iterator's next value as possibly
+    // undefined (a finished iterator), but the map can't be empty here.
+    failures.delete(/** @type {string} */ (failures.keys().next().value));
+  }
 }
 
 // --- Accounts -----------------------------------------------------------------
@@ -174,11 +213,11 @@ function accountFile(email) {
  *
  * @param {string} email - Normalized.
  * @returns {Promise<Account | null>} The account, or null if the email
- *   doesn't match EMAIL_PATTERN or there's no such account.
+ *   isn't acceptableEmail() or there's no such account.
  * @throws {Error} If the file exists but can't be read or parsed.
  */
 async function readAccount(email) {
-  if (!EMAIL_PATTERN.test(email)) return null;
+  if (!acceptableEmail(email)) return null;
   try {
     return JSON.parse(await fs.promises.readFile(accountFile(email), 'utf8'));
   } catch (err) {
@@ -232,7 +271,7 @@ function codeHash(code) {
  * the server never reads half of it.
  *
  * @param {string} rawEmail - The email to invite, as typed. Normalized
- *   first; anything that doesn't match EMAIL_PATTERN then is refused.
+ *   first; anything that isn't acceptableEmail() then is refused.
  * @param {number} [now=Date.now()] - The time to count the lifetime from,
  *   in milliseconds since 1970 (for tests).
  * @returns {Promise<{ email: string, code: string, expiresAt: string }>}
@@ -242,7 +281,7 @@ function codeHash(code) {
  */
 async function createInvite(rawEmail, now = Date.now()) {
   const email = normalizeEmail(rawEmail);
-  if (!EMAIL_PATTERN.test(email)) throw new Error(`Not an email address the server accepts: ${JSON.stringify(rawEmail)}`);
+  if (!acceptableEmail(email)) throw new Error(`Not an email address the server accepts: ${JSON.stringify(rawEmail)}`);
   const code = crypto.randomBytes(16).toString('base64url');
   const expiresAt = new Date(now + INVITE_LIFETIME_MS).toISOString();
   /** @type {Invite} */
@@ -259,11 +298,11 @@ async function createInvite(rawEmail, now = Date.now()) {
  *
  * @param {string} email - Normalized.
  * @returns {Promise<Invite | null>} The invite, or null if the email
- *   doesn't match EMAIL_PATTERN or there's no invite for it.
+ *   isn't acceptableEmail() or there's no invite for it.
  * @throws {Error} If the file exists but can't be read or parsed.
  */
 async function readInvite(email) {
-  if (!EMAIL_PATTERN.test(email)) return null;
+  if (!acceptableEmail(email)) return null;
   try {
     return JSON.parse(await fs.promises.readFile(inviteFile(email), 'utf8'));
   } catch (err) {
@@ -323,6 +362,9 @@ function throttled(key) {
  */
 async function register(rawEmail, code, password) {
   const email = normalizeEmail(rawEmail);
+  // No invite can exist for it (createInvite() checks the same), so refuse
+  // before throttling: a stranger can't fill `failures` with made-up keys.
+  if (!acceptableEmail(email)) return { ok: false, error: REGISTER_REFUSED };
   const key = `register:${email}`;
   const wait = throttled(key);
   if (wait) return wait;
@@ -387,6 +429,12 @@ async function register(rawEmail, code, password) {
  */
 async function login(rawEmail, password) {
   const email = normalizeEmail(rawEmail);
+  // No account can have it, so refuse at once: no scrypt (128 MiB, the
+  // expensive part) and no throttling entry. Answering faster than for a
+  // real email reveals only that this one is malformed, which the sender
+  // knows; whether a well-formed email has an account still takes the
+  // same time either way (below).
+  if (!acceptableEmail(email)) return { ok: false, error: LOGIN_REFUSED };
   const key = `login:${email}`;
   const wait = throttled(key);
   if (wait) return wait;
@@ -495,6 +543,8 @@ async function endSession(token) {
 module.exports = {
   AUTH_DIR,
   INVITES_DIR,
+  MAX_EMAIL_LENGTH,
+  MAX_TRACKED_FAILURES,
   MIN_PASSWORD_LENGTH,
   INVITE_LIFETIME_MS,
   SESSION_LIFETIME_MS,
