@@ -24,7 +24,7 @@ template for writing one.
 - The Test button's rules: playtest.js, playtest.test.js
 - scripts/question-admin.js (make delete-question, make rename-question)
 - For question authors: docs/how-to-add-a-new-question.html,
-  docs/question-template.json, .claude/skills/author-question/ (planned)
+  docs/question-template.json, .claude/skills/author-question/
 - Plans: docs/plans/playtest.md, docs/plans/topics-and-sources.md,
   docs/plans/error-line-numbers.md
 
