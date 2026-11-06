@@ -24,7 +24,8 @@ records, and the scripts that set up and adjust a learner.
   a refactor meant to change nothing). Both also exercise server.js and
   auth.js, infrastructure and security's (docs/contracts.md, 7 and 9)
 - The learner's pages: index.html, problems-list.js, problem.html,
-  problem-page.js, timer.js, style.css
+  problem-page.js, timer.js, style.css; and timer.test.js, timer.js's
+  tests (#110)
 - docs/how-to-add-a-new-user.html (adding a user or tester, start to
   finish)
 - docs/how-to-put-a-question-directly-into-my-queue-by-slug.html
