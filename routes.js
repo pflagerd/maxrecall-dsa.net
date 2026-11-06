@@ -228,6 +228,14 @@ router.get(
  * and queue files aren't consulted: it tests the question in any language
  * it has, and changes nothing of the learner's.
  *
+ * A feature, not a gap (owner, 2026-11-06): nothing here checks that the
+ * question is in the learner's queue or chosen backlog. Any question can
+ * be opened by its slug, and its Submit or Skip puts it straight into the
+ * queue (order.js, recordSubmit, rule 1): that's how a learner queues a
+ * question they choose (docs/how-to-put-a-question-directly-into-my-queue-by-slug.html).
+ * Don't add such a check. A chosen backlog limits what the list and Next
+ * offer; the profile's languages are what's enforced (403 above).
+ *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
  * @param {Response} res - The response, sent if the request is refused.

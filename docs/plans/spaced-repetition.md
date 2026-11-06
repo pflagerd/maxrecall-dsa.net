@@ -933,7 +933,9 @@ each checked to fail against a deliberately wrong version first.
     into, `tester@example.com`; only Python offered, turning it off or Java
     on refused (400), Java's Run 403; the chosen questions in order; a
     question that wasn't chosen, opened by its address, still accepted
-    and put in the queue (noted in §11). Option (c), `make invite` writing
+    and put in the queue (noted in §11; **a feature, owner 2026-11-06**:
+    how a learner queues a question of their choice,
+    `docs/how-to-put-a-question-directly-into-my-queue-by-slug.html`). Option (c), `make invite` writing
     the starting files, if this gets tedious.
 14. **Done 2026-11-05: setting up a new learner in one command**, `make
     learner-create EMAIL=… LANGUAGES=… SLUGS="…"` (`learner.js`,

@@ -436,8 +436,12 @@ function pairKey(pair) {
  * The queue and backlog after one saved Submit (step 6; D3, D4, D6, D8):
  *
  * 1. The pair is taken from where it is in the queue; from the backlog, or
- *    from neither file (a question added since the server started), it
- *    starts at the front of the queue.
+ *    from neither file (a question added since the server started, or one
+ *    the learner opened by its slug without having chosen it), it starts
+ *    at the front of the queue. The latter is a feature (owner,
+ *    2026-11-06): it's how a learner puts a question of their choice into
+ *    their queue (docs/how-to-put-a-question-directly-into-my-queue-by-slug.html),
+ *    so a Submit or Skip of any pair must keep joining the queue.
  * 2. pass is set, and passesInARow goes up by 1 on a pass or back to 0.
  * 3. It moves advance(passesInARow) places: that many other pairs end up
  *    ahead of it, or all of them if there aren't that many.
