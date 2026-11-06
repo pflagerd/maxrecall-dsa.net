@@ -410,7 +410,8 @@ Each is small and can be checked before the next.
    the readme's Known gaps.
    **Fixed 2026-11-06** (infrastructure and security): `sessionEmail`
    now refuses a session whose account is gone or newer than it, so
-   deleting the account is enough.
+   deleting the account is enough. Deployed to the VPS the same day
+   (`e5720d8`).
 2. **VPS: firewall.** `ufw` allowing only SSH
    ([ufw(8)](https://manpages.ubuntu.com/manpages/noble/en/man8/ufw.8.html)).
    SSH is allowed **before** enabling, with a second SSH session left open
@@ -520,3 +521,4 @@ the same change.
 | 2026-11-06 | D3 revised (owner): remove Basic auth, in two pull requests: first `auth.js` and `server.js` (malformed and over-long emails refused first, throttling bounded at 10,000 entries, sign-in errors to the log), then nginx (a site-wide cap of 30 sign-in attempts a minute, the per-address limit by IPv6 /64, `auth_basic` removed, `NODE_ENV=production`). |
 | 2026-11-06 | D3, part 2 in the repo (infrastructure and security): `auth_basic` removed from `deploy/nginx-maxrecallcode.conf`; sign-in limited per visitor (an IPv6 /64 as one, approximately, by a three-line `map`) and site-wide (30 a minute, burst 10); `NODE_ENV=production` in the service. Tested in the cloud; the VPS steps are `docs/deploy-vps.md` §13 step 8, for the owner. |
 | 2026-11-06 | D3 done on the VPS (owner, `docs/deploy-vps.md` §13 step 8): no shared login; the gate's `302`, the per-visitor limit (`400` ×6, `429` ×2) and signing in checked from Kubuntu; `htpasswd` deleted. The reload failed on the changed zone key (`[emerg]`, old configuration kept); a restart fixed it, and the docs now say restart. IPv6 untested end to end (Kubuntu has no IPv6 route) (on the VPS, nginx listens on `[::]:443` and `ufw` allows `443/tcp (v6)`). |
+| 2026-11-06 | #104 deployed (owner, `make deploy-server`): the VPS runs `e5720d8` (#104, #105, #108), so deleting `auth/accounts/<email>.json` now signs that account out on the live site too, and registering again doesn't bring its old sessions back. The deploy's output: `git pull --ff-only` clean, the sandbox's self-test passed, ports 3000 and 3001 on `127.0.0.1` only. Not checked end to end on the VPS (in the cloud: `docs/session-handoff/infrastructure-and-security/20261106T095245-0800.md`); offered to the owner as a one-off before testers (an invite for a throwaway email, register, delete the account file, reload). |
