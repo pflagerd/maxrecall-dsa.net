@@ -1,0 +1,203 @@
+{
+  "slug": "build-a-new-string",
+  "created": "2026-11-06T04:52:15Z",
+  "title": "Build a New String",
+  "difficulty": "Easy",
+  "topics": ["String"],
+  "sources": [],
+  "learning": {
+    "javascript": "<h3>Strings can't be changed: build a new one</h3><p>JavaScript strings are <em>immutable</em>: once made, a string never changes. Assigning to <code>s[0]</code> doesn't change <code>s</code> (it's ignored, or in strict mode it throws a <code>TypeError</code>). Instead, build a new string from pieces. <code>+</code> puts two strings together into a new one (<em>concatenation</em>), and <code>+=</code> adds a piece to the end of a variable's string, by making a new one:</p><div class=\"example\"><pre>const word = \"h\" + \"I\";   // \"hI\": a new string\n\nlet result = \"\";\nresult += \"h\";            // each += makes a new, longer string\nresult += \"I\";            // \"hI\"</pre></div>",
+    "python": "<h3>Strings can't be changed: build a new one</h3><p>Python strings are <em>immutable</em>: once made, a string never changes. <code>s[0] = \"H\"</code> raises <code>TypeError: 'str' object does not support item assignment</code>. Instead, build a new string from pieces. <code>+</code> puts two strings together into a new one (<em>concatenation</em>), and <code>+=</code> adds a piece to the end of a variable's string, by making a new one:</p><div class=\"example\"><pre>word = \"h\" + \"I\"          # \"hI\": a new string\n\nresult = \"\"\nresult += \"h\"             # each += makes a new, longer string\nresult += \"I\"             # \"hI\"</pre></div>",
+    "cpp": "<h3>A <code>std::string</code> can be changed</h3><p>Unlike strings in JavaScript, Python, Java and D, a C++ <code>std::string</code> is <em>mutable</em>: <code>s[0] = 'H';</code> changes it. Here <code>s</code> is passed by value, so the function has its own copy, and you can change it and return it. But changing it in place only replaces characters, and an answer longer than <code>s</code> needs a new string. <code>+</code> puts two strings together into a new one (<em>concatenation</em>), and <code>+=</code> adds a piece to the end of a string:</p><div class=\"example\"><pre>string result = \"\";\nresult += \"h\";            // adds to the end of result\nresult += \"I\";            // \"hI\"\n\nstring word = result + \"!\";   // \"hI!\": a new string</pre></div><p>Careful with two string literals: <code>\"h\" + \"I\"</code> doesn't compile (“invalid operands … to binary 'operator+'”). A literal in quotes is an array of <code>char</code>s, not a <code>std::string</code>, and at least one side of <code>+</code> must be a <code>std::string</code>.</p><p>See <a href=\"https://en.cppreference.com/w/cpp/string/basic_string/operator%2B\" target=\"_blank\" rel=\"noopener\">operator+</a> and <a href=\"https://en.cppreference.com/w/cpp/string/basic_string/operator%2B%3D\" target=\"_blank\" rel=\"noopener\">operator+=</a> on cppreference.</p>",
+    "java": "<h3>Strings can't be changed: build a new one</h3><p>Java <code>String</code>s are <em>immutable</em>: once made, a <code>String</code> never changes, and there's no method that changes one. Build a new one instead. <code>+</code> puts two <code>String</code>s together into a new one (<em>concatenation</em>), and <code>+=</code> adds a piece to the end of a variable's <code>String</code>, by making a new one:</p><div class=\"example\"><pre>String word = \"h\" + \"I\";        // \"hI\": a new String\n\nString result = \"\";\nresult += \"h\";                  // each += makes a new, longer String\nresult += \"I\";                  // \"hI\"</pre></div><p>See <a href=\"https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/String.html\" target=\"_blank\" rel=\"noopener\">String</a> in the Java 21 documentation.</p>",
+    "d": "<h3>Strings can't be changed: build a new one</h3><p>In D, <code>string</code> means <code>immutable(char)[]</code>: an array of characters that can't be changed, so <code>s[0] = 'H';</code> doesn't compile. Build a new one instead. <code>~</code> puts two strings together into a new one (<em>concatenation</em>), and <code>~=</code> adds a piece to the end of a string:</p><div class=\"example\"><pre>string word = \"h\" ~ \"I\";   // \"hI\": a new string\n\nstring result;\nresult ~= \"h\";            // ~= appends\nresult ~= \"I\";            // \"hI\"</pre></div><p>See <a href=\"https://dlang.org/spec/arrays.html#strings\" target=\"_blank\" rel=\"noopener\">Strings</a> and <a href=\"https://dlang.org/spec/expression.html#cat_expressions\" target=\"_blank\" rel=\"noopener\">concatenation</a> in the D language specification.</p>"
+  },
+  "description": {
+    "javascript": "<p>Given two strings <code>s</code> and <code>edge</code>, return a new string: <code>edge</code>, then <code>s</code>, then <code>edge</code> again.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers why a string can or can't be changed, and building a new one from pieces.</p>",
+    "python": "<p>Given two strings <code>s</code> and <code>edge</code>, return a new string: <code>edge</code>, then <code>s</code>, then <code>edge</code> again.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers why a string can or can't be changed, and building a new one from pieces.</p>",
+    "cpp": "<p>Given two strings <code>s</code> and <code>edge</code>, return a new string: <code>edge</code>, then <code>s</code>, then <code>edge</code> again.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers why a string can or can't be changed, and building a new one from pieces.</p>",
+    "java": "<p>Given two strings <code>s</code> and <code>edge</code>, return a new string: <code>edge</code>, then <code>s</code>, then <code>edge</code> again.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers why a string can or can't be changed, and building a new one from pieces.</p>",
+    "d": "<p>Given two strings <code>s</code> and <code>edge</code>, return a new string: <code>edge</code>, then <code>s</code>, then <code>edge</code> again.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers why a string can or can't be changed, and building a new one from pieces.</p>"
+  },
+  "examples": {
+    "javascript": [
+      {
+        "input": "s = \"cat\", edge = \"*\"",
+        "output": "\"*cat*\""
+      },
+      {
+        "input": "s = \"Hi\", edge = \"--\"",
+        "output": "\"--Hi--\""
+      },
+      {
+        "input": "s = \"\", edge = \"ab\"",
+        "output": "\"abab\"",
+        "explanation": "An empty s: edge twice."
+      },
+      {
+        "input": "s = \"x\", edge = \"\"",
+        "output": "\"x\"",
+        "explanation": "An empty edge adds nothing."
+      }
+    ],
+    "python": [
+      {
+        "input": "s = 'cat', edge = '*'",
+        "output": "'*cat*'"
+      },
+      {
+        "input": "s = 'Hi', edge = '--'",
+        "output": "'--Hi--'"
+      },
+      {
+        "input": "s = '', edge = 'ab'",
+        "output": "'abab'",
+        "explanation": "An empty s: edge twice."
+      },
+      {
+        "input": "s = 'x', edge = ''",
+        "output": "'x'",
+        "explanation": "An empty edge adds nothing."
+      }
+    ],
+    "cpp": [
+      {
+        "input": "s = \"cat\", edge = \"*\"",
+        "output": "\"*cat*\""
+      },
+      {
+        "input": "s = \"Hi\", edge = \"--\"",
+        "output": "\"--Hi--\""
+      },
+      {
+        "input": "s = \"\", edge = \"ab\"",
+        "output": "\"abab\"",
+        "explanation": "An empty s: edge twice."
+      },
+      {
+        "input": "s = \"x\", edge = \"\"",
+        "output": "\"x\"",
+        "explanation": "An empty edge adds nothing."
+      }
+    ],
+    "java": [
+      {
+        "input": "s = \"cat\", edge = \"*\"",
+        "output": "\"*cat*\""
+      },
+      {
+        "input": "s = \"Hi\", edge = \"--\"",
+        "output": "\"--Hi--\""
+      },
+      {
+        "input": "s = \"\", edge = \"ab\"",
+        "output": "\"abab\"",
+        "explanation": "An empty s: edge twice."
+      },
+      {
+        "input": "s = \"x\", edge = \"\"",
+        "output": "\"x\"",
+        "explanation": "An empty edge adds nothing."
+      }
+    ],
+    "d": [
+      {
+        "input": "s = \"cat\", edge = \"*\"",
+        "output": "\"*cat*\""
+      },
+      {
+        "input": "s = \"Hi\", edge = \"--\"",
+        "output": "\"--Hi--\""
+      },
+      {
+        "input": "s = \"\", edge = \"ab\"",
+        "output": "\"abab\"",
+        "explanation": "An empty s: edge twice."
+      },
+      {
+        "input": "s = \"x\", edge = \"\"",
+        "output": "\"x\"",
+        "explanation": "An empty edge adds nothing."
+      }
+    ]
+  },
+  "constraints": {
+    "javascript": [
+      "$0 \\le \\texttt{s.length} \\le 100$",
+      "$0 \\le \\texttt{edge.length} \\le 100$",
+      "<code>s</code> and <code>edge</code> contain only printable ASCII characters (codes 32 to 126)"
+    ],
+    "python": [
+      "$0 \\le \\texttt{len(s)} \\le 100$",
+      "$0 \\le \\texttt{len(edge)} \\le 100$",
+      "<code>s</code> and <code>edge</code> contain only printable ASCII characters (codes 32 to 126)"
+    ],
+    "cpp": [
+      "$0 \\le \\texttt{s.size()} \\le 100$",
+      "$0 \\le \\texttt{edge.size()} \\le 100$",
+      "<code>s</code> and <code>edge</code> contain only printable ASCII characters (codes 32 to 126)"
+    ],
+    "java": [
+      "$0 \\le \\texttt{s.length()} \\le 100$",
+      "$0 \\le \\texttt{edge.length()} \\le 100$",
+      "<code>s</code> and <code>edge</code> contain only printable ASCII characters (codes 32 to 126)"
+    ],
+    "d": [
+      "$0 \\le \\texttt{s.length} \\le 100$",
+      "$0 \\le \\texttt{edge.length} \\le 100$",
+      "<code>s</code> and <code>edge</code> contain only printable ASCII characters (codes 32 to 126)"
+    ]
+  },
+  "functionName": {
+    "javascript": "surround",
+    "python": "surround",
+    "cpp": "surround",
+    "java": "surround",
+    "d": "surround"
+  },
+  "starterCode": {
+    "javascript": "/**\n * @param {string} s\n * @param {string} edge\n * @return {string}\n */\nfunction surround(s, edge) {\n    \n}\n",
+    "python": "def surround(s, edge):\n    pass\n",
+    "cpp": "string surround(string s, string edge) {\n    \n}\n",
+    "java": "class Solution {\n    public String surround(String s, String edge) {\n        \n    }\n}\n",
+    "d": "string surround(string s, string edge) {\n    \n}\n"
+  },
+  "signature": {
+    "cpp": {
+      "params": [
+        "string",
+        "string"
+      ],
+      "returns": "string"
+    },
+    "java": {
+      "params": [
+        "String",
+        "String"
+      ],
+      "returns": "String"
+    },
+    "d": {
+      "params": [
+        "string",
+        "string"
+      ],
+      "returns": "string"
+    }
+  },
+  "testCases": [
+    {"args": ["cat", "*"], "expected": "*cat*", "hidden": false},
+    {"args": ["Hi", "--"], "expected": "--Hi--", "hidden": false},
+    {"args": ["", "ab"], "expected": "abab", "hidden": false},
+    {"args": ["x", ""], "expected": "x", "hidden": false},
+    {"args": ["", ""], "expected": "", "hidden": true},
+    {"args": [" ", "|"], "expected": "| |", "hidden": true},
+    {"args": ["mid", "edge"], "expected": "edgemidedge", "hidden": true},
+    {"args": ["abc", "abc"], "expected": "abcabcabc", "hidden": true},
+    {"args": ["a b", "\""], "expected": "\"a b\"", "hidden": true},
+    {"args": ["\\", "\\"], "expected": "\\\\\\", "hidden": true},
+    {"args": ["**", "*"], "expected": "****", "hidden": true},
+    {"args": [" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", "#"], "expected": "# !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~#", "hidden": true},
+    {"args": ["abababababababababababababababababababababababababababababababababababababababababababababababababab", "xyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyz!"], "expected": "xyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyz!ababababababababababababababababababababababababababababababababababababababababababababababababababxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyzxyz!", "hidden": true}
+  ]
+}

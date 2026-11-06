@@ -105,10 +105,12 @@ From the questions written so far; add rows as questions need them.
 |---|---|---|---|---|---|
 | Go through a string's characters | `for (const c of s)` | `for c in s:` | `for (char c : s)` | `for (char c : s.toCharArray())` | `foreach (c; s)` |
 | Can a string be changed? | no | no | yes (`std::string`) | no | no (`immutable(char)[]`) |
-| Append to a new string | `result += c` | `result += c` | `result += c`, `push_back` | `result += c` | `result ~= c` |
+| Put two strings together (concatenation) | `a + b` | `a + b` | `a + b` (one side a `std::string`: two literals don't compile) | `a + b` | `a ~ b` |
+| Append to a string | `result += c` | `result += c` | `result += c` | `result += c` | `result ~= c` |
 | Length | `s.length` | `len(s)` | `s.size()` | `s.length()` | `s.length` |
 
-Source: `questions/double-each-character.json`'s Learning tab.
+Source: the Learning tabs of `questions/build-a-new-string.json` and
+`questions/double-each-character.json`.
 
 ## 3. Checking what we write
 
