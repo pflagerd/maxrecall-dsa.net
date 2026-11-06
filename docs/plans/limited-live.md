@@ -155,6 +155,39 @@ own defences (D2, per-IP throttling) are trusted.
 
 **Decided (owner, 2026-11-04): A, Basic auth and rate limiting at nginx.**
 
+**Revised (owner, 2026-11-06): remove Basic auth, in two steps** (option
+B of infrastructure and security's analysis, 2026-11-06). The condition
+above changes: not "per-IP throttling in the app", which would repeat
+nginx's per-address limit, but what reading `auth.js` showed Basic auth
+was hiding from strangers:
+
+- **Fixed first (pull request 1, `auth.js` and `server.js`).** Every
+  failed sign-in kept a throttling entry keyed by the email as typed, up
+  to the 100 KB JSON limit, until a restart: measured 108 KiB kept per
+  attempt, about 1.5 GiB a day from one address at nginx's limit. A
+  well-formed email over 238 characters failed with `ENAMETOOLONG`, and
+  the error, with the path of `auth/`, went back to the browser. Now
+  malformed or over-long emails are refused at once (no scrypt, no
+  entry), at most 10,000 entries are kept (about 4 MiB), and sign-in
+  errors go to the log.
+- **Then (pull request 2, nginx).** A **site-wide cap of 30 sign-in
+  attempts a minute** on `/api/auth/login` and `/api/auth/register`, on
+  top of the per-address limit: each login is a 128 MiB scrypt on
+  Node's 4-thread pool, shared with file access, so attempts from many
+  addresses could stall the site. During a flood, sign-ins get 429;
+  signed-in testers carry on (360-day sessions). The site has IPv6
+  (decision log, 2026-11-05), so the per-address limit counts **a /64
+  as one address, approximately** (a `map` over the address text: with
+  `::` shortened in different places one /64 can count as a few). Then
+  `auth_basic` comes out, and `NODE_ENV=production` goes in the service
+  (Express's default error handler otherwise sends stack traces).
+- **Left as accepted**: anyone reaches the code that runs before
+  sign-in (`npm audit` on the VPS, 2026-11-06: 0 vulnerabilities); a
+  stolen session cookie no longer also needs the shared login (the
+  known gap of a deleted account's sessions matters a little more).
+  Unchanged: only invited people have accounts, so who can submit code
+  is the same (D4).
+
 ### D4. Is the judge ready for other people?
 
 The readme says the remaining sandbox items are "the remaining work before
@@ -460,3 +493,4 @@ the same change.
 | 2026-11-05 | `docs/how-to-add-a-new-user.html` (owner's request): steps 5 and 6's procedures in one page, like the problem page. It includes a draft message to testers saying what's stored about them (D5's "telling testers"), and a reset and removal that delete the user's sessions too. D5's backups are still open. |
 | 2026-11-05 | D5, partly (owner): each new user's folder becomes a git repository at setup, a step in `docs/how-to-add-a-new-user.html` (step 3). As the owner wrote it, it would fail on the VPS, so it runs every git command as `maxrecall` (root would own `.git`; git refuses root in a `maxrecall`-owned repository), sets a per-repository identity (`maxrecall` has none: "Please tell me who you are"), and adds `.gitignore` `*.tmp-*`; tested on a real `make learner-create` folder owned by a service user, with `make consistency-check` finding nothing. **Still open:** where the remote is (a private GitHub repository per user, Kubuntu pulling over SSH, recommended, or a bare repository on the VPS), and what commits later (a timer, or by hand): the first commit holds only the starting files. |
 | 2026-11-05 | D5's remote decided (owner): **option B, Kubuntu pulls** over SSH; nothing pushed from the VPS, no credentials there. Kubuntu clones with `--upload-pack='sudo -u maxrecall git-upload-pack'` and `-c remote.origin.uploadpack=…` (the first alone doesn't last past the clone; tested over `file://` with a repository owned by another user, not yet over SSH), then `git pull --ff-only`. The owner will use git-nested, a tool of their own (unpublished); it must do the same on the VPS side. The periodic commit on the VPS is issue #64. |
+| 2026-11-06 | D3 revised (owner): remove Basic auth, in two pull requests: first `auth.js` and `server.js` (malformed and over-long emails refused first, throttling bounded at 10,000 entries, sign-in errors to the log), then nginx (a site-wide cap of 30 sign-in attempts a minute, the per-address limit by IPv6 /64, `auth_basic` removed, `NODE_ENV=production`). |
