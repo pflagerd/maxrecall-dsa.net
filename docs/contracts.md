@@ -149,7 +149,8 @@ Provider: infrastructure and security (`paths.js`). Used by: users
 
 - **What crosses**: from `paths.js`, `resolveInside`; from `users.js`,
   `EMAIL_PATTERN`, `OWNER_EMAIL`, `USERS_DIR`; from `auth.js`,
-  `createInvite`, for users' `routes.test.js` only (#106). (`auth.js`'s
+  `createInvite`, for users' `routes.test.js` and `scripts/characterize.js`
+  only (#106). (`auth.js`'s
   `register`, `login`, `sessionEmail` and the rest are used only by
   `server.js` since the split: both infrastructure and security's.)
 - **Relied on**:
@@ -163,10 +164,10 @@ Provider: infrastructure and security (`paths.js`). Used by: users
   - `USERS_DIR` is where learners' files are; `server.js` only names it in
     its start-up log.
   - `createInvite(email)` resolves to an object with the invite's `code`,
-    and writes under `MAXRECALL_AUTH_DIR` when that's set. `routes.test.js`
-    calls it in a child process, through `require('./auth')` **inside a
-    `node -e` string** (`makeInvites`), so a `require` scan doesn't find
-    it: search for `'./auth'` as text too.
+    and writes under `MAXRECALL_AUTH_DIR` when that's set. Both of
+    users' files call it in a child process, through `require('./auth')`
+    **inside a `node -e` string** (each one's `makeInvites`), so a
+    `require` scan doesn't find it: search for `'./auth'` as text too.
 
 ## 8. The sign-in routes and ports (retired)
 
