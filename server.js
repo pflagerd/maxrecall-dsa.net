@@ -208,7 +208,11 @@ async function signIn(req, res, attempt, refusedStatus) {
     if (result.ok) await endSession(readCookie(req, SESSION_COOKIE));
     sendAuthResult(req, res, result, refusedStatus);
   } catch (err) {
-    res.status(500).json({ error: /** @type {Error} */ (err).message || 'Sign-in failed' });
+    // The details stay in the server's log: anyone can reach this route, and
+    // an error's message can hold a path on the server (CWE-209). Until
+    // 2026-11-06 a 300-character email sent back the path of auth/ here.
+    console.error(`Sign-in failed: ${/** @type {Error} */ (err).message}`);
+    res.status(500).json({ error: 'Sign-in failed on the server. Try again later.' });
   }
 }
 
@@ -253,7 +257,9 @@ app.post(
     try {
       await endSession(readCookie(req, SESSION_COOKIE));
     } catch (err) {
-      return res.status(500).json({ error: /** @type {Error} */ (err).message || 'Logout failed' });
+      // As for signing in: the details go to the log, not the browser.
+      console.error(`Logout failed: ${/** @type {Error} */ (err).message}`);
+      return res.status(500).json({ error: 'Logout failed on the server. Try again later.' });
     }
     res.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/' });
     res.json({ ok: true });
