@@ -24,7 +24,8 @@ the overall picture. Act as the human's lieutenant; the human decides.
   or human approval
 
 ## Each session
-1. Fetch all claude/* branches; read every role's latest handoff.
+1. Fetch every branch (not only claude/*: roles also push others, e.g.
+   infra/* and the VPS operator's); read every role's latest handoff.
 2. Check for ownership violations and contract drift.
 3. Apply cross-boundary requests that touch only files the architect
    owns; route the rest to the owning role, or ask the owner for an
