@@ -108,7 +108,10 @@ Teaching them what you're doing comes first. Speed comes second.
 The maxrecall-dsa repo is worked on by several Claude sessions, each with one role.
 
 - Your role is stated in the first message of your session ("Role: users").
-  If no role is stated, ask before making any changes.
+  If no role is stated, or the one stated isn't in the table below, ask
+  the owner which it is before making any changes; don't pick the nearest
+  one yourself. (On 2026-11-06 "infrastructure-and-security-remote" was
+  taken for infrastructure and security; that session was on the VPS.)
 - Before starting work, read your role file, `docs/roles/<role>.md`, the most
   recent `docs/session-handoff/<role>/*.md`, and the most recent
   `docs/session-handoff/architect/*.md` (the architect's "state of the
