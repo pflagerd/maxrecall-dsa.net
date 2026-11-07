@@ -132,6 +132,11 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   `master` first; if it moved, merge it in and check again before
   pushing. Everything else, including any other file in the same
   session, goes through a pull request the human merges.
+- A pull request's title ends with the role that opens it, in
+  parentheses, named as in the table below: e.g. "Contract 4: three
+  fixture questions (architect)", "… (infrastructure and security)"
+  (owner, 2026-11-07). GitHub's merge commit carries the title, so
+  `git log` shows whose each merged change was.
 
 | Role      | Role file                 |
 |-----------|---------------------------|
