@@ -17,6 +17,7 @@ reasoning behind it.
 | 2026-11-03 | **D6 (owner):** a backlog, **`backlog.json`** in the user's directory. Questions are added to it **in the order they were (are) created**. Later: which questions go in will depend on the **courses** a learner is doing, and their order on **dependencies** between questions (some assume others are already mastered). For now, creation order only. Details, all accepted: a **`created` field in each question file** (ties broken by file name); the backlog holds **pairs**, by question and then by the profile's language order; **at least 3 pairs kept in the queue, plus one more every 5 Submits**, in a file of its own, **`introduce.js`**; an introduced pair goes to the **front**; missing pairs are **appended automatically** (at server start, and when a language is newly allowed); a **new user** starts with everything in the backlog; a **`submitsSinceLastIntroduced`** counter at the top of `order.json`. **Layout and details, decided later the same day (owner, step 5):** `order.json` is `{ schemaVersion, submitsSinceLastIntroduced, queue: [{ question, language, pass?, passesInARow }] }` and `backlog.json` is `{ schemaVersion, backlog: [{ question, language }] }`; the lists are named `queue` and `backlog` (1); the backlog gets every pair the profile **allows**, languages turned off included, by creation time, then the languages turned on in the learner's order, then the other allowed ones (2); an invalid file **fails closed**, refusing that learner's Run and Submit with `500` (3); the files are created or filled **only at server start** (4); the users are the folders in `users/` holding `submissions/` or `profile.json` (5). | Changes the problem file format (`created`), so `readme.html` section 5 changes when that's built. |
 | 2026-11-03 | **D7 (owner):** (a), **stay on the results** after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. Details, all accepted: per language, as now; **"Next" on the button, what's next in its tooltip**; Next **ignores clicks for its first second** (a double click on Submit mustn't leave the results unread); a **reload shows Submit again**; an **unsaved Submit stays Submit**. The server says what's next (`GET /api/next`), and the page takes **`?language=`** in its address. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. |
 | 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. Skips are **treated as the learner failing**, and **a Skip is saved as a submission record with `"skipped": "yes"`**; ordinary Submits **leave the field out**. Details, all accepted: a Skip counts **exactly like a failed Submit** (`passesInARow` to 0, moved `advance(0)` places, counted towards `submitsSinceLastIntroduced`); Skip is **hidden once the button says Next**; a **confirmation** when `passesInARow` is more than 0; a **backlog pair moves into the queue** when skipped or submitted; records go to **`schemaVersion` 3**; a Skip record has the **same fields as a Submit**, with `status`, `passed`, `total`, `runtimeMs`, `stdout` and `stderr` `null` and `results` `[]`, since it isn't judged; the **Submissions tab lists Skips** as "Skipped"; a Skip **doesn't count as having answered** (the Learning/Applying tab rule). | **Changes the 2026-10-29 decision** that Skips aren't recorded: they are now, in the same `submissions/` folder. Check 6 and the later recalculation read a Skip record as a fail, so `order.json` and the records agree. Anything reading `submissions/` has to check `skipped`. |
+| 2026-11-07 | **D7 changed (owner):** Submit turns into Next only after a **passing** Submit (`Accepted`). After a failed one, saved and counted as a fail as before, it **stays Submit, so the learner can try again**; Skip stays shown, and the timer keeps running. Each try is an ordinary Submit: recorded, and moving the pair (a fail sets `passesInARow` to 0 and moves it `advance(0)`, about 1 place; a later pass counts from there). Skip after a failed Submit is **unchanged** (owner): a Skip record, a second fail. Reported by the owner as a bug on `add-to-a-string`; it was D7 as decided, every saved Submit turning into Next. | `POST /api/questions/:slug/submit` answers `pass` (`"yes"` or `"no"`, from `order.js`'s `passFor`, the one place D3's rule lives), and `problem-page.js` turns Submit into Next, and freezes the timer, only on `"yes"`. Changes T3 of `docs/plans/elapsed-timer.md` the same way. |
 
 ## What the owner asked for (from `TODO`)
 
@@ -478,6 +479,12 @@ counts, since the rule counts Submits, not passes.
 see what went wrong, and the Submit button itself turns into a Next
 button, rather than being grayed out with a second button beside it.**
 
+**Changed 2026-11-07 (owner; decision log):** only a *passing* Submit
+turns into Next. A failed one, saved and counted as a fail, stays Submit,
+to be tried again, with Skip shown and the timer running. The server says
+which it was (`pass` in the Submit's answer, from `passFor`). Where the
+bullets below say "a saved Submit", read "a saved, passing Submit".
+
 - **What Next opens:** a saved Submit has already updated the pair
   (D3, D4) and may have brought a pair in from the backlog (D6). "Next"
   is then the front of `order.json`, skipping pairs whose question is
@@ -495,7 +502,8 @@ button, rather than being grayed out with a second button beside it.**
 - **A reload shows Submit again,** as the grayed-out Submit is enabled
   again today: still a nudge, not a rule.
 - **A Submit that wasn't saved** (`saved: false`) moves nothing and stays
-  Submit.
+  Submit. Since 2026-11-07, so does a saved one that failed (it does move
+  the pair).
 - **The server says what's next:** `GET /api/next` returns the front
   pair. Bringing a pair in from the backlog happens when the Submit is
   saved, not when "next" is asked for, so `GET /api/next` changes nothing

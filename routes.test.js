@@ -586,15 +586,35 @@ test('Test: only the owner may; it judges every case and records nothing (contra
   assert.equal((await asOwner('GET', '/api/submissions')).json.length, 0, 'nothing recorded');
 });
 
-test('Submit: a bad elapsedMs is 400; an Accepted Submit is saved and moves the queue', async () => {
+test('Submit: a bad elapsedMs is 400; a wrong Submit is saved as a fail; an Accepted one is saved and moves the queue', async () => {
   const submit = '/api/questions/two-sum/submit';
+  /**
+   * The learner's two-sum pair in Python, from their order.json.
+   *
+   * @returns {{ pass?: string, passesInARow?: number }} The pair's element.
+   */
+  const pairNow = () => {
+    return readUserJson(LEARNER, 'order.json').queue.find((/** @type {{ question: string, language: string }} */ p) => p.question === 'two-sum' && p.language === 'python');
+  };
   for (const elapsedMs of [-1, 1.5]) {
     const answer = await as(LEARNER, 'POST', submit, { language: 'python', code: TWO_SUM_PY, elapsedMs });
     assert.equal(answer.status, 400, `elapsedMs ${elapsedMs}`);
   }
+  // A wrong answer is saved and counted as a fail, and says so (pass), so
+  // the page keeps Submit for another try (D7, as changed 2026-11-07).
+  const wrong = await as(LEARNER, 'POST', submit, { language: 'python', code: WRONG_PY });
+  assert.equal(wrong.status, 200, wrong.body.toString());
+  assert.equal(wrong.json.status, 'Wrong Answer');
+  assert.equal(wrong.json.pass, 'no');
+  assert.equal(wrong.json.saved, true);
+  assert.equal(wrong.json.queueUpdated, true);
+  assert.equal(pairNow().pass, 'no');
+  assert.equal(pairNow().passesInARow, 0);
+
   const answer = await as(LEARNER, 'POST', submit, { language: 'python', code: TWO_SUM_PY, elapsedMs: 1234 });
   assert.equal(answer.status, 200, answer.body.toString());
   assert.equal(answer.json.status, 'Accepted');
+  assert.equal(answer.json.pass, 'yes');
   assert.equal(answer.json.saved, true);
   assert.equal(answer.json.queueUpdated, true);
 
@@ -602,9 +622,8 @@ test('Submit: a bad elapsedMs is 400; an Accepted Submit is saved and moves the 
   assert.equal(record.status, 200);
   assert.equal(record.json.code, TWO_SUM_PY);
   assert.equal(record.json.elapsedMs, 1234);
-  const pair = readUserJson(LEARNER, 'order.json').queue.find((/** @type {{ question: string, language: string }} */ p) => p.question === 'two-sum' && p.language === 'python');
-  assert.equal(pair.pass, 'yes');
-  assert.equal(pair.passesInARow, 1);
+  assert.equal(pairNow().pass, 'yes');
+  assert.equal(pairNow().passesInARow, 1);
 });
 
 test('Skip: a streak is lost only once confirmed (409 CONFIRM_STREAK first)', async () => {
@@ -628,7 +647,7 @@ test('Skip: a streak is lost only once confirmed (409 CONFIRM_STREAK first)', as
 test('submissions: filtered by question and language, and refusals', async () => {
   const all = await as(LEARNER, 'GET', '/api/submissions?question=two-sum&language=python');
   assert.equal(all.status, 200);
-  assert.equal(all.json.length, 2, 'the Submit and the Skip');
+  assert.equal(all.json.length, 3, 'the two Submits and the Skip');
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=hello-world')).json.length, 0);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?language=klingon')).status, 400);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=a&question=b')).status, 400);
