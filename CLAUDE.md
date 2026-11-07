@@ -90,8 +90,11 @@ Teaching them what you're doing comes first. Speed comes second.
 
 ### Continuity between machines
 - Work happens in Claude Code cloud sessions, a local Kubuntu/WebStorm
-  instance, and Claude sessions on the VPS (so far one running as root,
-  through Remote Control; #96 proposes a user of its own). Write plans
+  instance, and Claude sessions on the VPS (so far one, running as root
+  through Remote Control, in the VPS operator role; #96 proposes a user
+  of its own). A session on the VPS checks that it is there (`hostname`,
+  `id`) before anything else: its system prompt may say otherwise
+  (`docs/roles/vps-operator.md`). Write plans
   and decisions to `docs/` in the repo, not only in chat, so the other
   environments can pick them up. Sessions on different machines can't
   always message each other (#96: the VPS session's `send_message` was
@@ -133,3 +136,4 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
 | infrastructure and security  | `docs/roles/infrastructure-and-security.md`  |
 | users     | `docs/roles/users.md`     |
 | questions | `docs/roles/questions.md` |
+| VPS operator | `docs/roles/vps-operator.md` |
