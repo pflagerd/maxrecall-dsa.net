@@ -1345,3 +1345,239 @@ nginx -t && systemctl restart nginx
 ```
 - After the `rm`, step 5's old commands would be needed first; they're
   in `git log -p docs/deploy-vps.md`.
+
+## 14. Root's GitHub key: a deploy key for this repository only (#119) [VPS, then GitHub]
+
+Written 2026-11-07 (infrastructure and security; issue #119). **Not yet
+run.** Root on the VPS pushes from its own checkout,
+`/root/maxrecall-dsa.net` (`origin` is
+`git@github.com:pflagerd/maxrecall-dsa.net`), with an SSH key that is
+**the owner's own key**: it can push to every repository on the owner's
+account. This section gives root a **deploy key**: a key GitHub attaches
+to one repository rather than to an account. It can push to this
+repository only, though still to any branch of it, `master` included.
+Then it deletes the old key, from GitHub and from the VPS.
+
+Who does what: **[VPS]** steps are for the owner or the VPS operator
+(`docs/roles/vps-operator.md`), **one yes from the owner per change**.
+Each step says whether it is read-only or a change, and how to undo a
+change. **[GitHub]** steps are the owner's, in the browser. Stop at
+anything unexpected and report it; don't improvise.
+
+Before starting:
+
+- **Never print a private key.** Only files ending `.pub`, and
+  fingerprints, may be shown. A command below that uses a private key
+  (`ssh -i`) reads it, but doesn't print it.
+- **Don't touch `/root/.ssh/authorized_keys`.** It decides who may log
+  in to the VPS, which this section doesn't change.
+- Nothing else is affected. The service's checkout,
+  `/srv/maxrecall/maxrecall-dsa.net`, pulls over HTTPS (§4, §8), and so
+  does `make deploy-server`. `gh` uses its own token (#97). The owner
+  says the old key is used nowhere else (#119).
+- Three GitHub details below are **expectations, not yet confirmed**:
+  where the setting is in GitHub's pages, the greeting a deploy key gets,
+  and the error a read-only key gets. GitHub's docs weren't reachable
+  from the session that wrote this. Record what GitHub actually shows,
+  so this section can be corrected.
+- The OpenSSH and git behaviour relied on is from the man pages and
+  source of the versions Ubuntu 24.04 ships (OpenSSH 9.6p1, git 2.43.0),
+  cited where used.
+
+### 1. Look first [VPS, read-only]
+
+```bash
+ls -l /root/.ssh/
+```
+- Lists the folder's file names, sizes and modes, without reading any of
+  them. Note the old key's file name. It's most likely `id_ed25519` or
+  `id_rsa`, each with a `.pub` beside it. Below it's `<old key>`. If
+  there is more than one key pair, or none, stop and report it.
+- There must be no file called `maxrecall-dsa-deploy` yet (step 2's
+  name). If there is, stop.
+
+```bash
+git -C /root/maxrecall-dsa.net remote -v
+```
+- `-C <dir>` runs git in that folder; `remote -v` lists the remotes'
+  URLs. Expect `git@github.com:pflagerd/maxrecall-dsa.net` twice (fetch,
+  push).
+
+```bash
+git -C /root/maxrecall-dsa.net config --show-origin --get core.sshCommand
+```
+- Prints the setting and the file it came from, if it's set. Expect
+  nothing (exit code 1, "not set"). If it prints something, stop.
+
+```bash
+printenv GIT_SSH_COMMAND
+```
+- Expect nothing. If it's set, it overrides step 5's setting
+  (git-config(1), `core.sshCommand`). Stop.
+
+**The owner, or the operator with the owner's explicit yes for this
+one line** (the operator's role forbids reading in `/root/.ssh/` by
+default, and this reads a public file there):
+
+```bash
+ssh-keygen -l -f /root/.ssh/<old key>.pub
+```
+- `-l` "Show fingerprint of specified public key file", `-f` names it
+  (ssh-keygen(1)). Prints a line like `256 SHA256:… comment (ED25519)`.
+  The fingerprint isn't secret. The owner uses it in step 7 to pick the
+  right key on GitHub. **It must be the `.pub` file.**
+
+### 2. Make the new key [VPS, change]
+
+```bash
+ssh-keygen -t ed25519 -N '' -C 'root@srv702017 deploy key, pflagerd/maxrecall-dsa.net' -f /root/.ssh/maxrecall-dsa-deploy
+```
+- `-t ed25519`: the type of key to create. `-N ''`: an empty passphrase.
+  `-C`: a comment, stored in the `.pub` file and shown on GitHub. `-f`:
+  where to write. It writes two files: the private key and `.pub`
+  beside it (ssh-keygen(1)).
+- **Why no passphrase:** the operator pushes without anyone there to
+  type one. The private key is protected by its mode (`600`, root only)
+  instead. Anything running as root can use it, as with the old key, but
+  now only for this repository.
+- It prints the new fingerprint and a picture of it ("randomart"), not
+  the key.
+- **Undo:** `rm /root/.ssh/maxrecall-dsa-deploy /root/.ssh/maxrecall-dsa-deploy.pub`
+
+```bash
+ls -l /root/.ssh/maxrecall-dsa-deploy /root/.ssh/maxrecall-dsa-deploy.pub
+```
+- Expect `-rw-------` for the first and `-rw-r--r--` for `.pub`, both
+  owned by root.
+
+```bash
+cat /root/.ssh/maxrecall-dsa-deploy.pub
+```
+- **The `.pub` file only.** One line, `ssh-ed25519 AAAA… root@srv702017
+  deploy key, …`: the public key, for the owner to paste in step 3. It's
+  safe to show.
+
+### 3. Add it to the repository [GitHub, owner]
+
+- The repository's **Settings → Deploy keys → Add deploy key** (an
+  expectation, as above). Title: `srv702017 root`. Key: step 2's line.
+  **Tick "Allow write access"**: the operator pushes its handoffs.
+- Nothing changes on the VPS. **Undo:** delete the deploy key on the same
+  page.
+
+### 4. Check the new key on its own [VPS, read-only]
+
+```bash
+ssh -F /dev/null -i /root/.ssh/maxrecall-dsa-deploy -o IdentitiesOnly=yes -T git@github.com
+```
+- `-T`: no terminal (GitHub gives no shell anyway). `-i`: the key to
+  use. **This offers that key and no other**:
+  - Given `-i`, ssh doesn't add its default keys (`~/.ssh/id_ed25519`
+    and the rest). In OpenSSH 9.6p1's `readconf.c`, line 2702, they're
+    added only `if (options->num_identity_files == 0)`.
+  - `-o IdentitiesOnly=yes` leaves out any keys an agent offers
+    (ssh_config(5)).
+  - `-F /dev/null` reads no configuration file. An `IdentityFile` line
+    in root's `~/.ssh/config` would otherwise add to the keys tried
+    (ssh_config(5): "Multiple IdentityFile directives will add to the
+    list"), and the operator doesn't read that file. Known hosts are
+    still `~/.ssh/known_hosts`, which already has GitHub's host key.
+- **Expect** (an expectation, as above) a greeting that names **the
+  repository**, not the owner: `Hi pflagerd/maxrecall-dsa.net! You've
+  successfully authenticated, but GitHub does not provide shell access.`
+  Exit code 1 is normal: GitHub closes the connection.
+  - `Hi pflagerd!` means the owner's key was used, not the deploy key:
+    stop.
+  - `Permission denied (publickey)` means step 3 isn't done, or the wrong
+    line was pasted: stop.
+  - A question about the host's authenticity means GitHub's host key
+    isn't known: stop (unexpected).
+- Record the greeting exactly.
+
+### 5. Make the checkout use it [VPS, change]
+
+```bash
+git -C /root/maxrecall-dsa.net config core.sshCommand 'ssh -F /dev/null -i /root/.ssh/maxrecall-dsa-deploy -o IdentitiesOnly=yes'
+```
+- With this set, "`git fetch` and `git push` will use the specified
+  command instead of `ssh`" (git-config(1), `core.sshCommand`): the same
+  command as step 4. With no `--global` or `--system`, git writes it to
+  this checkout's `.git/config` only (git-config(1), `--local`, "the
+  default behavior"). No other repository and no other user is affected.
+- **Undo:** `git -C /root/maxrecall-dsa.net config --unset core.sshCommand`
+
+```bash
+git -C /root/maxrecall-dsa.net config --show-origin --get core.sshCommand
+```
+- Expect `file:.git/config` and the command above.
+
+### 6. Check reading and pushing through git [VPS, read-only]
+
+```bash
+git -C /root/maxrecall-dsa.net ls-remote origin HEAD
+```
+- Asks GitHub for `master`'s commit, through step 5's command. Expect one
+  line: a commit id and `HEAD`.
+
+```bash
+git -C /root/maxrecall-dsa.net push --dry-run origin HEAD:refs/heads/deploy-key-check
+```
+- `--dry-run`: "Do everything except actually send the updates"
+  (git-push(1)), so no branch is created. It still connects to GitHub's
+  push service. Expect `* [new branch] HEAD -> deploy-key-check`.
+- An error naming a read-only key means "Allow write access" wasn't
+  ticked (an expectation, as above): fix step 3 and run this again.
+- The real test is the operator's next handoff push. Note whether it
+  worked.
+
+### 7. Delete the old key from the account [GitHub, owner]
+
+- Only after steps 4–6 passed. **Settings → SSH and GPG keys** (the
+  account's, not the repository's): delete the key whose fingerprint is
+  step 1's. The owner says the key is used nowhere else, so this revokes
+  it completely.
+- **Undo:** none needed. If something turns out to depend on the old key
+  after all, it gets a new key of its own: don't bring this one back.
+
+### 8. Check the old key is refused [VPS, read-only]
+
+```bash
+ssh -F /dev/null -i /root/.ssh/<old key> -o IdentitiesOnly=yes -T git@github.com
+```
+- The same as step 4, with the old key. It reads the key but doesn't
+  print it. Expect `Permission denied (publickey)`. If it greets
+  anyone, step 7 isn't done: stop.
+
+```bash
+git -C /root/maxrecall-dsa.net ls-remote origin HEAD
+```
+- Still works, now with the deploy key alone.
+
+### 9. Remove the old key from the VPS [VPS, change]
+
+```bash
+rm /root/.ssh/<old key> /root/.ssh/<old key>.pub
+```
+- Only the two files step 1 named. **Not** `authorized_keys`,
+  `known_hosts` or `config`.
+- **Undo:** none, and none needed: the key is already revoked (step 8).
+
+```bash
+ls -l /root/.ssh/
+```
+- Expect `maxrecall-dsa-deploy` and its `.pub`, plus whatever else step 1
+  listed, minus the old pair.
+
+### 10. Record it
+
+The operator's handoff (or the owner's note, for infrastructure and
+security) says what was run and when (UTC), step 4's greeting, step 6's
+output, step 8's refusal, and whether a real push has worked since. It
+also lists anything GitHub showed differently from the expectations
+above, so this section can be corrected. Then #119 can be closed.
+
+**What this doesn't fix.** Anything running as root on the VPS can still
+push to this repository, to any branch: there's no branch protection,
+and roles push handoffs straight to `master`. #96 (a user of its own for
+the operator) would move the key off root. #97 (the `gh` token) is
+separate.
