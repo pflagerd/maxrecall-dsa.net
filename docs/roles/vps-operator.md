@@ -23,7 +23,8 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   infrastructure-and-security handoffs of 2026-11-07).
 - Read this file, the newest handoff in
   `docs/session-handoff/vps-operator/`, the newest infrastructure and
-  security and architect handoffs, and `docs/deploy-vps.md`.
+  security and architect handoffs, `docs/deploy-vps.md`, and
+  `docs/contracts.md` (`CLAUDE.md`, "Roles": every role reads it).
 
 ## Owns
 - `docs/session-handoff/vps-operator/`. Its handoffs go straight to

@@ -7,6 +7,15 @@ submitted code in, and the judge's queue; backups; and the tooling
 every role builds and checks with (toolchains, `make`, `npm`,
 TypeScript, `doc-check`).
 
+On the VPS, this role writes; others run. It writes the procedures and
+configuration (`docs/deploy-vps.md`, `deploy/**`,
+`scripts/deploy-server.sh`), through pull requests. The owner carries
+them out on the machine, or the VPS operator does
+(`docs/roles/vps-operator.md`), with the owner's yes for each change. Write
+a procedure so the operator can follow it exactly: it stops where one
+doesn't cover a change, or is wrong, and its findings come here as
+requests in its handoffs.
+
 ## Owns (files/directories the role owns)
 - docs/session-handoff/infrastructure-and-security/
 - server.js, the sign-in layer: who a request is from and the trusted
