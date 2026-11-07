@@ -451,10 +451,12 @@ const KNOWN_LANGUAGES = ['javascript', 'python', 'cpp', 'java', 'd'];
 const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++', java: 'Java', d: 'D' };
 
 // Submit turns into Next (spaced-repetition plan, D7, step 7) once this
-// question has been Submitted, and saved, in a language since the page
-// opened. Per language, because progress is per (question, language):
-// switched to another language, it's Submit again. A reload starts afresh:
-// it's a nudge, not a rule the server enforces. This replaced issue #18's
+// question has been Submitted, saved and passed, in a language since the
+// page opened. A failed Submit stays Submit, so the learner can try again
+// (owner, 2026-11-07: before, any saved Submit turned into Next). Per
+// language, because progress is per (question, language): switched to
+// another language, it's Submit again. A reload starts afresh: it's a
+// nudge, not a rule the server enforces. This replaced issue #18's
 // grayed-out Submit.
 
 /**
@@ -479,7 +481,7 @@ const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++'
  *   Submit can't land on Next before the results are read (D7).
  */
 
-/** Next's state by language, for languages submitted and saved. @type {Record<string, NextState>} */
+/** Next's state by language, for languages submitted, saved and passed. @type {Record<string, NextState>} */
 const nextByLanguage = {};
 const SUBMIT_TITLE = submitBtn.title;
 const SUBMIT_LABEL = /** @type {string} */ (submitBtn.textContent);
@@ -638,7 +640,8 @@ async function skip() {
 // question opens in that language and counts only while that language is
 // shown and this tab is visible (the Page Visibility API's document.hidden:
 // another tab, a minimized window or a locked screen pause it, another
-// window on top doesn't). A saved Submit freezes it, and Submit sends the
+// window on top doesn't). A saved Submit that passes freezes it (a failed
+// one lets it carry on, as the learner tries again), and Submit sends the
 // time so the record keeps it. While a Submit waits for its answer the
 // clock is held, so judging time isn't counted. A reload starts afresh.
 /** One stopwatch per language, made when first needed. @type {Record<string, import('./timer').Stopwatch>} */
@@ -1576,6 +1579,8 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
  * @property {string} [stdout]
  * @property {string} [stderr]
  * @property {TestResult[]} [results]
+ * @property {'yes' | 'no'} [pass] - Submit only: whether it passed, as the
+ *   queue counts it (order.js's passFor: only Accepted is "yes").
  * @property {boolean} [saved] - Submit only: whether the record was saved.
  * @property {string} [saveError] - Submit only, when not saved: why.
  * @property {string} [submissionId] - Submit only, when saved.
@@ -1675,10 +1680,14 @@ async function execute(endpoint, button) {
     consoleStateByLanguage[language] = { kind: 'result', data };
     if (stillShown()) renderResults(data);
     if (isSubmit && data.saved) {
-      // Submit turns into Next (D7): ask now what it opens, so the
-      // tooltip can say it (step 7, detail 5). fetchNext() never rejects.
-      nextByLanguage[language] = await fetchNext();
-      clockFor(language).freeze();
+      // A passing Submit turns into Next (D7): ask now what it opens, so
+      // the tooltip can say it (step 7, detail 5). fetchNext() never
+      // rejects. A failing one stays Submit, with the clock still running,
+      // to be tried again (owner, 2026-11-07).
+      if (data.pass === 'yes') {
+        nextByLanguage[language] = await fetchNext();
+        clockFor(language).freeze();
+      }
       submissionsNotice = null;
       // A saved Submit becomes the submission named in the page address, so
       // a reload reopens what was just submitted rather than an older one;
@@ -1699,8 +1708,9 @@ async function execute(endpoint, button) {
       submittingLanguages.delete(language);
       updateClocks();
     }
-    // After a saved Submit the button is Next; a failed one (network error,
-    // judge busy, not saved) is Submit again, to be tried again.
+    // After a saved, passing Submit the button is Next; any other (a wrong
+    // answer, a network error, judge busy, not saved) is Submit again, to
+    // be tried again.
     if (button === submitBtn) updateSubmitButton();
     else button.disabled = false;
   }

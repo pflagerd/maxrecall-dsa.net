@@ -350,9 +350,9 @@ function submissionRecord({ problem, sha256, language, code, elapsedMs }, submit
  * a record and moves the queue) and Test (issue #58: all of them, the
  * hidden ones' details shown, and nothing saved or moved). Refuses what
  * checkExecutionRequest() refuses; 503 when the judge is unavailable or
- * busy; otherwise the judge's result, with saved/submissionId (or
- * saveError) and queueUpdated (or queueError) for a Submit, and tested:
- * true for a Test.
+ * busy; otherwise the judge's result, with pass ("yes" or "no", passFor's
+ * verdict), saved/submissionId (or saveError) and queueUpdated (or
+ * queueError) for a Submit, and tested: true for a Test.
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }.
@@ -379,8 +379,9 @@ async function handleExecution(req, res, { mode }) {
 
   try {
     const submittedAt = new Date().toISOString();
-    // Submit adds what happened to its record: saved, then submissionId or saveError.
-    const result = /** @type {import('./judge/runner').JudgeResult & { saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string, tested?: boolean }} */ (
+    // Submit adds whether it passed, then what happened to its record:
+    // saved, then submissionId or saveError.
+    const result = /** @type {import('./judge/runner').JudgeResult & { pass?: 'yes' | 'no', saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string, tested?: boolean }} */ (
       await runSubmission({ language, code, functionName, testCases, signature, judgeMode })
     );
     // Test: the hidden cases marked again, and nothing saved or moved
@@ -392,6 +393,11 @@ async function handleExecution(req, res, { mode }) {
     // Only Submit is recorded (Run and Test aren't). A failed save mustn't
     // cost the learner their result, so it's reported alongside it instead.
     if (mode === 'submit') {
+      // The page turns Submit into Next only on a pass (D7, as changed on
+      // 2026-11-07), so it's told the verdict the queue uses, from the one
+      // function that decides it, rather than working it out again.
+      const pass = passFor(result.status);
+      result.pass = pass;
       try {
         // saveSubmission checks the user again.
         result.submissionId = await saveSubmission(email, submissionRecord(request, submittedAt, result));
@@ -406,7 +412,7 @@ async function handleExecution(req, res, { mode }) {
       // detail 5). No await from here to the response: see updateQueue().
       if (result.saved) {
         try {
-          updateQueue(email, { question: problem.slug, language }, passFor(result.status));
+          updateQueue(email, { question: problem.slug, language }, pass);
           result.queueUpdated = true;
         } catch (err) {
           console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
