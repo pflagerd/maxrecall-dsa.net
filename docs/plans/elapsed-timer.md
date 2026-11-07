@@ -58,6 +58,11 @@ designed so a countdown can reuse it later (T7).
 
 **Recommendation: (a).**
 
+**Changed 2026-11-07 (owner, with D7 of `docs/plans/spaced-repetition.md`):**
+it now freezes only at a saved Submit that **passes**. A failed Submit no
+longer ends the attempt (the button stays Submit), so the clock carries on
+through the next try, and each Submit's record keeps the time so far.
+
 ### T4. Does it pause when you aren't looking?
 
 - **(a) It pauses while the browser tab is hidden** (another tab, minimized
