@@ -45,10 +45,23 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   with the owner's yes. The live service's command line is
   `/usr/local/bin/node server.js`, which `pkill -f "node server.js"`
   matches.
-- **No test servers, test runs or `make` targets on the VPS.** Its
-  checkout, `/root/maxrecall-dsa.net`, is for reading. Run as root,
-  `make test` can `apt-get install` (`scripts/toolchain-deps.sh`), and a
-  server started without `HOST` listens on every interface.
+- **No test servers, test runs or `make` targets on the VPS**, but one:
+  `make deploy-server`, as `docs/deploy-vps.md` writes it, with the
+  owner's yes for that deploy. Its checkout, `/root/maxrecall-dsa.net`,
+  is otherwise for reading. Run as root, `make test` can `apt-get
+  install` (`scripts/toolchain-deps.sh`), and a server started without
+  `HOST` listens on every interface.
+- **A deploy installs what `master` is when it pulls**, not what was
+  surveyed earlier (2026-11-07: three pull requests merged between the
+  survey and the pull, so the owner said yes to a different change).
+  So fetch, show what will be deployed (the commits and files between
+  the deployed commit and `origin/master`), and deploy in one go; stop
+  and ask again if it differs from what the owner was told. Say in the
+  ask that `make deploy-server` can also install system packages
+  (`toolchain-deps`, `sandbox-deps`), runs `npm install`, and installs
+  the unit file if it changed (`scripts/deploy-server.sh`). A procedure
+  for this survey, and for going back (#126), is infrastructure and
+  security's, in `docs/deploy-vps.md`.
 - After anything that touches the service: `systemctl is-active
   maxrecall-dsa.test.service`, and its journal since the change.
 
