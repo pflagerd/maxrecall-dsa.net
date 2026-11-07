@@ -1354,8 +1354,11 @@ run.** Root on the VPS pushes from its own checkout,
 `git@github.com:pflagerd/maxrecall-dsa.net`), with an SSH key that is
 **the owner's own key**: it can push to every repository on the owner's
 account. This section gives root a **deploy key**: a key GitHub attaches
-to one repository rather than to an account. It can push to this
-repository only, though still to any branch of it, `master` included.
+to one repository rather than to an account: "an SSH key that grants
+access to a single repository" ([GitHub, deploy keys](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#deploy-keys)).
+It can push to this repository only, though still to any branch of it,
+`master` included: "Deploy keys with write access can perform the same
+actions as … a collaborator on a personal repository" (same page).
 Then it deletes the old key, from GitHub and from the VPS.
 
 Who does what: **[VPS]** steps are for the owner or the VPS operator
@@ -1375,11 +1378,13 @@ Before starting:
   `/srv/maxrecall/maxrecall-dsa.net`, pulls over HTTPS (§4, §8), and so
   does `make deploy-server`. `gh` uses its own token (#97). The owner
   says the old key is used nowhere else (#119).
-- Three GitHub details below are **expectations, not yet confirmed**:
-  where the setting is in GitHub's pages, the greeting a deploy key gets,
-  and the error a read-only key gets. GitHub's docs weren't reachable
-  from the session that wrote this. Record what GitHub actually shows,
-  so this section can be corrected.
+- Checked against GitHub's docs (2026-11-07): where the setting is
+  (step 3). **Two details are expectations, not stated there**: the
+  greeting a deploy key gets (step 4; GitHub documents only `Hi
+  USERNAME! …`,
+  [testing your SSH connection](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/testing-your-ssh-connection)),
+  and the error a read-only key gets (step 6). Record what GitHub
+  actually shows, so this section can be corrected.
 - The OpenSSH and git behaviour relied on is from the man pages and
   source of the versions Ubuntu 24.04 ships (OpenSSH 9.6p1, git 2.43.0),
   cited where used.
@@ -1459,9 +1464,12 @@ cat /root/.ssh/maxrecall-dsa-deploy.pub
 
 ### 3. Add it to the repository [GitHub, owner]
 
-- The repository's **Settings → Deploy keys → Add deploy key** (an
-  expectation, as above). Title: `srv702017 root`. Key: step 2's line.
-  **Tick "Allow write access"**: the operator pushes its handoffs.
+- The repository's **Settings**, then "In the sidebar, click **Deploy
+  Keys**", then **Add deploy key**
+  ([GitHub, set up deploy keys](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys#set-up-deploy-keys)).
+  Title: `srv702017 root`. Key: step 2's line. **Tick "Allow write
+  access"**: the operator pushes its handoffs. ("Deploy keys are
+  read-only by default", same page.)
 - Nothing changes on the VPS. **Undo:** delete the deploy key on the same
   page.
 
