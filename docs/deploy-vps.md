@@ -1589,3 +1589,171 @@ push to this repository, to any branch: there's no branch protection,
 and roles push handoffs straight to `master`. #96 (a user of its own for
 the operator) would move the key off root. #97 (the `gh` token) is
 separate.
+
+## 15. Going back to the previous version [GitHub, then VPS]
+
+Written 2026-11-07 (infrastructure and security; the VPS operator's
+request, `docs/session-handoff/vps-operator/20261106T172702-0800.md`).
+**Not yet used.** For when a deploy made things worse.
+
+`make deploy-server` always deploys the tip of `master` (`git pull
+--ff-only`, "The quick way"), and it stays that way (owner, 2026-11-07).
+So you can't go back by deploying an older commit: the next deploy would
+pull `master` again. Instead:
+
+- **The normal way, A: undo the change on GitHub, then deploy as
+  usual.** Use it whenever the site can wait the minutes this takes.
+- **The emergency way, B: put the VPS's checkout back by hand, then do
+  A anyway.** Only when the site is broken, and the owner says it can't
+  wait. Until A is done, `master` still has the bad change, and **the
+  next `make deploy-server` brings it back.**
+
+Same rules as §14: **[VPS]** steps are for the owner or the VPS operator,
+one yes from the owner per change. Each step says read-only or change,
+and how to undo a change. Stop at anything unexpected and report it.
+
+### A. Revert the pull request, then deploy [GitHub, owner; then VPS]
+
+1. **On GitHub**: open the merged pull request that caused it, and near
+   the bottom click **Revert**. "Reverting a merged pull request creates
+   a new pull request that reverts the original merge commit"
+   ([GitHub, reverting a pull request](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/reverting-a-pull-request)).
+   If GitHub can't (a conflict), stop: the role that owns the files
+   writes the revert by hand.
+2. **Merge that pull request**, as any other. The checks run as usual.
+3. **Deploy as usual** ("The quick way"). Look at the commit
+   `make deploy-server` reports (`deploy-server: at <commit> …`): it
+   must be the revert's merge, or later.
+
+**To bring the change back later**, revert the revert: the same
+**Revert** button, on the revert's pull request. Merging the old branch
+again brings nothing back: "Reverting a merge commit declares that you
+will never want the tree changes brought in by the merge. As a result,
+later merges will only bring in tree changes introduced by commits that
+are not ancestors of the previously reverted merge" (git-revert(1),
+`--mainline`).
+
+### B. The emergency way, by hand [VPS]
+
+All as root on the VPS, for `/srv/maxrecall/maxrecall-dsa.net`, the
+service's checkout (not root's own `/root/maxrecall-dsa.net`). It does
+by hand what `scripts/deploy-server.sh` does on an update, in the same
+way:
+
+- **Git and npm run as `maxrecall`**, so the files stay its own. That's
+  `runuser -u maxrecall -- env HOME=/srv/maxrecall PATH=…`, the
+  script's `as_service_user`.
+- **With systemd's `PATH`**, as the script runs:
+  `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`. Root's
+  own `PATH` puts a Node 18 first (infrastructure and security's
+  handoff `20261106T163918-0800.md`; not yet fixed), and its `npm` would
+  be the wrong one.
+- **The checkout stays on branch `master`**, moved back with
+  `git reset --hard`. The script refuses a checkout on any other branch,
+  so a detached checkout would break the next deploy.
+
+**1. Find the two commits [read-only].**
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net reflog -n 5
+```
+- `reflog` lists where `HEAD` has been, newest first (git-reflog(1));
+  `-n 5`: the last five. The top line, `HEAD@{0}`, is what's deployed
+  now: call it `<bad>`. The second, `HEAD@{1}`, is what ran before the
+  last pull: call it `<previous>`. The VPS operator's last deploy
+  handoff names both ("Deployed X over Y"); they must agree. If they
+  don't, or the top line isn't a `pull`, stop.
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net status --porcelain
+```
+- Expect nothing: the checkout has no changes of its own. If it prints
+  anything, stop: step 3 would throw them away.
+
+**2. See what going back changes [read-only].**
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net diff --stat <previous> <bad>
+```
+- `--stat`: just the files, and how much changed in each. Note three
+  things:
+  - `package.json`: if it's listed, step 4 is needed.
+  - `deploy/maxrecall-dsa.test.service`: if it's listed, step 5 is
+    needed.
+  - **A change to what's stored on disk** (anything the readme's "Where
+    data lives" describes, such as a `schemaVersion`, or a rename of the
+    files under `users/` or `auth/`): **stop.** Files the newer version
+    wrote may not be readable by the older one. Going back then needs
+    infrastructure and security first, not this procedure.
+
+**3. Move the checkout back [change].**
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net reset --hard <previous>
+```
+- `--hard` moves the branch, `master`, and the files to `<previous>`
+  (git-reset(1)). Step 1 showed there was nothing else to lose. The
+  running server doesn't notice until step 6.
+- **Undo:** the same command with `<bad>`.
+
+**4. Only if step 2 listed `package.json`: its packages [change].**
+
+```bash
+cd /srv/maxrecall/maxrecall-dsa.net
+```
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin npm install --omit=dev --no-audit --no-fund
+```
+- The script's own command (`--omit=dev`: no development packages;
+  the other two flags only skip messages).
+- **Undo:** after step 3's undo, run it again.
+
+**5. Only if step 2 listed the unit file: install it [change].**
+
+```bash
+install -m 0644 /srv/maxrecall/maxrecall-dsa.net/deploy/maxrecall-dsa.test.service /etc/systemd/system/maxrecall-dsa.test.service
+```
+```bash
+systemctl daemon-reload
+```
+- The script's own two commands. `install -m 0644` copies the file with
+  that mode; `daemon-reload` makes systemd read it again.
+- **Undo:** after step 3's undo, run both again.
+
+**6. Restart the service [change].** The site is down for a second or
+two.
+
+```bash
+systemctl restart maxrecall-dsa.test.service
+```
+- **Undo:** step 3's undo (with 4 and 5 again, if they were needed),
+  then this again.
+
+**7. Check it [read-only].**
+
+```bash
+systemctl is-active maxrecall-dsa.test.service
+```
+- Expect `active`.
+
+```bash
+journalctl -u maxrecall-dsa.test.service --since "5 min ago" --no-pager | grep -v 'Queues:'
+```
+- The service's log for the last five minutes ("5 min ago": a relative
+  time, systemd.time(7)). `grep -v 'Queues:'`
+  leaves out the lines that name learners. Expect `Server listening on
+  127.0.0.1:3000 only` and `Trusted listener on 127.0.0.1:3001 only`.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
+```
+- Expect `200`, from the app itself. nginx answers `502` when the app
+  is down.
+
+**8. Then A, at once.** Until `master` has the revert, **don't run
+`make deploy-server`**: it would deploy `<bad>` again. Once the revert is
+merged, a normal deploy fast-forwards the checkout from `<previous>` to
+the revert, and the VPS and `master` agree again.
+
+**Record it** in the operator's handoff: both commits, what step 2
+listed, each change with its time (UTC), and step 7's results.
