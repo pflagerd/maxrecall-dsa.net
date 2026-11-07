@@ -18,7 +18,14 @@ User=maxrecall
 Group=maxrecall
 WorkingDirectory=/srv/maxrecall/maxrecall-dsa.net
 ExecStart=/usr/local/bin/node server.js
-Restart=on-failure
+# always, not on-failure (2026-11-07): systemd counts an exit on SIGTERM,
+# SIGHUP, SIGINT or SIGPIPE as clean, and on-failure doesn't restart after a
+# clean exit (systemd.service(5), Restart=). On 2026-11-06 a stray
+# `pkill -f "node server.js"` sent SIGTERM and the site stayed down for 34
+# minutes. `systemctl stop` still stops it for good: a stop or restart by
+# systemd itself is never undone. A crash loop still ends after 5 starts in
+# 10 s (the default start limit, systemd.unit(5)), whatever this says.
+Restart=always
 RestartSec=2
 
 # Only reachable from this machine. Port 3000 requires sign-in; the SSH
