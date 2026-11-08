@@ -178,6 +178,19 @@ Decided while building (small choices, owner may overrule):
 - Leaving is `location.assign('/')`, like the back link, so Back
   returns to the question, opened afresh.
 
+Added 2026-11-08 (owner): **a progress bar under the countdown**, the
+time left, full when the warning opens and empty when it runs out.
+Decided while building (small choices, owner may overrule): an HTML
+`<progress>` (`#idle-dialog-progress`), which browsers expose to screen
+readers as a progress bar
+(https://html.spec.whatwg.org/multipage/form-elements.html#the-progress-element);
+its `max` is `IDLE_WARNING_MS`, set by `problem-page.js`, so it can't
+disagree with the countdown; it drains rather than fills, like the
+countdown; it moves when the countdown does, once a second (1/300 of
+its width); `--accent` on a grey track (`style.css`,
+`.idle-dialog-progress`, with Chromium's and Firefox's own
+pseudo-elements). Checked in headless Chromium only.
+
 For #21's countdown: the idle timeout is separate from the stopwatch, so
 a countdown can pause with the stopwatch while the idle timeout keeps
 real time.
