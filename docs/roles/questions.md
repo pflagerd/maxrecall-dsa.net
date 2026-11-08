@@ -26,7 +26,8 @@ template for writing one.
 - For question authors: docs/how-to-add-a-new-question.html,
   docs/question-template.json, .claude/skills/author-question/
 - Plans: docs/plans/playtest.md, docs/plans/topics-and-sources.md,
-  docs/plans/error-line-numbers.md
+  docs/plans/error-line-numbers.md,
+  docs/plans/fundamentals-learned-links-concept-checks.md (#145)
 
 ## May read, must not edit
 - Everything the infrastructure-and-security and users roles own, in

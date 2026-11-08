@@ -31,7 +31,7 @@ records, and the scripts that set up and adjust a learner.
 - docs/how-to-put-a-question-directly-into-my-queue-by-slug.html
   (queueing a question of the learner's choice, by its slug: #81)
 - Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
-  docs/plans/elapsed-timer.md
+  docs/plans/elapsed-timer.md, docs/plans/question-bank-page.md (#133)
 - The format of users/<email>/ (gitignored, on each machine)
 
 ## May read, must not edit
