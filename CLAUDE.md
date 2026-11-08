@@ -123,6 +123,12 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   files below, or under an exception the owner grants for one change
   (your role file says whether and how your role may ask). If you need
   such a change, write it as a request in your handoff doc instead.
+- **A new plan is its author's** (owner, 2026-11-08): a file a role adds
+  to `docs/plans/` belongs to that role from its first commit, as its
+  ownership list. Name your role in its first lines (e.g. "Status:
+  **proposed** (questions, 2026-11-08)"). The architect adds it to your
+  role file's list in its next role-files pull request; until then this
+  rule is what makes it yours.
 - Shared files: any role may edit `readme.html`, and any role may propose a
   change to `CLAUDE.md` (in its own pull request, saying so in the
   description). The human approves and merges both. Any role may also
