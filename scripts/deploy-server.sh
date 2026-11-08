@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sets up, or updates, the MaxRecall DSA service on this machine, doing what
+# Sets up, or updates, the MaxRecall Code service on this machine, doing what
 # docs/deploy-vps.md §3–§6 and §8 describe. `make deploy-server` runs it
 # after scripts/toolchain-deps.sh and scripts/sandbox-deps.sh (§1, §1a, §2).
 #
@@ -27,9 +27,14 @@ SERVICE_USER=maxrecall
 HOME_DIR=/srv/maxrecall
 CHECKOUT=$HOME_DIR/maxrecall-dsa.net
 DATA_DIR=$HOME_DIR/data
-UNIT=maxrecall-dsa.test.service
+UNIT=maxrecallcode.service
 UNIT_PATH=/etc/systemd/system/$UNIT
-OLD_UNIT=maxrecall-dsa.service
+# The service's earlier names, newest first: maxrecall-dsa.test.service
+# until #123 (2026-11-08), maxrecall-dsa.service until 2026-10-29. One
+# still installed counts as installed (not a first run), and is stopped
+# and removed after $UNIT is copied in, before $UNIT starts (§5).
+# Never list $UNIT here: it would be removed as soon as it's installed.
+OLD_UNITS=(maxrecall-dsa.test.service maxrecall-dsa.service)
 # The ports in the unit file: 3000 needs sign-in, 3001 is the trusted port.
 PORTS=(3000 3001)
 
@@ -50,11 +55,16 @@ as_service_user() {
   runuser -u "$SERVICE_USER" -- env HOME="$HOME_DIR" PATH="$PATH" "$@"
 }
 
+# A first run: no checkout yet, or no unit file under any of its names.
+installed=no
+for unit in "$UNIT" "${OLD_UNITS[@]}"; do
+  if [ -f "/etc/systemd/system/$unit" ]; then installed=yes; fi
+done
 first_install=no
-[ -d "$CHECKOUT/.git" ] && [ -f "$UNIT_PATH" ] || first_install=yes
+[ -d "$CHECKOUT/.git" ] && [ "$installed" = yes ] || first_install=yes
 
 if [ "$first_install" = yes ] && [ "${DEPLOY_CONFIRM:-}" != yes ]; then
-  echo "This installs the MaxRecall DSA server as a systemd service on THIS machine ($(hostname)):"
+  echo "This installs the MaxRecall Code server as a systemd service on THIS machine ($(hostname)):"
   echo "  - a system user '$SERVICE_USER' and $HOME_DIR (code, data, accounts);"
   echo "  - $UNIT, started now and at every boot, on 127.0.0.1:3000 (sign-in)"
   echo "    and 127.0.0.1:3001, where anyone on this machine is the owner with no sign-in."
@@ -96,13 +106,17 @@ if ! cmp -s "$CHECKOUT/deploy/$UNIT" "$UNIT_PATH"; then
   install -m 0644 "$CHECKOUT/deploy/$UNIT" "$UNIT_PATH"
   systemctl daemon-reload
 fi
-# The service's earlier name, if it's still around, would also want port 3000.
-if [ -f "/etc/systemd/system/$OLD_UNIT" ]; then
-  note "removing the old $OLD_UNIT (it was renamed $UNIT)."
-  systemctl disable --now "$OLD_UNIT" >&2 || true
-  rm -f "/etc/systemd/system/$OLD_UNIT"
-  systemctl daemon-reload
-fi
+# The service under an earlier name, if it's still around, holds ports 3000
+# and 3001: stop it (disable --now) and remove it before $UNIT starts.
+for old in "${OLD_UNITS[@]}"; do
+  [ "$old" != "$UNIT" ] || fail "OLD_UNITS lists $UNIT itself; it would be removed as soon as it's installed."
+  if [ -f "/etc/systemd/system/$old" ]; then
+    note "removing the old $old (renamed $UNIT)."
+    systemctl disable --now "$old" >&2 || true
+    rm -f "/etc/systemd/system/$old"
+    systemctl daemon-reload
+  fi
+done
 note "enabling $UNIT and (re)starting it."
 systemctl enable -q "$UNIT"
 started=$(date '+%Y-%m-%d %H:%M:%S')
