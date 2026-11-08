@@ -80,13 +80,18 @@ code {
   max-width: 800px;
 }
 
+/* The table's box: rounded and shadowed, and scrolling sideways when the
+   table is wider than the screen, so the page itself never is. */
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
 .problem-list {
   width: 100%;
   border-collapse: collapse;
   background: var(--surface);
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .problem-list th {
@@ -134,6 +139,49 @@ code {
 .result-new {
   color: var(--accent);
   font-style: italic;
+}
+
+/* The question bank (#133): index.html?view=bank. */
+.list-wrap.bank-view {
+  max-width: 1100px;
+}
+.view-switch {
+  margin: 0 0 1rem;
+}
+.view-switch:empty {
+  display: none;
+}
+.view-switch a,
+.bank-pair a {
+  color: var(--accent);
+}
+.bank-slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+.bank-pair {
+  white-space: nowrap;
+}
+/* No underline, which turns "—" into "=": hovering shows it's a link. */
+.bank-pair a {
+  text-decoration: none;
+}
+.bank-pair a:hover {
+  text-decoration: underline;
+}
+.bank-neither a {
+  color: #94a3b8;
+}
+/* In a file, but in a language turned off: not on the list. */
+.bank-off a {
+  opacity: 0.55;
+  font-style: italic;
+}
+.bank-created {
+  color: #94a3b8;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 

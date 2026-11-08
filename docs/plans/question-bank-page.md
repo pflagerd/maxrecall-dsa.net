@@ -1,7 +1,12 @@
 # The question bank page (issue #133): a proposal
 
-Status: **decided, not built** (users' proposal, 2026-11-08; the owner's
-answers the same day). Nothing is built yet.
+Status: **built** (users' proposal, 2026-11-08; the owner's answers the
+same day; built the same day). `readme.html` (HTTP API, Front end)
+describes it as built, and wins where this differs. Two things the
+proposal didn't foresee: the list's table now scrolls sideways inside its
+own box on a narrow screen (it already overflowed a phone by 307 px, and
+the bank's columns made it worse), and the bank view is up to 1100 px
+wide, against the list's 800.
 
 ## Decisions (owner, 2026-11-08)
 

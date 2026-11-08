@@ -15,9 +15,16 @@
 
   <main>
     <section class="list-wrap">
+      <!-- The question bank's link, or the way back from it (#133): shown by
+           problems-list.js only to whoever may see the bank. -->
+      <p id="view-switch" class="view-switch"></p>
       <div id="next-line" class="next-line"></div>
+      <!-- Scrolls sideways on its own when the table is wider than the
+           screen (a phone; the bank's language columns), so the page doesn't. -->
+      <div class="table-scroll">
       <table class="problem-list">
-        <thead>
+        <!-- The queue's columns; the question bank (?view=bank) replaces them. -->
+        <thead id="problem-head">
           <tr>
             <th title="Your queue's order: 1 is next">#</th>
             <th>Title</th>
@@ -31,6 +38,7 @@
           <tr><td colspan="6">Loading problems...</td></tr>
         </tbody>
       </table>
+      </div>
     </section>
   </main>
 
