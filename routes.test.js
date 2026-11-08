@@ -32,7 +32,7 @@ const { spawn, execFileSync } = require('child_process');
 
 const REPO = __dirname;
 
-const OWNER = 'owner@example.com';
+const OWNER = 'owner@example.com'; // python on, javascript allowed but off, a chosen backlog (#133)
 const LEARNER = 'learner.a@example.com'; // python and javascript, every question
 const CHOOSER = 'chooser@example.com'; // python, a chosen backlog of hello-world alone
 const BROKEN_PROFILE = 'broken.profile@example.com';
@@ -408,6 +408,15 @@ before(
     writeFile(path.join(usersDir, CHOOSER, 'profile.json'), { schemaVersion: 1, allowed: { languages: ['python'] }, backlog: 'chosen' });
     writeFile(path.join(usersDir, CHOOSER, 'order.json'), { schemaVersion: 1, submitsSinceLastIntroduced: 0, queue: [] });
     writeFile(path.join(usersDir, CHOOSER, 'backlog.json'), { schemaVersion: 1, backlog: [{ question: 'hello-world', language: 'python' }] });
+    // The owner, for the question bank (#133): JavaScript allowed but turned
+    // off, with a pair of it in the queue, which the list doesn't show and
+    // the bank does; a chosen backlog, so nothing is added at start.
+    writeFile(path.join(usersDir, OWNER, 'profile.json'), { schemaVersion: 1, allowed: { languages: ['python', 'javascript'] }, preferred: { languages: ['python'], defaultLanguage: 'python' }, backlog: 'chosen' });
+    writeFile(path.join(usersDir, OWNER, 'order.json'), {
+      schemaVersion: 1, submitsSinceLastIntroduced: 0,
+      queue: [{ question: 'hello-world', language: 'javascript', passesInARow: 0 }, { question: 'valid-parentheses', language: 'python', passesInARow: 0 }],
+    });
+    writeFile(path.join(usersDir, OWNER, 'backlog.json'), { schemaVersion: 1, backlog: [{ question: 'two-sum', language: 'python' }] });
     writeFile(path.join(usersDir, BROKEN_PROFILE, 'profile.json'), { schemaVersion: 1, colour: 'blue' });
     writeFile(path.join(usersDir, BROKEN_QUEUE, 'profile.json'), { schemaVersion: 1, allowed: { languages: ['python'] } });
     writeFile(path.join(usersDir, BROKEN_QUEUE, 'order.json'), '{ not json\n');
@@ -464,7 +473,7 @@ test('the gate: signed out, every feature route is 401 and gives nothing away', 
   /** @type {[string, string, unknown?][]} */
   const routes = [
     ['GET', '/api/questions'], ['GET', '/api/questions/two-sum'], ['GET', '/api/profile'],
-    ['GET', '/api/next'], ['GET', '/api/queue'], ['GET', '/api/submissions'],
+    ['GET', '/api/next'], ['GET', '/api/queue'], ['GET', '/api/question-bank'], ['GET', '/api/submissions'],
     ['GET', '/api/submissions/2026-01-01T00-00-00.000Z'], ['GET', '/api/nope'],
     ['POST', '/api/questions/two-sum/run', { language: 'python', code: TWO_SUM_PY }],
     ['POST', '/api/questions/two-sum/submit', { language: 'python', code: TWO_SUM_PY }],
@@ -673,6 +682,42 @@ test('next and queue: what to do next, and the list of pairs', async () => {
   const queue = await as(LEARNER, 'GET', '/api/queue');
   assert.equal(queue.status, 200);
   assert.ok(queue.json.pairs.some((/** @type {{ question: string, where: string }} */ p) => p.question === 'two-sum' && p.where === 'queue'));
+});
+
+test('question bank (#133): the owner sees every question and where each pair is; anyone else is refused', async () => {
+  const bank = await asOwner('GET', '/api/question-bank');
+  assert.equal(bank.status, 200, bank.body.toString());
+  assert.deepEqual(bank.json.languages, ['python', 'javascript'], 'the allowed languages, those turned on first');
+
+  /** @type {{ slug: string, created: string, pairs: Record<string, unknown> }[]} */
+  const questions = bank.json.questions;
+  const everySlug = (await asOwner('GET', '/api/questions')).json.map((/** @type {{ slug: string }} */ q) => q.slug).sort();
+  assert.deepEqual(questions.map((q) => q.slug).sort(), everySlug, 'every question in questions/');
+  const order = questions.map((q) => `${q.created} ${q.slug}`);
+  assert.deepEqual(order, [...order].sort(), 'by created, then slug');
+
+  /**
+   * One question's pairs, from the bank.
+   *
+   * @param {string} slug - The question.
+   * @returns {Record<string, unknown>} Its pairs, by language.
+   */
+  const pairsOf = (slug) => {
+    const found = questions.find((q) => q.slug === slug);
+    assert.ok(found, slug);
+    return found.pairs;
+  };
+  assert.deepEqual(pairsOf('valid-parentheses'), { python: { where: 'queue', position: 1, listed: true } }, 'first on the list: the pair before it is off');
+  assert.deepEqual(pairsOf('hello-world'), { javascript: { where: 'queue', listed: false } }, 'off, so not listed, but shown; python in neither file');
+  assert.deepEqual(pairsOf('two-sum'), { python: { where: 'backlog', listed: true } });
+
+  const owner = await asOwner('GET', '/api/profile');
+  assert.equal(owner.json.canSeeQuestionBank, true);
+  const learner = await as(LEARNER, 'GET', '/api/profile');
+  assert.equal(learner.json.canSeeQuestionBank, false);
+  const refused = await as(LEARNER, 'GET', '/api/question-bank');
+  assert.equal(refused.status, 403);
+  assert.equal(refused.json.questions, undefined, 'nothing of the bank');
 });
 
 // ---- A feature, not a gap (owner, 2026-11-06) ----
