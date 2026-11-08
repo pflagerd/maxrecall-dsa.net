@@ -80,7 +80,7 @@
   <li><strong>What it teaches.</strong> One new concept, stated in a sentence. It may build on a concept an earlier question taught, ideally at most one: list that question in <code>alreadyLearned</code>, and link it in the Learning tab's “Learned earlier”. A question that needs two new concepts is two questions, the one the other depends on first.</li>
   <li><strong>Its name</strong> (the <em>slug</em>): lowercase letters and digits, joined by single hyphens, e.g. <code>linked-list-from-values</code>. It's the file name (<code>questions/&lt;name&gt;.json</code>), part of the page's address (<code>problem.html?slug=…</code>), and how every learner's queue refers to it, so pick one you won't want to change. (If you must, <code>make rename-question</code> does it safely.)</li>
   <li><strong>Its title</strong>, as the problem list shows it.</li>
-  <li><strong>Its difficulty</strong>: <code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</li>
+  <li><strong>Its difficulty</strong>: <code>Fundamentals</code>, <code>Easy</code>, <code>Medium</code> or <code>Hard</code>. <code>Fundamentals</code> is for a question whose new concept is a feature of the language or its library; the rule is in <code>docs/roles/questions/how-to-write-a-question.md</code>, section 1.</li>
   <li><strong>Its topics and sources</strong>: names shown as bubbles. Use names already in <code>labels.json</code> where they fit, so the colours match; a new name works, in the default colours, until it's added there.</li>
   <li><strong>How it's judged</strong> (<code>judgeMode</code>): <code>"function"</code>, the judge calls one function with arguments and compares what it returns; or <code>"program"</code>, the judge runs the whole program with some standard input and compares its output. Most questions are functions.</li>
   <li><strong>Its languages.</strong> Each language needs its own starter code, function name, description, examples and constraints, and C++, Java and D also a type <code>signature</code>. Starting with one language and adding the others later is fine: a language left out is simply not offered.</li>
@@ -198,7 +198,7 @@
 <p>Then open the pull request on GitHub, for review before merging.</p>
 
 <h2 id="s9">9. After it's merged: deploy, and give it to learners</h2>
-<p>On the VPS, as root, in root's clone: <code>git pull --ff-only</code>, then <code>make deploy-server</code> (<code>docs/deploy-vps.md</code>, “The quick way”).</p>
+<p>Deploy it on the VPS with the guarded deploy (<code>docs/deploy-vps.md</code>, “The quick way”, “Updating: the guarded deploy”), after the owner's yes for the commit. The yes names one commit by its id, and the deploy puts exactly that commit live, or stops if <code>master</code> has moved past it (<code>docs/decisions/20261108T085607-0800-guarded-deploy.md</code>). A plain <code>git pull</code> and <code>make deploy-server</code> would deploy whatever <code>master</code>'s tip is, including commits merged after the yes.</p>
 <ul>
   <li>Learners whose backlog is <code>"all"</code> get it at that restart.</li>
   <li>Learners with a <strong>chosen</strong> backlog (you, and testers set up with <code>make learner-create</code>) get it only when it's added, with the server stopped (<code>docs/deploy-vps.md</code> §10):</li>
@@ -211,7 +211,7 @@
   <tr><td><code>slug</code></td><td>yes</td><td>The file name without <code>.json</code>.</td></tr>
   <tr><td><code>created</code></td><td>yes</td><td>UTC time to the second, <code>2026-11-05T19:04:31Z</code>.</td></tr>
   <tr><td><code>title</code></td><td>yes</td><td>As the list shows it.</td></tr>
-  <tr><td><code>difficulty</code></td><td>yes</td><td><code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</td></tr>
+  <tr><td><code>difficulty</code></td><td>yes</td><td><code>Fundamentals</code>, <code>Easy</code>, <code>Medium</code> or <code>Hard</code>.</td></tr>
   <tr><td><code>topics</code>, <code>sources</code></td><td>yes</td><td>Lists of names, may be empty; colours from <code>labels.json</code>.</td></tr>
   <tr><td><code>alreadyLearned</code></td><td>no</td><td>The slugs of the questions it builds on directly, e.g. <code>["add-to-a-string"]</code>; left out if none. Not the ones those build on: they come with them. Every Learning tab links each of them, and no others, in its “Learned earlier” section; <code>make test</code> checks both, that no question builds on itself, and that none lists a question it already reaches through another.</td></tr>
   <tr><td><code>judgeMode</code></td><td>no</td><td><code>"function"</code> (left out means this) or <code>"program"</code>.</td></tr>

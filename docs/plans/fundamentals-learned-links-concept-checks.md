@@ -1,9 +1,11 @@
 # Fundamentals, "Learned earlier" links, and checking the concept was used (#93, #88, #92): a proposal
 
-Status: **proposed** (questions, 2026-11-08), nothing built. The owner
-answers the questions below in this file; each part can be decided and
-built on its own. Where this disagrees with `readme.html`, `readme.html`
-wins: it describes what's built.
+Status: **Part 1 decided** (owner, 2026-11-08: Q1 to Q3, below), not yet
+built; **Q5 moved to #146**; **Parts 2 and 3 still proposed**, to be
+decided later (owner, 2026-11-08). Proposed by questions, 2026-11-08
+(#145). The owner answers the questions below in this file; each part
+can be decided and built on its own. Where this disagrees with
+`readme.html`, `readme.html` wins: it describes what's built.
 
 Why together: #93 and #88 each change contract 4 (the question bank,
 `docs/contracts.md`), and #92 changes contract 2 (judging). Designing them
@@ -64,6 +66,26 @@ The borderline one is **Is Unique I**: its tool is in each standard library
 (`set`, `HashSet`, …), but what it teaches is the idea of a hash table,
 so the rule puts it at Easy. **Recommendation: the table as it stands.**
 
+**Decided** (owner, 2026-11-08): **the six, and Is Unique I too**, so
+seven questions are Fundamentals. The rule above put Is Unique I at
+Easy, so it's reworded to fit (questions' wording, for the guide; the
+owner can change it in the pull request that adds it):
+
+> **Fundamentals**: the question's one new concept is something the
+> language or its standard library already gives you, learned by using
+> it: syntax, an operator, how a built-in type behaves, a library
+> function, or a ready-made container such as Python's `set`.
+> **Easy or above**: the new concept is a data structure the learner
+> builds (e.g. linked nodes), or an algorithm, an idea for solving the
+> problem (e.g. Two Sum's looking up the complement), even if it uses a
+> library container along the way.
+
+So Is Unique I is Fundamentals (its new concept is using a `set`,
+`HashSet`, … to remember what's been seen), Singly Linked List Hello
+World stays Easy (the learner makes and links the nodes), and Two Sum
+stays where it is (its new concept is the complement lookup, not the
+hash map it uses).
+
 ### Q2. Hello World's topic "Fundamentals"
 
 With the level, the list would show "Fundamentals" twice on Hello World's
@@ -78,11 +100,18 @@ row: the badge and the topic bubble.
 **Recommendation: (b)**, so a topic says what a question is about and
 the badge says how hard it is, with no word used for both.
 
+**Decided** (owner, 2026-11-08): **(b)**, Hello World's topic becomes
+`"Output"`. `labels.json` lists neither `Fundamentals` nor `Output`, so
+the bubble keeps the default colour, as now.
+
 ### Q3. One level, or more?
 
 The issue says "a level or maybe levels". **Recommendation: one,
 `Fundamentals`, now.** Another can be added the same way later; nothing
 here rules one out.
+
+**Decided** (owner, 2026-11-08): **one**, so the difficulties are
+`Fundamentals`, `Easy`, `Medium`, `Hard`.
 
 ### Q4. The badge's colour (users', `style.css`)
 
@@ -96,8 +125,8 @@ guess at what reads well, not something checked with anyone.
 - **Contract 4**: `difficulty`'s values become `Fundamentals`, `Easy`,
   `Medium`, `Hard`, and `style.css` colours `difficulty-fundamentals`.
 - **Questions' files**: `question-files.js` (`DIFFICULTIES`, and its
-  JSDoc), `questions.test.js` (the expected message), the six question
-  files, Hello World's topic (Q2), `docs/how-to-add-a-new-question.html`,
+  JSDoc), `questions.test.js` (the expected message), the seven question
+  files (Q1, as decided), Hello World's topic (Q2), `docs/how-to-add-a-new-question.html`,
   the guide (Q1's rule), `readme.html` section 5.
 - **Users' files**: `style.css` (the colour); the JSDoc in
   `problems-list.js`, `problem-page.js` and `routes.js` that says
@@ -109,7 +138,7 @@ guess at what reads well, not something checked with anyone.
   `scripts/characterize.js` snapshots its `difficulty`: run the change
   outside a refactor's two snapshots.
 - **Merge order**: users' `style.css` rule first (a class nothing uses
-  yet is harmless), then questions'. The other way round, the six badges
+  yet is harmless), then questions'. The other way round, the seven badges
   show uncoloured until users' change lands.
 
 ### Q5. For later, not #93: the order a new learner meets them
@@ -137,7 +166,18 @@ here:
 **Recommendation:** a separate issue for users, after this one, since it
 reorders learners' backlogs.
 
+**Moved to #146** (users, 2026-11-08), which lays out the choices for
+the owner. **A correction** (questions, from #146): "in `created`
+order" is true only of a `"backlog": "all"` backlog, which the server
+fills (`order.js`, `allowedPairs`). A chosen backlog, which
+`make learner-create` gives every new learner, keeps the order the owner
+types (`order.js`, `pairsToAdd`), so there the risk is a mistyped order
+with nothing to catch it, not a backwards one.
+
 ## Part 2. #88: clicking a "Learned earlier" link
+
+Not decided yet: the owner chose to decide Parts 2 and 3 later
+(2026-11-08), after Part 1 is built.
 
 The issue: clicking a "Learned earlier" question loads it, with a warning,
 and swaps it into the queue: the clicked question becomes the current one,
@@ -261,6 +301,11 @@ later, for Python first, if (a) proves too crude.
   so a new status needs no change of users' to be shown and recorded as a
   fail. `routes.test.js` matches `Accepted` and `Wrong Answer` only on its
   fixture questions; as long as `two-sum` gets no check, it's unaffected.
+  **Incomplete** (questions, 2026-11-08): infrastructure and security's
+  `judge/sandbox-selftest.js` matches `'Accepted'`, `'Compile Error'`
+  and `'Time Limit Exceeded'` as strings too (contract 2, since #147). A
+  new status leaves them alone; renaming one wouldn't, so add, never
+  rename.
 - Run and Test as well as Submit: proposed yes, so the learner meets the
   check before Submitting.
 
