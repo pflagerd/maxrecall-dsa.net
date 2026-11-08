@@ -10,8 +10,17 @@ answers the same day). Nothing is built yet.
 | Q1 | **(b) A view of the list page**, `index.html?view=bank`, reached by a link only the owner sees. No new files to serve; no other role involved. |
 | Q2 | **(b) A capability of users' own**: a check against `OWNER_EMAIL` in `routes.js`, and `canSeeQuestionBank` in the profile answer. Not `canTestQuestions`. The route refuses anyone else (403). |
 | Q3 | **(b) One row per question, a column per allowed language**: "#3" (queue position), "backlog", "—" (neither), or blank when the question lacks that language. |
-| Q5 | **(a) Rows link to the question**, with a line above the table saying a Submit or Skip there puts it into the queue. |
-| Q4 | Not asked: the recommendation, (a) by `created` then slug, with slug, title, the language columns, difficulty and created; no bubbles. The owner may overrule. |
+| Q5 | **(a) Rows link to the question**, with a line above the table saying what a Submit or Skip there does (below). |
+
+**What opening a row does** (`order.js`, `recordSubmit`; the owner asked, 2026-11-08). Opening a question, or Run, changes nothing. A saved Submit, or a Skip (a fail, D8), moves the pair:
+- **in the queue**: taken out from where it is, its `passesInARow` carried over (a pass adds 1, a fail sets 0), and put back `advance(passesInARow)` places further on **from there**, not from the front;
+- **in the backlog, or in neither file**: taken out of the backlog and **started at the front**, `passesInARow` 0, then moved the same way (about 1–2 places on a pass);
+- either way, the Submit counts toward `submitsSinceLastIntroduced`, so it may bring new pairs in from the backlog.
+
+The note above the table, proposed: "Opening a question changes nothing. A Submit or Skip moves it: from the backlog or neither, to near the front of your queue; from your queue, further back from where it is now."
+
+**For later, not #133**: a queued pair done early counts like one done on time, so its streak grows though the gap was short. Treating an early pass differently would change D4 (`advance.js`, `order.js`): a separate issue if wanted.
+| Q4 | Order not asked: the recommendation, (a) by `created` then slug. Columns: slug, title, the language columns, **the sources and topics bubbles** (owner, 2026-11-08, overruling the recommendation to leave them off: rows like the list's, and the bank can be scanned by topic; `renderBubbles`, contract 10), difficulty, created. If the row gets too wide, created goes first. |
 | Q6 | Not asked: the recommendation, nothing that writes (no adding to the backlog or queue from the page). The owner may overrule. |
 
 The sections below are the proposal as written, kept for its reasons.
