@@ -648,15 +648,16 @@ function loadProfile(email) {
 /**
  * The profile as the page gets it (GET /api/profile, PATCH
  * /api/profile/preferred): the effective profile plus canTestQuestions,
- * whether the Test button is shown (issue #58). Both answers carry it,
- * since the page replaces its copy with either.
+ * whether the Test button is shown (issue #58), and canSeeQuestionBank,
+ * whether the list links to the question bank (#133). Both answers carry
+ * them, since the page replaces its copy with either.
  *
  * @param {string} email - The signed-in user.
  * @param {import('./profile').EffectiveProfile} profile - Their profile.
- * @returns {import('./profile').EffectiveProfile & { canTestQuestions: boolean }} The answer.
+ * @returns {import('./profile').EffectiveProfile & { canTestQuestions: boolean, canSeeQuestionBank: boolean }} The answer.
  */
 function profileForPage(email, profile) {
-  return { ...profile, canTestQuestions: canTestQuestions(email, OWNER_EMAIL) };
+  return { ...profile, canTestQuestions: canTestQuestions(email, OWNER_EMAIL), canSeeQuestionBank: canSeeQuestionBank(email) };
 }
 
 // What the browser is told when something fails on the server for a reason
@@ -824,6 +825,29 @@ router.get(
   },
 );
 
+// The question bank (#133): the owner only (canSeeQuestionBank), and safe,
+// like GET /api/queue: nothing is written.
+router.get(
+  '/api/question-bank',
+  /**
+   * GET /api/question-bank: { languages, questions } (questionBank()), or
+   * 403 for anyone canSeeQuestionBank() refuses.
+   *
+   * @param {AppRequest} req - The request.
+   * @param {Response} res - The bank; 403; or 500 if the profile, a queue
+   *   file or a question file is invalid.
+   * @returns {Response | void} Nothing that's used.
+   */
+  (req, res) => {
+    if (!canSeeQuestionBank(req.userEmail)) return res.status(403).json({ error: 'Only the owner can see the question bank.' });
+    try {
+      res.json(questionBank(/** @type {string} */ (req.userEmail))); // signed in: the gate
+    } catch (err) {
+      return sendViewError(res, /** @type {Error & { code?: string }} */ (err), 'Question bank not listed');
+    }
+  },
+);
+
 /**
  * What to open next for a user (step 7): nextPair() over their files, the
  * backlog filled in memory only (detail 4), with canOpenPair(). Writes
@@ -846,12 +870,15 @@ function workOutNext(email) {
  * A user's queue and backlog as Next and the problem list see them (steps
  * 7 and 9): the backlog filled in memory only (step 7, detail 4), the
  * canOpenPair() test, and a way to look up a question. Writes nothing.
+ * Also the profile and the questions it was worked out from, for the
+ * question bank (#133).
  *
  * @param {string} email - The user's email.
  * @returns {{ order: import('./order').OrderFile, backlog: import('./order').BacklogFile,
  *   canOpen: (pair: import('./order').BacklogElement) => boolean,
- *   questionOf: (slug: string) => QuestionListing }} The view. questionOf()
- *   is only for a pair canOpen() accepted, whose question is known.
+ *   questionOf: (slug: string) => QuestionListing,
+ *   profile: import('./profile').EffectiveProfile, questions: QuestionListing[] }} The view.
+ *   questionOf() is only for a pair canOpen() accepted, whose question is known.
  * @throws {Error} ProfileError (INVALID_PROFILE) or QueueFileError
  *   (INVALID_QUEUE) for an invalid file; another Error if a file can't be
  *   read, or a question file is invalid.
@@ -867,6 +894,103 @@ function queueView(email) {
     canOpen: canOpenPair(profile, questions),
     // canOpenPair() accepts only pairs whose question is in questions.
     questionOf: (slug) => /** @type {QuestionListing} */ (bySlug.get(slug)),
+    profile,
+    questions,
+  };
+}
+
+// --- The question bank (issue #133; docs/plans/question-bank-page.md) -------
+
+/**
+ * Whether a user may see the question bank: every question, and where each
+ * of its pairs is in their own queue and backlog (#133, Q2). Today only
+ * the owner (MAXRECALL_USER, users.js), as for Test, but a rule of its
+ * own, so the two can part later (a teacher).
+ *
+ * @param {string | null | undefined} email - The signed-in user
+ *   (req.userEmail, which the gate sets), or null or undefined if none.
+ * @returns {boolean} True only for OWNER_EMAIL; false for anything else,
+ *   null, undefined and '' included.
+ */
+function canSeeQuestionBank(email) {
+  return typeof email === 'string' && email !== '' && email === OWNER_EMAIL;
+}
+
+/**
+ * Where one pair is, for the question bank.
+ *
+ * @typedef {object} BankPair
+ * @property {'queue' | 'backlog'} where - The file it's in.
+ * @property {number} [position] - In the queue and listed: its number on
+ *   the problem list (1 is next), counted, as the list counts, over the
+ *   pairs the list shows.
+ * @property {boolean} listed - Whether the problem list shows it:
+ *   false for a language turned off (canOpenPair()).
+ */
+
+/**
+ * One question in the question bank.
+ *
+ * @typedef {object} BankQuestion
+ * @property {string} slug - Its file name without .json.
+ * @property {string} created - UTC ISO 8601, from the file.
+ * @property {string[]} languages - The languages it has (its starterCode's).
+ * @property {string} title
+ * @property {string} difficulty
+ * @property {string[]} topics
+ * @property {string[]} sources
+ * @property {Record<string, BankPair>} pairs - By language, the pairs in
+ *   the queue or backlog; a language in neither file isn't there.
+ */
+
+/**
+ * The question bank for one user (#133): every question in questions/, by
+ * created then slug, each with where its pairs are in the user's queue and
+ * backlog, as GET /api/queue sees them (the backlog filled in memory for
+ * "all"), but a pair in a language turned off is shown too (listed:
+ * false). Writes nothing.
+ *
+ * @param {string} email - The user.
+ * @returns {{ languages: string[], questions: BankQuestion[] }} languages:
+ *   the columns, the allowed languages, those turned on first, in the
+ *   learner's order.
+ * @throws {Error} As queueView() does.
+ */
+function questionBank(email) {
+  const { order, backlog, canOpen, profile, questions } = queueView(email);
+  /** @type {Map<string, BankPair>} */
+  const where = new Map();
+  let position = 0;
+  for (const e of order.queue) {
+    const listed = canOpen(e);
+    if (listed) position += 1;
+    where.set(`${e.question}/${e.language}`, { where: 'queue', ...(listed && { position }), listed });
+  }
+  for (const p of backlog.backlog) {
+    where.set(`${p.question}/${p.language}`, { where: 'backlog', listed: canOpen(p) });
+  }
+  const languages = [...profile.languages, ...profile.allowedLanguages.filter((l) => !profile.languages.includes(l))];
+  const sorted = [...questions].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+  return {
+    languages,
+    questions: sorted.map(
+      /**
+       * One question's line: what the list shows of it, and its pairs.
+       *
+       * @param {QuestionListing} q - The question.
+       * @returns {BankQuestion} Its line.
+       */
+      (q) => {
+        /** @type {Record<string, BankPair>} */
+        const pairs = {};
+        for (const language of q.languages) {
+          const found = where.get(`${q.slug}/${language}`);
+          if (found) pairs[language] = found;
+        }
+        const { slug, created, title, difficulty, topics, sources } = q;
+        return { slug, created, languages: q.languages, title, difficulty, topics, sources, pairs };
+      },
+    ),
   };
 }
 
