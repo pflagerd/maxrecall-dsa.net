@@ -115,20 +115,30 @@ questions as fixtures, below).
     renaming a file means `make rename-question` (section 5), never a
     plain `git mv`.
   - The problem file format, `readme.html` section 5, in particular
-    `created`, `title`, `difficulty`, `topics`, `sources` and the
-    languages of `starterCode`, which `questionInfos()` passes on.
-  - `difficulty`'s values, matched as strings: users' pages make it the
-    CSS class `difficulty-<value in lowercase>` (`problems-list.js`'s
-    `difficultyClass`, `problem-page.js`), and `style.css` colours
-    `difficulty-easy`, `-medium` and `-hard`. A new value (#93) passes
-    `make test` once `question-files.js` allows it, and shows as an
-    uncoloured badge until `style.css` has a rule for it.
+    `created`, `title`, `difficulty`, `topics`, `sources`,
+    `alreadyLearned` and the languages of `starterCode`, which
+    `questionInfos()` passes on.
+  - `difficulty`'s values, matched as strings: `Fundamentals` (below
+    Easy, for language features; #93), `Easy`, `Medium`, `Hard`. Users'
+    pages make it the CSS class `difficulty-<value in lowercase>`
+    (`problems-list.js`'s `difficultyClass`, `problem-page.js`), and
+    `style.css` colours `difficulty-fundamentals`, `-easy`, `-medium` and
+    `-hard`. Another new value passes `make test` once
+    `question-files.js` allows it, and shows as an uncoloured badge
+    until `style.css` has a rule for it: users' rule merges first.
   - `alreadyLearned` (optional; #89, direct prerequisites only since
-    #91) is in the format, but not in what `questionInfos()` passes on.
-    It does reach the problem page: `routes.js`'s `toPublicProblem`
-    sends every field but `testCases`. Nothing of users' reads it yet.
-    Starting to (ordering a backlog by it, or #88's links) is a change
-    to this contract, named here when it's made.
+    #91): `questionInfos()` passes it on (#146), and users' `order.js`
+    (`dependencyOrder`, through `allowedPairs`) puts each question of an
+    `"all"` backlog after the ones it names. It relies on an array of
+    slugs; an entry naming no question is ignored, and a missing field
+    means "builds on nothing". It relies on `checkQuestion` refusing a
+    loop only for the order to mean anything: a loop loses no pair (its
+    questions are appended in creation order; `order.test.js`). Not
+    relied on: entries being direct prerequisites only, or having no
+    duplicates (either gives the same order). It also reaches the
+    problem page (`routes.js`'s `toPublicProblem` sends every field but
+    `testCases`), where nothing of users' reads it yet; #88's links
+    would be a further change to this contract.
   - `questions/renames.json`, the rename log, is questions' file but
     users' `consistency.js` parses it (`parseRenames`, `updateRenames`):
     its format is part of this contract both ways.
