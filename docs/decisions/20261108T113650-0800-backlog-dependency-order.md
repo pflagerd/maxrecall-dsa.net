@@ -22,12 +22,15 @@ so a learner met questions before the ones they build on. D6
 (`docs/plans/spaced-repetition.md`) already expected ordering by
 dependencies later.
 
-**Corrections to #146**, found building it: the merge order is users
-first, not questions. `question-files.js`'s `QuestionListing` type is
-users' `QuestionInfo` plus a few fields, so `questionInfos()` returning
-`alreadyLearned` fails `make typecheck` (TS2353) until `QuestionInfo` has
-the field; and questions' `QuestionFile` type doesn't declare it either
-(TS2339). Both seen by trying that change on top of this one.
+**On #146's merge order** ("questions first"): `question-files.js`'s
+`QuestionListing` type is users' `QuestionInfo` plus fields from
+questions' `QuestionFile`, so `questionInfos()` returning
+`alreadyLearned`, as #146 described it, fails `make typecheck` (TS2353)
+until `QuestionInfo` has the field, and `QuestionFile` didn't declare it
+(TS2339): seen by trying that change on top of this one. Questions'
+change also adds the field to `QuestionListing`'s own list, so either
+pull request can merge first (questions' report, checked both ways
+there; not checked here).
 
 Source: `order.js` (`dependencyOrder`, `allowedPairs`), `order.test.js`;
 #146; `docs/plans/spaced-repetition.md`, D6.
