@@ -36,18 +36,22 @@ function isQuestionFile(name) {
  *
  * @typedef {object} QuestionFile
  * @property {string} title
- * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard"
+ *   (DIFFICULTIES).
  * @property {string[]} topics
  * @property {string[]} sources
+ * @property {string[]} [alreadyLearned] - The slugs of the questions it
+ *   builds on directly; missing if none (an empty list is refused).
  * @property {string} created - UTC ISO 8601 (step 3).
  * @property {Record<string, string>} starterCode - By language.
  */
 
 /**
  * What order.js needs to know about a question, and what GET /api/next and
- * GET /api/queue show of it.
+ * GET /api/queue show of it. alreadyLearned is for order.js (#146), which
+ * puts a question after the ones it builds on.
  *
- * @typedef {import('./order').QuestionInfo & Pick<QuestionFile, 'title' | 'difficulty' | 'topics' | 'sources'>} QuestionListing
+ * @typedef {import('./order').QuestionInfo & Pick<QuestionFile, 'title' | 'difficulty' | 'topics' | 'sources' | 'alreadyLearned'>} QuestionListing
  */
 
 /**
@@ -56,7 +60,7 @@ function isQuestionFile(name) {
  *
  * @returns {QuestionListing[]} One per question file: its file name without
  *   .json (D1), created, its starterCode's languages, title, difficulty,
- *   topics and sources.
+ *   topics, sources and alreadyLearned (undefined where it builds on none).
  * @throws {Error} If questions/ can't be read, or a file isn't valid JSON
  *   (the message then names the file).
  */
@@ -70,7 +74,7 @@ function questionInfos() {
        *
        * @param {string} f - The file's name in questions/.
        * @returns {QuestionListing} Its slug, created, languages, title,
-       *   difficulty, topics and sources.
+       *   difficulty, topics, sources and alreadyLearned.
        * @throws {Error} "questions/<f>: ..." if it can't be read or parsed.
        */
       (f) => {
@@ -81,8 +85,8 @@ function questionInfos() {
         } catch (err) {
           throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
         }
-        const { title, difficulty, topics, sources } = problem;
-        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title, difficulty, topics, sources };
+        const { title, difficulty, topics, sources, alreadyLearned } = problem;
+        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title, difficulty, topics, sources, alreadyLearned };
       },
     );
 }
@@ -105,8 +109,13 @@ function readRenamesText() {
 
 /** A question file's fields (readme.html, "Problem file format"). @type {readonly string[]} */
 const QUESTION_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']);
-/** The difficulties the list shows. @type {readonly string[]} */
-const DIFFICULTIES = Object.freeze(['Easy', 'Medium', 'Hard']);
+/**
+ * The difficulties the list shows, easiest first. Fundamentals (owner,
+ * 2026-11-08, #93) is for questions whose new concept is a feature of the
+ * language or its library (docs/roles/questions/how-to-write-a-question.md).
+ * @type {readonly string[]}
+ */
+const DIFFICULTIES = Object.freeze(['Fundamentals', 'Easy', 'Medium', 'Hard']);
 /** The languages whose judge harness needs a signature (judge/runner.js). @type {readonly string[]} */
 const TYPED_LANGUAGES = Object.freeze(['cpp', 'java', 'd']);
 // UTC ISO 8601 to the second, e.g. 2026-10-24T05:31:05Z. UTC only, so that

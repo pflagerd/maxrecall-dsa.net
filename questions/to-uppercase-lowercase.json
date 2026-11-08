@@ -2,7 +2,7 @@
   "slug": "to-uppercase-lowercase",
   "created": "2026-10-30T14:23:45Z",
   "title": "To Uppercase and Lowercase",
-  "difficulty": "Easy",
+  "difficulty": "Fundamentals",
   "topics": ["String"],
   "sources": [],
   "alreadyLearned": ["double-each-character"],
