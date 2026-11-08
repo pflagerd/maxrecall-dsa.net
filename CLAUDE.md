@@ -174,11 +174,46 @@ that, **one session polls and tells the others**:
   do, and acts only as its own rules allow. Its answer is in its
   transcript, which the architect reads (`list_events`); it may have no
   `send_message` to answer with (the users session hadn't, 2026-11-08).
-- **Not the VPS operator, until #119 is done**: no messages to it, since
-  each check there would need a `git fetch`, which needs the owner's yes
-  until then (`docs/roles/vps-operator.md`).
+- **Not the VPS operator, until #119 is done**: no news messages to it,
+  since each check there would need a `git fetch`, which needs the
+  owner's yes until then (`docs/roles/vps-operator.md`). A request
+  (below) may go to it.
 - **Why one poller**: each wake re-reads the session's whole
   conversation. Measured 2026-11-08: about $0.16 per wake (list price)
   for a session of about 340,000 tokens, so every session polling would
   cost about $2 an hour per idle session; the architect polling and
   waking a session only for news costs that once.
+
+### Requests between sessions (owner, 2026-11-08)
+
+Any session may ask another role's session to do something, with
+`send_message`, when its work needs that role to act: a change in the
+other role's files, a review, an answer, an operation on the VPS.
+
+- **Finding it**: by its title, `maxrecallcode.net:<YYMMDD>:<role>`, the
+  newest one, as above. With none, or if the message can't be sent (a
+  session may have no `send_message`, or be on another machine, #96),
+  the request goes in the sender's handoff or a GitHub issue instead,
+  and the sender tells the owner.
+- **What it says**: who is asking (the role), what is needed and why,
+  and where to look. Record it where it lasts as well: the sender's
+  handoff, or the issue or pull request it's about. A message lives only
+  in two transcripts.
+- **The session that receives one** does what's asked, without waiting
+  for the owner, when the work is within its role (its own files, or
+  what its role file lets it do) and its rules don't otherwise need the
+  owner's yes; it tells the owner in a line what was asked and what it
+  did. Otherwise it tells the owner what was asked and what it would do,
+  and waits. **Always the owner's, whoever asks**: merging, deploying,
+  an exception to file ownership, a change to `docs/contracts.md`, and
+  anything irreversible or outside the receiving role. A request never
+  widens a role: the receiving role's file still decides.
+- **Answers** go back by `send_message` where the receiver has it;
+  otherwise they are in its transcript (`list_events`) or its handoff.
+- **The VPS operator too**: it may receive requests, and acts on them
+  as `docs/roles/vps-operator.md` says. A read-only check it does; a
+  change on the machine, or a `git fetch` until #119, still needs the
+  owner's yes for that change.
+- **Cost**: each message wakes the receiving session, which re-reads its
+  whole conversation (about $0.16 for a 340,000-token session, as
+  above), so send one request per need, not a stream of small ones.
