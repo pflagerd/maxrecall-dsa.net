@@ -147,7 +147,7 @@
 
 <h3 id="by-hand">By hand, with no record, anywhere in the queue</h3>
 <p>Edit <code>order.json</code> with the server stopped: it rewrites the file at every Submit, so the site is down for everyone for those minutes. On the VPS, as root:</p>
-<pre><code>systemctl stop maxrecall-dsa.test.service</code></pre>
+<pre><code>systemctl stop maxrecallcode.service</code></pre>
 <pre><code>SUDO_EDITOR=vi sudoedit -u maxrecall /srv/maxrecall/data/users/daniel.pflager@gmail.com/order.json</code></pre>
 <ul>
   <li><code>sudoedit -u maxrecall</code>: edits a copy, then writes it back as <code>maxrecall</code>, so the file stays the service's. Editing it with <code>vi</code> directly as root could leave it root's, and the server couldn't write it any more (<a href="https://www.sudo.ws/docs/man/sudo.man/">sudo(8)</a>, <code>-e</code>).</li>
@@ -165,7 +165,7 @@
 <ul>
   <li>“nothing found” for you: done. An <code>error</code> names the problem in the file: fix it and check again. A <code>warning</code> about the question means its slug or language is wrong: it would stay in the queue but never be offered.</li>
 </ul>
-<pre><code>systemctl start maxrecall-dsa.test.service</code></pre>
+<pre><code>systemctl start maxrecallcode.service</code></pre>
 <p>In the test run, the file stayed <code>maxrecall</code>'s, the check found nothing, and Next then offered the question added first.</p>
 
 <h3>Through your backlog: <code>make backlog-add … AT=1</code></h3>

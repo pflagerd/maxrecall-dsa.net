@@ -213,7 +213,7 @@ relies on within its own files.
 
 Provider and user: infrastructure and security (`server.js`;
 `login-page.js`, `account.js`, `deploy/nginx-maxrecallcode.conf`,
-`deploy/maxrecall-dsa.test.service`).
+`deploy/maxrecallcode.service`).
 
 - **What crosses**: the paths `/api/auth/register`, `/api/auth/login`,
   `/api/auth/logout`, `/api/auth/me`; the environment variables `PORT`

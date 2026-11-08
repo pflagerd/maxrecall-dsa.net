@@ -1,4 +1,5 @@
-# systemd service for running MaxRecall DSA on the VPS.
+# systemd service for running MaxRecall Code on the VPS (maxrecallcode.service;
+# maxrecall-dsa.test.service until #123, 2026-11-08).
 # Install and use it by following docs/deploy-vps.md.
 #
 # Paths assume the layout in that guide:
@@ -8,7 +9,7 @@
 #   /usr/local/bin/node                Node 22 from nodejs.org
 
 [Unit]
-Description=MaxRecall DSA practice server
+Description=MaxRecall Code practice server
 Documentation=https://github.com/pflagerd/maxrecall-dsa.net/blob/master/docs/deploy-vps.md
 After=network.target
 
