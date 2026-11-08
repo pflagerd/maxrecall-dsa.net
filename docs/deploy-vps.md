@@ -111,6 +111,174 @@ stopped on `Sandbox: UNAVAILABLE (… bwrap: Can't mount proc on /newroot/proc:
 Operation not permitted)`. The unit's `ProtectKernelTunables=yes` was the
 cause, and it has been removed (see §5).
 
+### Updating: the guarded deploy [VPS]
+
+Written 2026-11-08 (infrastructure and security; the VPS operator's
+request). The operator first ran it to deploy `38b6af3` (its handoff
+`docs/session-handoff/vps-operator/20261107T092844-0800.md`). **This is
+how an update is deployed**: the owner says yes to one commit, and the
+deploy puts exactly that commit live, or stops.
+
+**Why it's needed.** `make deploy-server` deploys whatever the tip of
+`master` is when it runs (owner, 2026-11-07: no pinning to a named
+commit; §15). If `master` moves between the owner's yes and the deploy
+(another pull request merged, a handoff pushed), a plain
+`git pull && make deploy-server` would put live commits nobody looked
+at. The guard deploys only if the tip is still the commit the owner
+approved.
+
+**The gap it can't close.** The guard checks `master` in root's
+checkout. Then `scripts/deploy-server.sh`, after `toolchain-deps` and
+`sandbox-deps` (seconds), fetches `master` again into the service's
+checkout, `/srv/maxrecall/maxrecall-dsa.net`, and deploys what it gets.
+A merge in those seconds would go live too. This is the time between a
+check and the use of what was checked ("TOCTOU"). Step 5 catches it
+afterwards.
+
+Same rules as §14: **[VPS]** steps are for the owner or the VPS
+operator, one yes from the owner per change. Each step says read-only or
+change. Stop at anything unexpected and report it.
+
+**1. What the update brings [read-only].** On the VPS, what runs now:
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net log --oneline -1
+```
+- `runuser -u maxrecall --`: run as the service's user, who owns that
+  checkout ([runuser(1)](https://man7.org/linux/man-pages/man1/runuser.1.html)).
+  `env HOME=/srv/maxrecall`: that user's home, as the script sets it.
+  `git -C <folder>`: run in that folder. `log --oneline -1`: the newest
+  commit, on one line.
+- Call it `<deployed>`. It fetches nothing.
+
+Then, **in any checkout fetched since the merge** (Kubuntu, a cloud
+session; on the VPS, a `git fetch` in root's checkout needs the owner's
+yes until #119, `docs/roles/vps-operator.md`). `<commit>` is the commit
+to deploy, usually the tip of `master`:
+
+```bash
+git log --oneline <deployed>..<commit>
+```
+```bash
+git diff --stat <deployed> <commit>
+```
+- `A..B`: the commits in `B` that aren't in `A`, i.e. what the deploy
+  adds ([gitrevisions(7)](https://git-scm.com/docs/gitrevisions#_dotted_range_notations)).
+  `diff --stat`: just the files, and how much changed in each.
+- **Stop, and ask infrastructure and security first**, if `--stat`
+  shows:
+  - **a renamed unit file** under `deploy/` (a rename shows with `=>`):
+    it needs a procedure of its own, like §16;
+  - **a change to what's stored on disk** (anything the readme's "Where
+    data lives" describes, such as a `schemaVersion`, or a rename of the
+    files under `users/` or `auth/`);
+  - **a renamed or deleted question** (`questions/<name>.json` with
+    `=>`, or with only `-` signs): learners' files then need §8's step,
+    with the server stopped, and `make deploy-server` doesn't do it.
+- `package.json` or `deploy/maxrecallcode.service` changed: nothing to
+  do, since the script runs `npm install` and copies a changed unit file.
+
+**2. The owner's yes**, for `<commit>`, named by its id (e.g. "Deploy
+`17d3f80`"). A yes to a pull request's number isn't enough: the
+operator's first attempt on 2026-11-07 stopped because `master` had
+moved past the commits surveyed.
+
+**3. Check root's checkout [read-only].** As root, in
+`/root/maxrecall-dsa.net`:
+
+```bash
+git branch --show-current
+```
+- Expect `master`: the merge in step 4 moves the branch you're on.
+
+```bash
+git status --porcelain --untracked-files=no
+```
+- `--porcelain`: one line per changed file, nothing else;
+  `--untracked-files=no`: leave out files git doesn't track
+  ([git-status(1)](https://git-scm.com/docs/git-status)). **Expect
+  nothing.** `make deploy-server` runs *this* checkout's `Makefile` and
+  `scripts/deploy-server.sh`, as root, so an uncommitted edit here would
+  run as root. If it prints anything, stop.
+
+**4. The deploy [change]**, surveyed and run in one go, still in
+`/root/maxrecall-dsa.net`:
+
+```bash
+if git fetch origin master && [ "$(git rev-parse origin/master)" = "$(git rev-parse <commit>)" ]; then
+  git merge --ff-only <commit> && make deploy-server
+else
+  echo "STOP: master is not <commit>"; git log --oneline <commit>..origin/master
+fi
+```
+- `git fetch origin master`: brings GitHub's `master` into
+  `origin/master`, changing no files. It's part of the deploy the owner
+  said yes to.
+- `git rev-parse`: turns a name (`origin/master`, a short id) into the
+  full 40-character commit id, so `[ … = … ]` compares two exact ids
+  ([git-rev-parse(1)](https://git-scm.com/docs/git-rev-parse)).
+- `git merge --ff-only <commit>`: moves root's checkout to exactly that
+  commit, never past it, and refuses rather than make a merge commit
+  (e.g. if root's `master` has a handoff commit not yet pushed)
+  ([git-merge(1)](https://git-scm.com/docs/git-merge#Documentation/git-merge.txt---ff-only)).
+  This is why the guard checks root's checkout: the `Makefile` and
+  script that then run as root are `<commit>`'s.
+- `&&`: each step runs only if the one before succeeded.
+- `else`: `master` has moved on (or the fetch failed: git says so above
+  the `STOP` line). Nothing changed but `origin/master`; the `git log`
+  lists what's new. Survey that (step 1) and ask the owner
+  again.
+- **Expect**, among the script's lines: `deploy-server: updating
+  /srv/maxrecall/maxrecall-dsa.net (master) with git pull --ff-only.`,
+  `deploy-server: at <commit> …`, and last `Deployed: maxrecallcode.service
+  at <commit> …, running.`
+- **If it fails** (a line `deploy-server: …` and no `Deployed:`): stop.
+  Copy its last lines into the handoff and don't run it again without
+  the owner's yes. Going back: §15.
+
+**5. Check it [read-only].** First, that the service's checkout got
+`<commit>` and nothing newer (the gap above):
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net rev-parse HEAD
+```
+```bash
+git rev-parse <commit>
+```
+- The second runs in root's checkout. **Expect the same id twice.**
+- **If they differ**, `master` moved during the deploy, and commits
+  the owner didn't approve are live. List them in the service's
+  checkout:
+  `runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net log --oneline <commit>..HEAD`.
+  Tell the owner, who either says yes to them now or has them taken
+  out with §15 A (revert, then deploy).
+
+Then the service itself, as §15 B step 7:
+
+```bash
+systemctl is-active maxrecallcode.service
+```
+- Expect `active`.
+
+```bash
+journalctl -u maxrecallcode.service --since "5 min ago" --no-pager | grep -v 'Queues:'
+```
+- Expect `Server listening on 127.0.0.1:3000 only` and `Trusted
+  listener on 127.0.0.1:3001 only`. `grep -v 'Queues:'` leaves out the
+  lines that name learners.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
+```
+- `-s`: no progress bar; `-o /dev/null`: throw the page away; `-w
+  '%{http_code}\n'`: print only the status code
+  ([curl(1)](https://curl.se/docs/manpage.html)). Expect `200`. nginx
+  answers `502` when the app is down.
+
+**6. Record it** in the operator's handoff: `<deployed>` and `<commit>`,
+what step 1's `--stat` listed, each change with its time (UTC), and
+step 5's results. **To undo**: §15.
+
 The sections below are what it does, step by step, with each command
 explained.
 
@@ -529,6 +697,11 @@ step 4. Browsers keep cookies per host name, not per port, so all these
 trusted port ignores it.
 
 ## 8. Updating to the latest code [VPS]
+
+**Normally, deploy an update with the guarded deploy** ("The quick
+way", "Updating: the guarded deploy"), which does what follows and
+checks it's the commit the owner approved. This section is what it does,
+by hand.
 
 ```bash
 cd /srv/maxrecall/maxrecall-dsa.net
@@ -1818,8 +1991,9 @@ systemctl cat maxrecall-dsa.test.service | grep '^# /'
   other file is a drop-in: stop.
 
 **2. The deploy [change]**, only of `<commit>`, surveyed and run in one
-go (the VPS operator's guarded deploy, its handoff
-`20261107T092844-0800.md`), as root in `/root/maxrecall-dsa.net`:
+go: the guarded deploy ("The quick way", "Updating: the guarded
+deploy"; do its steps 1 to 3 first), as root in
+`/root/maxrecall-dsa.net`:
 
 ```bash
 if git fetch origin master && [ "$(git rev-parse origin/master)" = "$(git rev-parse <commit>)" ]; then
@@ -1874,8 +2048,7 @@ journalctl -u maxrecallcode.service --since "5 min ago" --no-pager | grep -v 'Qu
   out the lines that name learners.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}
-' https://maxrecallcode.net/login.html
+curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
 ```
 - Expect `200`. The uptime check (`.github/workflows/uptime.yml`, the
   Actions tab) should stay green at its next run.
