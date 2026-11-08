@@ -145,7 +145,7 @@ questions as fixtures, below).
   - **One type crosses the other way**: questions' `question-files.js`
     builds `QuestionListing`, what `questionInfos()` returns, on users'
     `QuestionInfo` from `order.js` (`import('./order').QuestionInfo &
-    Pick<…>`, line 50; since #112). A type only, nothing at run time,
+    Pick<…>`, its `@typedef`; since #112). A type only, nothing at run time,
     but it ties the two in `make typecheck`: renaming or moving
     `QuestionInfo` fails questions' check. A field that `questionInfos()`
     starts passing on must be in `QuestionListing`, or questions' change
