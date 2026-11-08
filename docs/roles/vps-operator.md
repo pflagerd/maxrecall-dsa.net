@@ -71,7 +71,7 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   for this survey, and for going back (#126), is infrastructure and
   security's, in `docs/deploy-vps.md`.
 - After anything that touches the service: `systemctl is-active
-  maxrecall-dsa.test.service`, and its journal since the change.
+  maxrecallcode.service`, and its journal since the change.
 
 ## Secrets and personal data
 - **Never read or print** `/srv/maxrecall/data/auth/`,
@@ -111,7 +111,7 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
 - Write `docs/session-handoff/vps-operator/<timestamp>.md`: what was run,
   what changed on the machine (with times, UTC), what was found, and
   requests for infrastructure and security.
-- Check `systemctl is-active maxrecall-dsa.test.service`, and list any
+- Check `systemctl is-active maxrecallcode.service`, and list any
   process this session started that is still running (there should be
   none).
 - Commit and push the handoff.

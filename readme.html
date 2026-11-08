@@ -193,7 +193,7 @@ never a shared server). <code>make run</code> and <code>make dev</code> install 
   <tr><td><code>scripts/deploy-server.sh</code></td><td>Sets up or updates the systemd service (<code>make deploy-server</code>).</td></tr>
   <tr><td><code>scripts/toolchain-deps.sh</code></td><td>Installs the toolchains from <code>docs/deploy-vps.md</code> §1–§2 if missing (<code>make toolchain-deps</code>).</td></tr>
   <tr><td><code>scripts/sandbox-deps.sh</code></td><td>Installs and checks the judge's sandbox dependencies (<code>make sandbox-deps</code>). Used by <code>make</code> and by the cloud SessionStart hook.</td></tr>
-  <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecall-dsa.test.service</code></td><td>Step-by-step guide and systemd service for running the app on the VPS (Ubuntu 24.04), reachable through an SSH tunnel and, once §13 is done, at <code>https://maxrecallcode.net</code>.</td></tr>
+  <tr><td><code>docs/deploy-vps.md</code>, <code>deploy/maxrecallcode.service</code></td><td>Step-by-step guide and systemd service (<code>maxrecallcode.service</code>; <code>maxrecall-dsa.test.service</code> until #123, 2026-11-08) for running the app on the VPS (Ubuntu 24.04), reachable through an SSH tunnel and, once §13 is done, at <code>https://maxrecallcode.net</code>.</td></tr>
   <tr><td><code>deploy/nginx-maxrecallcode.conf</code></td><td>nginx in front of the app on the VPS (limited-live step 3, <code>docs/deploy-vps.md</code> §13): <code>maxrecallcode.net</code> over HTTPS, <code>.com</code> and <code>.org</code> redirecting to it, rate limiting on login and register (10 a minute per visitor, an IPv6 /64 counting as one, approximately; 30 a minute for the whole site), HSTS, and proxying to <code>127.0.0.1:3000</code> only, never the trusted port.</td></tr>
   <tr><td><code>docs/d-compiler.md</code></td><td>How to install DMD from d-apt (the D community's APT repository on SourceForge), with the key fingerprint to check. Not used by the hook since 2026-11-02; DMD is now only the judge's fallback when <code>ldc2</code> isn't installed.</td></tr>
   <tr><td><code>docs/question-template.json</code></td><td>The file to copy to start a question (2026-11-05, owner's suggestion; <code>docs/how-to-add-a-new-question.html</code>, step 3): the Python parts of <code>singly-linked-list-hello-world.json</code>, with <code>slug</code> <code>question-template</code>, a placeholder <code>created</code> (<code>2000-01-01T00:00:00Z</code>) and title. Not in <code>questions/</code>, where every file is a question. <code>make test</code> checks it follows the format, and fails while any question still has its <code>created</code> or title.</td></tr>
@@ -333,7 +333,7 @@ Exceeded message says “Memory limit reached …, which slowed it down until it
 It's on only when <code>MAXRECALL_REQUIRE_CGROUPS=1</code>, which the VPS's unit sets together with <code>Delegate=yes</code> and
 <code>DelegateSubgroup=server</code>; there the server refuses to judge if it can't set it up. Elsewhere (the cloud, <code>make dev</code>
 on Kubuntu) the server doesn't touch cgroups, and the <code>Sandbox:</code> line says so.
-<span class="src">Source: <code>judge/cgroups.js</code>, <code>deploy/maxrecall-dsa.test.service</code>.</span></p>
+<span class="src">Source: <code>judge/cgroups.js</code>, <code>deploy/maxrecallcode.service</code>.</span></p>
 <p>
 Captured stdout/stderr is capped at 200,000 characters. The user's own prints are
 separated from the harness's result by a <code>###JUDGE_RESULT###</code> marker line.

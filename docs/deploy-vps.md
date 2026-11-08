@@ -26,7 +26,7 @@ sandbox (`readme.html` §6; compilers since step 4), under a seccomp filter
 
 - runs as its own unprivileged user, `maxrecall`;
 - is reachable only through your SSH login;
-- runs under systemd containment (`deploy/maxrecall-dsa.test.service`): no
+- runs under systemd containment (`deploy/maxrecallcode.service`): no
   network except the VPS itself, a read-only file system apart from three
   folders, and a private `/tmp`.
 
@@ -376,34 +376,42 @@ sudo rm -r /etc/maxrecall-dsa
 ## 5. Install and start the service [VPS]
 
 ```bash
-sudo cp deploy/maxrecall-dsa.test.service /etc/systemd/system/
+sudo cp deploy/maxrecallcode.service /etc/systemd/system/
 ```
 Copies the unit file to where systemd looks for local services. If you want a
 different `MAXRECALL_USER`, edit the copy with `sudo vi
-/etc/systemd/system/maxrecall-dsa.test.service`.
+/etc/systemd/system/maxrecallcode.service`.
 
 ```bash
 sudo systemctl daemon-reload
 ```
 Makes systemd re-read its unit files.
 
-The service is called `maxrecall-dsa.test.service`. The commands below always
-give that full name. With a dot in the name, a shortened form relies on
-systemd guessing the `.service` part.
+The service is called `maxrecallcode.service` (since 2026-11-08, #123).
+The commands below always give that full name.
 
-If you already installed it under its earlier name, `maxrecall-dsa.service`,
-remove that one first so the two don't both try to use port 3000:
+It had two earlier names: `maxrecall-dsa.test.service` until 2026-11-08,
+and `maxrecall-dsa.service` until 2026-10-29. `make deploy-server` removes
+either if it finds it (§16 is the deploy that did the latest rename). By
+hand, remove one first so the two don't both try to use ports 3000 and
+3001; for the newer earlier name:
 ```bash
-sudo systemctl disable --now maxrecall-dsa.service
-sudo rm /etc/systemd/system/maxrecall-dsa.service
+sudo systemctl disable --now maxrecall-dsa.test.service
+sudo rm /etc/systemd/system/maxrecall-dsa.test.service
 sudo systemctl daemon-reload
 ```
 - `disable --now` stops it and stops it starting at boot.
 - `rm` deletes its unit file.
 - `daemon-reload` makes systemd forget it.
+- The same three with `maxrecall-dsa.service`, if that one is there.
+
+The journal keeps each entry under the name the unit had then (the
+`_SYSTEMD_UNIT` field,
+[systemd.journal-fields(7)](https://www.freedesktop.org/software/systemd/man/latest/systemd.journal-fields.html)),
+so the log from before 2026-11-08 is `journalctl -u maxrecall-dsa.test.service`.
 
 ```bash
-sudo systemctl enable --now maxrecall-dsa.test.service
+sudo systemctl enable --now maxrecallcode.service
 ```
 - `enable` starts the service at every boot.
 - `--now` also starts it immediately.
@@ -411,12 +419,12 @@ sudo systemctl enable --now maxrecall-dsa.test.service
 See [systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html).
 
 ```bash
-systemctl status maxrecall-dsa.test.service
+systemctl status maxrecallcode.service
 ```
 Should say `active (running)`.
 
 ```bash
-journalctl -u maxrecall-dsa.test.service -n 20
+journalctl -u maxrecallcode.service -n 20
 ```
 Shows the service's last 20 log lines (`-u` selects the unit, `-n` sets how
 many lines). The latest start should show four lines:
@@ -480,7 +488,7 @@ anything, stop the service and recheck the service file.
 
 **[VPS]**
 ```bash
-sudo systemd-analyze security maxrecall-dsa.test.service
+sudo systemd-analyze security maxrecallcode.service
 ```
 Lists the containment settings and an overall exposure score, where lower is
 better. See [systemd-analyze(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
@@ -531,12 +539,12 @@ follow GitHub, never have commits of its own.
 
 ```bash
 sudo -u maxrecall npm install --omit=dev
-sudo systemctl restart maxrecall-dsa.test.service
+sudo systemctl restart maxrecallcode.service
 ```
 Picks up any dependency changes, then restarts the server so it runs the new
 code.
 
-If `deploy/maxrecall-dsa.test.service` itself changed, copy it again (step 5) and
+If `deploy/maxrecallcode.service` itself changed, copy it again (step 5) and
 run `sudo systemctl daemon-reload` before restarting.
 
 **If the pull renamed or deleted a question** (its commit says "Rename
@@ -546,7 +554,7 @@ the checkout, not `/srv/maxrecall/data/users`. Update them with the server
 stopped, before the restart above (spaced-repetition plan, step 11):
 
 ```bash
-sudo systemctl stop maxrecall-dsa.test.service
+sudo systemctl stop maxrecallcode.service
 ```
 Stops the server: the command refuses while one answers, since both rewrite
 `order.json`.
@@ -563,7 +571,7 @@ sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users DRY_RUN=1 ma
   pull, so it says "already renamed (e.g. by git pull): only the references".
 
 For a deleted question, `make delete-question SLUG=its-name` the same way.
-Then `sudo systemctl start maxrecall-dsa.test.service`, and check the
+Then `sudo systemctl start maxrecallcode.service`, and check the
 `Consistency:` lines with `journalctl` (step 5).
 
 **Updating to a version with the sandbox check (2026-11-02 or later)** for the
@@ -605,7 +613,7 @@ pull request is merged, update first ("The quick way", or §8).
 All commands are run as root on the VPS.
 
 ```bash
-systemctl stop maxrecall-dsa.test.service
+systemctl stop maxrecallcode.service
 ```
 - Stops the server: `make backlog-add` refuses while one answers, since a
   Submit rewrites `backlog.json` too.
@@ -680,11 +688,11 @@ sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog
   writes nothing. Run it again without `DRY_RUN=1` to write it.
 
 ```bash
-systemctl start maxrecall-dsa.test.service
+systemctl start maxrecallcode.service
 ```
 
 ```bash
-journalctl -u maxrecall-dsa.test.service -n 20 --no-pager | grep -E 'Queues|Consistency'
+journalctl -u maxrecallcode.service -n 20 --no-pager | grep -E 'Queues|Consistency'
 ```
 Should show `Queues: daniel.pflager@gmail.com: 0 in order.json, 1 in
 backlog.json (0 added)` and `Consistency: … nothing found`. `(0 added)` is
@@ -1253,7 +1261,7 @@ make deploy-server
   script installs because the file changed. Should end with `Deployed:`.
 
 ```bash
-systemctl show -p Environment maxrecall-dsa.test.service
+systemctl show -p Environment maxrecallcode.service
 ```
 - `show -p` prints one of the unit's properties
   ([systemctl](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)).
@@ -1678,8 +1686,14 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
 - `--stat`: just the files, and how much changed in each. Note three
   things:
   - `package.json`: if it's listed, step 4 is needed.
-  - `deploy/maxrecall-dsa.test.service`: if it's listed, step 5 is
+  - `deploy/maxrecallcode.service`: if it's listed, step 5 is
     needed.
+  - **A renamed unit file** (`--stat` shows a rename with `=>`, e.g.
+    #123's `deploy/{maxrecall-dsa.test.service => maxrecallcode.service}`,
+    the start of a long path cut to `...` to fit the terminal):
+    **stop.** Steps 5 to 7 name one unit, and going back across a rename
+    means swapping two. For #123's rename, §16's undo does it; for any
+    other, infrastructure and security writes the steps first.
   - **A change to what's stored on disk** (anything the readme's "Where
     data lives" describes, such as a `schemaVersion`, or a rename of the
     files under `users/` or `auth/`): **stop.** Files the newer version
@@ -1711,7 +1725,7 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall PATH=/usr/local/sbin:/usr/local/
 **5. Only if step 2 listed the unit file: install it [change].**
 
 ```bash
-install -m 0644 /srv/maxrecall/maxrecall-dsa.net/deploy/maxrecall-dsa.test.service /etc/systemd/system/maxrecall-dsa.test.service
+install -m 0644 /srv/maxrecall/maxrecall-dsa.net/deploy/maxrecallcode.service /etc/systemd/system/maxrecallcode.service
 ```
 ```bash
 systemctl daemon-reload
@@ -1724,7 +1738,7 @@ systemctl daemon-reload
 two.
 
 ```bash
-systemctl restart maxrecall-dsa.test.service
+systemctl restart maxrecallcode.service
 ```
 - **Undo:** step 3's undo (with 4 and 5 again, if they were needed),
   then this again.
@@ -1732,12 +1746,12 @@ systemctl restart maxrecall-dsa.test.service
 **7. Check it [read-only].**
 
 ```bash
-systemctl is-active maxrecall-dsa.test.service
+systemctl is-active maxrecallcode.service
 ```
 - Expect `active`.
 
 ```bash
-journalctl -u maxrecall-dsa.test.service --since "5 min ago" --no-pager | grep -v 'Queues:'
+journalctl -u maxrecallcode.service --since "5 min ago" --no-pager | grep -v 'Queues:'
 ```
 - The service's log for the last five minutes ("5 min ago": a relative
   time, systemd.time(7)). `grep -v 'Queues:'`
@@ -1757,3 +1771,165 @@ the revert, and the VPS and `master` agree again.
 
 **Record it** in the operator's handoff: both commits, what step 2
 listed, each change with its time (UTC), and step 7's results.
+
+## 16. Renaming the service to `maxrecallcode.service` (#123) [VPS]
+
+Written 2026-11-08 (infrastructure and security; owner's choice of the
+name). **Not yet run.** A one-time deploy: the first after the pull
+request that renames `deploy/maxrecall-dsa.test.service` to
+`deploy/maxrecallcode.service` (call its merge commit `<commit>`; the
+owner names it). After it, deploys are as usual.
+
+`make deploy-server` does the rename itself (`scripts/deploy-server.sh`,
+`OLD_UNITS`): it copies in `maxrecallcode.service`, then stops, disables
+and deletes `maxrecall-dsa.test.service`, then enables and starts the new
+one. The site is down from the old one's stop to the new one's start
+(a guess: a second or two, like a restart). Tested in a cloud session
+with stand-ins for `systemctl`, `journalctl` and `ss` (no systemd
+there): the rename, a second run (no rename), a first run (asks), and
+the script refusing, with nothing changed, an `OLD_UNITS` that lists the
+new name.
+
+Same rules as §14: one yes from the owner per change; each step says
+read-only or change, and how to undo it. Stop at anything unexpected and
+report it.
+
+**1. Before [read-only].**
+
+```bash
+systemctl is-active maxrecall-dsa.test.service
+```
+- Expect `active`: the service under its current name.
+
+```bash
+ls /etc/systemd/system/ | grep -F maxrecall
+```
+- `grep -F`: the pattern is plain text. Expect exactly one line,
+  `maxrecall-dsa.test.service`. If `maxrecallcode.service` is already
+  there, or a folder ending `.service.d` (a drop-in, which would be left
+  behind), stop.
+
+```bash
+systemctl cat maxrecall-dsa.test.service | grep '^# /'
+```
+- `systemctl cat` shows the files a unit is made of, each after a comment
+  naming it ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)).
+  Expect only `# /etc/systemd/system/maxrecall-dsa.test.service`. Any
+  other file is a drop-in: stop.
+
+**2. The deploy [change]**, only of `<commit>`, surveyed and run in one
+go (the VPS operator's guarded deploy, its handoff
+`20261107T092844-0800.md`), as root in `/root/maxrecall-dsa.net`:
+
+```bash
+if git fetch origin master && [ "$(git rev-parse origin/master)" = "$(git rev-parse <commit>)" ]; then
+  git merge --ff-only <commit> && make deploy-server
+else
+  echo "STOP: master is not <commit>"; git log --oneline <commit>..origin/master
+fi
+```
+- `git rev-parse` turns a name into its full commit id, so the two can be
+  compared; `git merge --ff-only <commit>` moves root's checkout to
+  exactly that commit, never past it. If `master` has moved on, it stops
+  and lists what's new: ask the owner again.
+- `make deploy-server` then pulls `master` into the service's own
+  checkout itself, so step 3 reads which commit that got.
+- **Expect these lines**, in this order:
+  `installing /etc/systemd/system/maxrecallcode.service.`,
+  `removing the old maxrecall-dsa.test.service (renamed maxrecallcode.service).`,
+  `enabling maxrecallcode.service and (re)starting it.`, and last
+  `Deployed: maxrecallcode.service at <commit> …`.
+- **Not expected: the question** `Set up the maxrecall service on this
+  machine? [y/N]`. It means the script found no unit file under any
+  name. Answer `N` (nothing changes) and stop.
+- **Undo:** "Undo", below.
+
+**3. After [read-only].**
+
+```bash
+systemctl is-active maxrecallcode.service
+```
+```bash
+systemctl is-enabled maxrecallcode.service
+```
+- Expect `active`, then `enabled` (starts at boot).
+
+```bash
+ls /etc/systemd/system/ /etc/systemd/system/multi-user.target.wants/ | grep -F maxrecall
+```
+- Expect `maxrecallcode.service` once in each folder, and no
+  `maxrecall-dsa.test.service`: the old unit file and its boot link
+  (`multi-user.target.wants/`, made by `enable`) are both gone.
+
+```bash
+runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net log --oneline -1
+```
+- Expect `<commit>`: what the service's checkout runs.
+
+```bash
+journalctl -u maxrecallcode.service --since "5 min ago" --no-pager | grep -v 'Queues:'
+```
+- As §15 B step 7: expect `Server listening on 127.0.0.1:3000 only` and
+  `Trusted listener on 127.0.0.1:3001 only`. `grep -v 'Queues:'` leaves
+  out the lines that name learners.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}
+' https://maxrecallcode.net/login.html
+```
+- Expect `200`. The uptime check (`.github/workflows/uptime.yml`, the
+  Actions tab) should stay green at its next run.
+
+**4. Afterwards.**
+- The log from before is `journalctl -u maxrecall-dsa.test.service`
+  (§5).
+- Root's `~/.claude/settings.json` on the VPS (not in the repo) may
+  have rules naming the old unit, such as `systemctl show
+  maxrecall-dsa.test.service *`: the owner changes them.
+- Record it in the operator's handoff: `<commit>`, the lines step 2
+  printed, each change with its time (UTC), and step 3's results.
+
+### Undo: back to `maxrecall-dsa.test.service` [VPS, change]
+
+Only if the new unit won't run and the owner says the site can't wait
+for the normal way (§15 A: revert the pull request on GitHub, then
+deploy). Like §15 B it's done by hand, then §15 A anyway, and **until
+the revert is merged, don't run `make deploy-server`**: it would rename
+again. Each command is one change.
+
+1. **Find `<previous>` [read-only]**: as §15 B step 1. The top reflog
+   line is the pull to `<commit>`; the second is `<previous>`.
+2. **Move the checkout back**: as §15 B step 3, with `<previous>`. Its
+   `deploy/` has `maxrecall-dsa.test.service` again.
+   ```bash
+   runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net reset --hard <previous>
+   ```
+3. **Put the old unit file back**, while the new one still runs:
+   ```bash
+   install -m 0644 /srv/maxrecall/maxrecall-dsa.net/deploy/maxrecall-dsa.test.service /etc/systemd/system/maxrecall-dsa.test.service
+   ```
+   ```bash
+   systemctl daemon-reload
+   ```
+4. **Stop the new one** (the site is down from here):
+   ```bash
+   systemctl disable --now maxrecallcode.service
+   ```
+5. **Start the old one** (the site is back):
+   ```bash
+   systemctl enable --now maxrecall-dsa.test.service
+   ```
+6. **Delete the new unit file**:
+   ```bash
+   rm /etc/systemd/system/maxrecallcode.service
+   ```
+   ```bash
+   systemctl daemon-reload
+   ```
+7. **Check [read-only]**: §15 B step 7, with `maxrecall-dsa.test.service`.
+8. **Then §15 A**: revert the pull request. Once it's merged, a normal
+   deploy fast-forwards the checkout from `<previous>` to the revert,
+   whose script and unit file are the old ones, so it renames nothing.
+
+Undoing the undo is step 2 of this section again, once the problem is
+fixed in a new pull request.

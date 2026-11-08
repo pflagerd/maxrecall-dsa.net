@@ -234,12 +234,12 @@ Thanks!</code></pre>
 
 <h3>More questions</h3>
 <p>The server must be stopped for this (a Submit rewrites <code>backlog.json</code> too), so the site is down for everyone for those seconds:</p>
-<pre><code>systemctl stop maxrecall-dsa.test.service</code></pre>
+<pre><code>systemctl stop maxrecallcode.service</code></pre>
 <pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=tester@example.com SLUGS="climbing-stairs" DRY_RUN=1</code></pre>
 <ul>
   <li><code>AT=1</code> puts them at the front of the backlog instead of the end. If <code>Backlog after (…)</code> is right, run it again without <code>DRY_RUN=1</code>. <code>make backlog-remove</code> takes questions out the same way.</li>
 </ul>
-<pre><code>systemctl start maxrecall-dsa.test.service</code></pre>
+<pre><code>systemctl start maxrecallcode.service</code></pre>
 <p>What's added comes into their queue at their next Submit or Skip (<code>docs/deploy-vps.md</code> §10).</p>
 
 <h3>The invite ran out before they registered</h3>
