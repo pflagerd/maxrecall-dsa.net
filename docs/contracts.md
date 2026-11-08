@@ -48,8 +48,9 @@ Provider: infrastructure and security (`judge/sandbox.js`,
 
 ## 2. Judging, for the server and the sandbox test
 
-Provider: questions (`judge/runner.js`). Used by: users (`routes.js`);
-infrastructure and security (`judge/sandbox-selftest.js`).
+Provider: questions (`judge/runner.js`). Used by: users (`routes.js`;
+`routes.test.js`, through a real `node server.js`); infrastructure and
+security (`judge/sandbox-selftest.js`).
 
 - **What crosses**: `runSubmission`; for the sandbox test also
   `TIMEOUT_MS` and `CPP_COMPILE_TIMEOUT_MS`. (`server.js`'s start-up log
@@ -64,6 +65,10 @@ infrastructure and security (`judge/sandbox-selftest.js`).
     `retryAfterSeconds` for `'JUDGE_BUSY'`; anything else is a 500. It
     matches the strings, not the classes: renaming a code passes
     `make typecheck` and turns every busy judge into a 500.
+  - `routes.test.js` matches a `JudgeResult`'s `status` values
+    `'Accepted'` and `'Wrong Answer'` as strings, and reads its `total`
+    and `results` (a Test's answer). Renaming a status fails `make test`
+    (section 4 has the questions it judges).
 
 ## 3. The Test button's rules
 
@@ -79,7 +84,9 @@ has the route).
 
 Provider: questions (`question-files.js`, `questions/**`). Used by: users
 (`routes.js`, `scripts/backlog.js`, `scripts/learner-create.js`,
-`scripts/recalculate-queue.js`, `scripts/consistency-check.js`).
+`scripts/recalculate-queue.js`, `scripts/consistency-check.js`;
+`routes.test.js` and `scripts/characterize.js`, which use three real
+questions as fixtures, below).
 
 - **What crosses**: `QUESTIONS_DIR`, `isQuestionFile`, `questionInfos`,
   `RENAMES_FILE`, `readRenamesText`; and the files themselves.
@@ -106,6 +113,32 @@ Provider: questions (`question-files.js`, `questions/**`). Used by: users
   - `questions/renames.json`, the rename log, is questions' file but
     users' `consistency.js` parses it (`parseRenames`, `updateRenames`):
     its format is part of this contract both ways.
+  - **Three questions are users' test fixtures** (questions' finding,
+    users agreeing, 2026-11-07). `routes.test.js` (in `make test`) judges
+    through a real server, which reads the real `questions/`:
+    `QUESTIONS_DIR` is fixed, unlike the users and auth folders the test
+    overrides. It relies on:
+    - `two-sum`: exists; Python's `functionName` is `two_sum` and
+      JavaScript's `twoSum`; the test's hash-map solutions in both are
+      Accepted and `return [0, 0]` in Python is Wrong Answer; at least
+      one test case is `hidden` (the test reads the file to count them).
+      Run, Test, Submit and Skip are tested on it.
+    - `hello-world`: exists, in Python and JavaScript.
+    - `valid-parentheses`: exists, in Python.
+
+    So renaming or deleting one of them, dropping one of those
+    languages, changing a `functionName` or what's judged right, or
+    leaving `two-sum` without a hidden case fails `make test` though
+    nothing of users' is wrong: agree it with users first, through the
+    architect. Wording, the Learning tab, and test cases the two
+    solutions still pass are free; run `node --test routes.test.js`
+    after editing one of the three. `scripts/characterize.js` (by hand,
+    `make characterize`) snapshots answers for `two-sum` (Run, Test,
+    Submit, Skip) and `hello-world`, so an edit to either between a
+    refactor's two snapshots shows as a difference that isn't the
+    refactor's. Fixture questions of the tests' own would free the real
+    bank; that needs a way to point `QUESTIONS_DIR` elsewhere (questions'
+    `question-files.js`, and users' tests): not proposed yet.
 
 ## 5. A learner's files, for deleting and renaming questions
 

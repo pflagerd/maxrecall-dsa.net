@@ -36,6 +36,9 @@ requests in its handoffs.
   tsconfig.browser.json, browser-globals.d.ts, scripts/doc-check.js,
   .gitignore, .env.example (package-lock.json is gitignored, so not a
   tracked file)
+- GitHub Actions: .github/workflows/ (code GitHub runs with a token;
+  first, the scheduled outside check that the site is up, the owner's
+  choice, 2026-11-07)
 - Plans: docs/plans/limited-live.md, docs/plans/sandboxing.md
 - The format of auth/ (gitignored, on each machine)
 
