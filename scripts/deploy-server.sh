@@ -16,6 +16,12 @@
 # question. Invites (make invite, §4) stay manual: they're for people you
 # choose.
 #
+# DEPLOY_EXPECT=<full commit id> (optional; the guarded deploy in
+# docs/deploy-vps.md, "The quick way", sets it): deploy only if $BRANCH on
+# GitHub is exactly that commit, the one the owner said yes to. It fetches
+# once, compares what it got, and merges that id, so nothing merged after
+# the check can go live. Without it, it deploys whatever $BRANCH's tip is.
+#
 # It stops with an error if anything fails, including a "Sandbox:
 # UNAVAILABLE" line in the service's log, or the ports listening on more
 # than 127.0.0.1.
@@ -45,10 +51,17 @@ fail() { echo "deploy-server: $*" >&2; exit 1; }
 for old in "${OLD_UNITS[@]}"; do
   [ "$old" != "$UNIT" ] || fail "OLD_UNITS lists $UNIT itself; it would be removed as soon as it's installed. Nothing changed."
 done
+# A full commit id only (this repository's are SHA-1, 40 hex digits): a
+# short one can be ambiguous, and anything else is refused, so the value
+# can't be read by git as an option or another name.
+EXPECT=${DEPLOY_EXPECT:-}
+if [ -n "$EXPECT" ] && ! [[ "$EXPECT" =~ ^[0-9a-f]{40}$ ]]; then
+  fail "DEPLOY_EXPECT must be a full 40-character commit id in lowercase hex (git rev-parse <commit>), not '$EXPECT'. Nothing changed."
+fi
 
 if [ "$(id -u)" -ne 0 ]; then
   note "needs root; running again with sudo (it may ask for your password)."
-  exec sudo DEPLOY_CONFIRM="${DEPLOY_CONFIRM:-}" DEPLOY_REPO="$REPO_URL" DEPLOY_BRANCH="$BRANCH" PATH="$PATH" "$0" "$@"
+  exec sudo DEPLOY_CONFIRM="${DEPLOY_CONFIRM:-}" DEPLOY_EXPECT="$EXPECT" DEPLOY_REPO="$REPO_URL" DEPLOY_BRANCH="$BRANCH" PATH="$PATH" "$0" "$@"
 fi
 
 command -v systemctl >/dev/null && [ -d /run/systemd/system ] \
@@ -87,15 +100,31 @@ fi
 # §4. The code (a clone of its own, owned by the service's user) and the
 # data folder outside it. §8 when it's already there.
 if [ -d "$CHECKOUT/.git" ]; then
-  note "updating $CHECKOUT ($BRANCH) with git pull --ff-only."
   as_service_user git -C "$CHECKOUT" fetch -q origin "$BRANCH"
   current=$(as_service_user git -C "$CHECKOUT" branch --show-current)
   [ "$current" = "$BRANCH" ] || fail "$CHECKOUT is on '$current', not '$BRANCH'; switch it yourself (git -C $CHECKOUT switch $BRANCH) and run this again."
-  as_service_user git -C "$CHECKOUT" pull -q --ff-only origin "$BRANCH" \
-    || fail "git pull --ff-only failed in $CHECKOUT: it has commits of its own (it should only follow GitHub, §8)."
+  if [ -n "$EXPECT" ]; then
+    # FETCH_HEAD is exactly what that fetch got. Merging the id, not
+    # pulling the branch, means no second fetch: what's checked is what's
+    # deployed.
+    fetched=$(as_service_user git -C "$CHECKOUT" rev-parse FETCH_HEAD)
+    [ "$fetched" = "$EXPECT" ] || fail "$BRANCH on GitHub is $fetched, not DEPLOY_EXPECT $EXPECT: it moved after the owner's yes. Nothing changed; the service still runs $(as_service_user git -C "$CHECKOUT" log --oneline -1). Survey what's new and ask the owner again (docs/deploy-vps.md, \"Updating: the guarded deploy\")."
+    note "updating $CHECKOUT to $EXPECT ($BRANCH on GitHub, as DEPLOY_EXPECT says) with git merge --ff-only."
+    as_service_user git -C "$CHECKOUT" merge -q --ff-only "$EXPECT" \
+      || fail "git merge --ff-only failed in $CHECKOUT: it has commits of its own (it should only follow GitHub, §8)."
+  else
+    note "updating $CHECKOUT ($BRANCH) with git pull --ff-only."
+    as_service_user git -C "$CHECKOUT" pull -q --ff-only origin "$BRANCH" \
+      || fail "git pull --ff-only failed in $CHECKOUT: it has commits of its own (it should only follow GitHub, §8)."
+  fi
 else
   note "cloning $REPO_URL ($BRANCH) into $CHECKOUT."
   as_service_user git clone -q --branch "$BRANCH" "$REPO_URL" "$CHECKOUT"
+  if [ -n "$EXPECT" ]; then
+    cloned=$(as_service_user git -C "$CHECKOUT" rev-parse HEAD)
+    # Nothing is installed or started yet; the next run updates this clone.
+    [ "$cloned" = "$EXPECT" ] || fail "$BRANCH on GitHub is $cloned, not DEPLOY_EXPECT $EXPECT. Cloned into $CHECKOUT, but nothing installed or started. Survey what's new and ask the owner again."
+  fi
 fi
 note "at $(as_service_user git -C "$CHECKOUT" log --oneline -1)."
 note "installing npm packages (npm install --omit=dev)."
