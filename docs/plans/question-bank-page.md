@@ -1,8 +1,20 @@
 # The question bank page (issue #133): a proposal
 
-Status: **proposed** (users, 2026-11-08). Nothing is built. The owner
-decides Q1–Q6 below; until then this is a design to argue with, not a
-plan to follow.
+Status: **decided, not built** (users' proposal, 2026-11-08; the owner's
+answers the same day). Nothing is built yet.
+
+## Decisions (owner, 2026-11-08)
+
+| Question | Decision |
+| --- | --- |
+| Q1 | **(b) A view of the list page**, `index.html?view=bank`, reached by a link only the owner sees. No new files to serve; no other role involved. |
+| Q2 | **(b) A capability of users' own**: a check against `OWNER_EMAIL` in `routes.js`, and `canSeeQuestionBank` in the profile answer. Not `canTestQuestions`. The route refuses anyone else (403). |
+| Q3 | **(b) One row per question, a column per allowed language**: "#3" (queue position), "backlog", "—" (neither), or blank when the question lacks that language. |
+| Q5 | **(a) Rows link to the question**, with a line above the table saying a Submit or Skip there puts it into the queue. |
+| Q4 | Not asked: the recommendation, (a) by `created` then slug, with slug, title, the language columns, difficulty and created; no bubbles. The owner may overrule. |
+| Q6 | Not asked: the recommendation, nothing that writes (no adding to the backlog or queue from the page). The owner may overrule. |
+
+The sections below are the proposal as written, kept for its reasons.
 
 ## What the owner asked for
 
