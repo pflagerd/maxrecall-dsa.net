@@ -425,6 +425,48 @@ function addToBacklog(order, backlog, pairs, at) {
 }
 
 /**
+ * Warnings for a chosen backlog (#146, choice B(a)), for make learner-create
+ * and make backlog-add to print: each question named in slugs that will
+ * come before one it builds on (alreadyLearned), or builds on one in
+ * neither file. They're warnings, not refusals, so an order can still be
+ * chosen on purpose. Only the questions named are checked, not the rest of
+ * the backlog (choice C(a)).
+ *
+ * By question, not pair: a question's place is its first pair's, every
+ * pair in the queue counting as before every pair in the backlog (already
+ * introduced). An alreadyLearned entry naming no question is ignored, as in
+ * dependencyOrder().
+ *
+ * @param {QuestionInfo[]} questions - Every question.
+ * @param {OrderFile} order - The queue after the change.
+ * @param {BacklogFile} backlog - The backlog after the change.
+ * @param {string[]} slugs - The questions just named, in SLUGS.
+ * @returns {string[]} One line per problem, e.g. "add-to-a-string comes
+ *   before build-a-new-string, which it builds on"; empty if none.
+ */
+function prerequisiteWarnings(questions, order, backlog, slugs) {
+  /** @type {Map<string, number>} */
+  const place = new Map();
+  for (const e of order.queue) place.set(e.question, 0);
+  for (const [i, p] of backlog.backlog.entries()) {
+    if (!place.has(p.question)) place.set(p.question, i + 1);
+  }
+  const bySlug = new Map(questions.map((q) => [q.slug, q]));
+  /** @type {string[]} */
+  const warnings = [];
+  for (const slug of new Set(slugs)) {
+    const at = place.get(slug);
+    for (const earlier of bySlug.get(slug)?.alreadyLearned ?? []) {
+      if (!bySlug.has(earlier)) continue;
+      const earlierAt = place.get(earlier);
+      if (earlierAt === undefined) warnings.push(`${slug} builds on ${earlier}, which is in neither their queue nor their backlog`);
+      else if (at !== undefined && earlierAt > at) warnings.push(`${slug} comes before ${earlier}, which it builds on`);
+    }
+  }
+  return warnings;
+}
+
+/**
  * The backlog without these questions, in every language (step 13, detail
  * 4, make backlog-remove). Only the backlog changes: a question already in
  * the queue stays there, and is listed in notRemoved.
@@ -685,4 +727,4 @@ function canOpenPair(profile, questions) {
   return (pair) => profile.languages.includes(pair.language) && available.has(`${pair.question}/${pair.language}`);
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, prerequisiteWarnings, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };

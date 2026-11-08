@@ -7,7 +7,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, prerequisiteWarnings, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -128,6 +128,43 @@ test('a question that builds on one that isn\'t there is placed as if it built o
 test('a loop (which checkQuestion refuses) loses no question: its questions come last, by creation time', () => {
   const questions = [built('x', 3, ['y']), built('free', 9), built('y', 1, ['x'])];
   assert.deepEqual(dependencyOrder(questions).map((q) => q.slug), ['free', 'y', 'x']);
+});
+
+/** A chain for prerequisiteWarnings(): c builds on b, b on a. */
+const CHAIN = [built('a', 1), built('b', 2, ['a']), built('c', 3, ['b']), built('d', 4, ['gone'])];
+
+/**
+ * A backlog file holding these questions in Python, in this order.
+ *
+ * @param {string[]} slugs - The questions.
+ * @returns {import('./order').BacklogFile} The file.
+ */
+function backlogOf(slugs) {
+  return { schemaVersion: 1, backlog: slugs.map((question) => ({ question, language: 'python' })) };
+}
+
+/** An empty queue. @type {import('./order').OrderFile} */
+const NO_QUEUE = { schemaVersion: 1, submitsSinceLastIntroduced: 0, queue: [] };
+
+test('no warning for questions after the ones they build on (#146, B(a))', () => {
+  assert.deepEqual(prerequisiteWarnings(CHAIN, NO_QUEUE, backlogOf(['a', 'b', 'c']), ['a', 'b', 'c']), []);
+});
+
+test('a warning for a question before one it builds on, and for one built on but not chosen', () => {
+  assert.deepEqual(prerequisiteWarnings(CHAIN, NO_QUEUE, backlogOf(['c', 'b']), ['c', 'b']), [
+    'c comes before b, which it builds on',
+    'b builds on a, which is in neither their queue nor their backlog',
+  ]);
+});
+
+test('a prerequisite already in the queue counts as before; only the questions named are checked', () => {
+  const queue = { ...NO_QUEUE, queue: [{ question: 'b', language: 'python', passesInARow: 0 }] };
+  // b's own missing a isn't reported: b wasn't named (C(a)).
+  assert.deepEqual(prerequisiteWarnings(CHAIN, queue, backlogOf(['c']), ['c']), []);
+});
+
+test('an alreadyLearned entry naming no question is ignored, as in dependencyOrder()', () => {
+  assert.deepEqual(prerequisiteWarnings(CHAIN, NO_QUEUE, backlogOf(['d']), ['d']), []);
 });
 
 test('filling appends only the pairs in neither file, and leaves the given backlog alone', () => {

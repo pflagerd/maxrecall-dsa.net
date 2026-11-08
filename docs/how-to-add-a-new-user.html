@@ -103,7 +103,7 @@
   <li><code>sudo -u maxrecall</code>: as the service's user, so the files are its own (<a href="https://www.sudo.ws/docs/man/sudo.man/">sudo(8)</a>).</li>
   <li><code>env MAXRECALL_USERS_DIR=…</code>: the service's users folder. Without it the files would go into the checkout's own <code>users/</code>, which the service never reads.</li>
   <li><code>EMAIL</code>, <code>LANGUAGES</code> (<code>"python java"</code> for two) and <code>SLUGS</code> (quoted, separated by spaces): from step 1. Each question goes in once for each of their languages it has.</li>
-  <li><code>DRY_RUN=1</code>: shows the <code>profile.json</code> and backlog it would write.</li>
+  <li><code>DRY_RUN=1</code>: shows the <code>profile.json</code> and backlog it would write, and a <code>warning: …</code> line for each question that comes before one it builds on, or builds on one you left out (#146). A warning doesn't stop it: put the questions in order in <code>SLUGS</code>, or go ahead if the order is meant.</li>
 </ul>
 <p>If it's right, the same without <code>DRY_RUN=1</code>:</p>
 <pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make learner-create EMAIL=tester@example.com LANGUAGES=python SLUGS="hello-world two-sum"</code></pre>
@@ -237,7 +237,7 @@ Thanks!</code></pre>
 <pre><code>systemctl stop maxrecallcode.service</code></pre>
 <pre><code>sudo -u maxrecall env MAXRECALL_USERS_DIR=/srv/maxrecall/data/users make backlog-add EMAIL=tester@example.com SLUGS="climbing-stairs" DRY_RUN=1</code></pre>
 <ul>
-  <li><code>AT=1</code> puts them at the front of the backlog instead of the end. If <code>Backlog after (…)</code> is right, run it again without <code>DRY_RUN=1</code>. <code>make backlog-remove</code> takes questions out the same way.</li>
+  <li><code>AT=1</code> puts them at the front of the backlog instead of the end. If <code>Backlog after (…)</code> is right, and any <code>warning: …</code> line (a question before one it builds on, or building on one in neither their queue nor their backlog) is meant, run it again without <code>DRY_RUN=1</code>. <code>make backlog-remove</code> takes questions out the same way.</li>
 </ul>
 <pre><code>systemctl start maxrecallcode.service</code></pre>
 <p>What's added comes into their queue at their next Submit or Skip (<code>docs/deploy-vps.md</code> §10).</p>

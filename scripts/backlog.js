@@ -19,7 +19,7 @@
 const { EMAIL_PATTERN, listUsers, readUserFile, writeUserFile } = require('../users');
 const { questionInfos } = require('../question-files');
 const { parseProfile } = require('../profile');
-const { parseQueueFiles, pairsToAdd, addToBacklog, removeFromBacklog } = require('../order');
+const { parseQueueFiles, pairsToAdd, addToBacklog, prerequisiteWarnings, removeFromBacklog } = require('../order');
 const { Refusal, refuseIfServerRunning, checkName } = require('./question-admin');
 const { splitList } = require('../learner');
 
@@ -160,14 +160,17 @@ async function add(dryRun) {
   requireChosen(user);
   const slugs = readSlugs();
   const at = readAt();
+  const questions = questionInfos();
   let result;
   try {
-    result = addToBacklog(user.order, user.backlog, pairsToAdd(slugs, questionInfos(), user.profile), at);
+    result = addToBacklog(user.order, user.backlog, pairsToAdd(slugs, questions, user.profile), at);
   } catch (err) {
     throw new Refusal(/** @type {Error} */ (err).message);
   }
   await refuseIfServerRunning();
-  report(user, result.backlog, dryRun, [...result.added.map((p) => `added: ${named(p)}`), ...result.skipped.map((s) => `not added: ${s}`)]);
+  // Warned, still written (#146, B(a)): the order may be meant.
+  const warnings = prerequisiteWarnings(questions, user.order, result.backlog, slugs).map((w) => `warning: ${w}`);
+  report(user, result.backlog, dryRun, [...result.added.map((p) => `added: ${named(p)}`), ...result.skipped.map((s) => `not added: ${s}`), ...warnings]);
 }
 
 /**
