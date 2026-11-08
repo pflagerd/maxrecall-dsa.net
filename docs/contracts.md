@@ -69,16 +69,24 @@ security (`judge/sandbox-selftest.js`).
     `'Accepted'` and `'Wrong Answer'` as strings, and reads its `total`
     and `results` (a Test's answer). Renaming a status fails `make test`
     (section 4 has the questions it judges).
-  - `judge/sandbox-selftest.js` matches `status` values as strings too:
-    `'Accepted'` (G7's ESCAPED: the C++ submission that includes the
-    owner-only canary header compiled), `'Compile Error'` (G7's
-    contained, with the compiler's own complaint about the header) and
-    `'Time Limit Exceeded'` (an after-timeout orphan probe really ran).
+  - `judge/sandbox-selftest.js` matches `status` values as strings too,
+    the same three in seven places (2026-11-08; the reliance was there
+    already, and only this item is new):
+    - `'Accepted'`: G7's ESCAPED, the C++ submission that includes the
+      owner-only canary header compiled (line 491); G9 counts the
+      Accepted results of its concurrent judgings (683).
+    - `'Compile Error'`: G7's contained, with the compiler's own
+      complaint about the header (498); G10's contained, the compile
+      stopped at its time limit (717), and its skipped, GCC's own
+      `constexpr` limit ended it first (731).
+    - `'Time Limit Exceeded'`: an after-timeout orphan probe really ran
+      (461); G6d's skipped, the wall clock stopped it on few cores (530).
+
     Renaming one of them still passes `make test`, which doesn't run the
-    self-test. `make sandbox-test`, run by hand, then fails with that
-    probe inconclusive, and G7 can no longer report ESCAPED. (Found
-    2026-11-08; the reliance was there already, and only this line is
-    new.)
+    self-test. `make sandbox-test`, run by hand, then fails with those
+    probes inconclusive: G7 can no longer report ESCAPED, and G9 counts
+    no Accepted judgings. (Infrastructure and security found the four
+    places the first version of this item missed.)
 
 ## 3. The Test button's rules
 
