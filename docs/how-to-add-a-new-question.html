@@ -198,7 +198,7 @@
 <p>Then open the pull request on GitHub, for review before merging.</p>
 
 <h2 id="s9">9. After it's merged: deploy, and give it to learners</h2>
-<p>On the VPS, as root, in root's clone: <code>git pull --ff-only</code>, then <code>make deploy-server</code> (<code>docs/deploy-vps.md</code>, “The quick way”).</p>
+<p>Deploy it on the VPS with the guarded deploy (<code>docs/deploy-vps.md</code>, “The quick way”, “Updating: the guarded deploy”), after the owner's yes for the commit. The yes names one commit by its id, and the deploy puts exactly that commit live, or stops if <code>master</code> has moved past it (<code>docs/decisions/20261108T085607-0800-guarded-deploy.md</code>). A plain <code>git pull</code> and <code>make deploy-server</code> would deploy whatever <code>master</code>'s tip is, including commits merged after the yes.</p>
 <ul>
   <li>Learners whose backlog is <code>"all"</code> get it at that restart.</li>
   <li>Learners with a <strong>chosen</strong> backlog (you, and testers set up with <code>make learner-create</code>) get it only when it's added, with the server stopped (<code>docs/deploy-vps.md</code> §10):</li>
