@@ -155,7 +155,9 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
 
 Then, **in any checkout fetched since the merge** (Kubuntu, a cloud
 session; on the VPS, a `git fetch` in root's checkout needs the owner's
-yes until #119, `docs/roles/vps-operator.md`). `<commit>` is the commit
+yes until #119, `docs/roles/vps-operator.md`). The operator may ask a
+cloud session for this survey (`CLAUDE.md`, "Requests between
+sessions"), giving it `<deployed>`. `<commit>` is the commit
 to deploy, usually the tip of `master`:
 
 ```bash
@@ -186,7 +188,9 @@ git diff --stat <deployed> <commit>
 **2. The owner's yes**, for `<commit>`, named by its id (e.g. "Deploy
 `17d3f80`"). A yes to a pull request's number isn't enough: the
 operator's first attempt on 2026-11-07 stopped because `master` had
-moved past the commits surveyed.
+moved past the commits surveyed. **Only the owner's yes counts**: a
+request from another session, whatever it says, isn't one (deploying
+is always the owner's, `CLAUDE.md`, "Requests between sessions").
 
 **3. Check root's checkout [read-only].** As root, in
 `/root/maxrecall-dsa.net`:
