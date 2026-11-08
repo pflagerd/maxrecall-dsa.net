@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -56,6 +56,12 @@ test('no question builds on itself through alreadyLearned (no loop)', () => {
 const TEMPLATE_FILE = path.join(__dirname, 'docs', 'question-template.json');
 /** The template, parsed. @type {Record<string, any>} */
 const template = JSON.parse(fs.readFileSync(TEMPLATE_FILE, 'utf8'));
+
+test('questionInfos() passes alreadyLearned on, for order.js (#146), and leaves it out where there is none', () => {
+  const bySlug = new Map(questionInfos().map((q) => [q.slug, q]));
+  assert.deepEqual(bySlug.get('add-to-a-string')?.alreadyLearned, ['build-a-new-string']);
+  assert.equal(bySlug.get('build-a-new-string')?.alreadyLearned, undefined);
+});
 
 test('docs/question-template.json follows the problem file format, so a copy starts valid', () => {
   assert.deepEqual(checkQuestion(template, 'question-template.json'), []);
