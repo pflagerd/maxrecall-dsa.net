@@ -88,6 +88,12 @@ make deploy-server
   skips the question.
 - **Run it again to update** (§8): `git pull --ff-only`, `npm install`, the
   unit file re-copied only if it changed, then a restart and the same checks.
+- **`DEPLOY_EXPECT=<full commit id> make deploy-server`** deploys only if
+  `master` on GitHub is exactly that commit, and refuses otherwise with
+  nothing changed (since 2026-11-08). It fetches once, compares what it
+  got, and merges that id instead of pulling, so nothing merged after the
+  check can go live. The guarded deploy below sets it; without it, the
+  script deploys whatever the tip is.
 - **Its `PATH` is systemd's own**
   (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin`, plus `/sbin:/bin`)
   for all of this, so toolchains in root's home folder can't interfere.
@@ -129,13 +135,15 @@ commit; §15). If `master` moves between the owner's yes and the deploy
 at. The guard deploys only if the tip is still the commit the owner
 approved.
 
-**The gap it can't close.** The guard checks `master` in root's
-checkout. Then `scripts/deploy-server.sh`, after `toolchain-deps` and
-`sandbox-deps` (seconds), fetches `master` again into the service's
-checkout, `/srv/maxrecall/maxrecall-dsa.net`, and deploys what it gets.
-A merge in those seconds would go live too. This is the time between a
-check and the use of what was checked ("TOCTOU"). Step 5 catches it
-afterwards.
+**The gap, closed by `DEPLOY_EXPECT`** (2026-11-08). The guard checks
+`master` in root's checkout. Then `scripts/deploy-server.sh`, after
+`toolchain-deps` and `sandbox-deps` (seconds), fetches `master` again
+into the service's checkout, `/srv/maxrecall/maxrecall-dsa.net`. Before
+`DEPLOY_EXPECT`, it deployed what it got, so a merge in those seconds
+went live too: the time between a check and the use of what was checked
+("TOCTOU"). Now step 4 passes the approved id, and the script compares
+its own fetch with it and merges exactly that id, or stops. Step 5
+checks again afterwards.
 
 Same rules as §14: **[VPS]** steps are for the owner or the VPS
 operator, one yes from the owner per change. Each step says read-only or
@@ -215,7 +223,7 @@ git status --porcelain --untracked-files=no
 
 ```bash
 if git fetch origin master && [ "$(git rev-parse origin/master)" = "$(git rev-parse <commit>)" ]; then
-  git merge --ff-only <commit> && make deploy-server < /dev/null
+  git merge --ff-only <commit> && DEPLOY_EXPECT="$(git rev-parse <commit>)" make deploy-server < /dev/null
 else
   echo "STOP: master is not <commit>"; git log --oneline <commit>..origin/master
 fi
@@ -233,6 +241,11 @@ fi
   This is why the guard checks root's checkout: the `Makefile` and
   script that then run as root are `<commit>`'s.
 - `&&`: each step runs only if the one before succeeded.
+- `DEPLOY_EXPECT="$(git rev-parse <commit>)"`: an environment variable
+  for that one command, the full id of `<commit>`. The script checks its
+  own fetch of `master` against it and deploys exactly that id, or stops
+  with nothing changed (above, "The gap"). It wants the full 40
+  characters, so a short id is refused rather than guessed at.
 - `< /dev/null`: the script gets no input. On an update it asks
   nothing; if it ever asks its first-run question (`Set up the maxrecall
   service on this machine?`), something is wrong, and with no input
@@ -244,15 +257,22 @@ fi
   in full, then ask the owner again, with advice: what each new commit
   says, what bears on the deploy, go ahead or wait (owner, 2026-11-07).
 - **Expect**, among the script's lines: `deploy-server: updating
-  /srv/maxrecall/maxrecall-dsa.net (master) with git pull --ff-only.`,
-  `deploy-server: at <commit> …`, and last `Deployed: maxrecallcode.service
-  at <commit> …, running.`
+  /srv/maxrecall/maxrecall-dsa.net to <full id> (master on GitHub, as
+  DEPLOY_EXPECT says) with git merge --ff-only.`, `deploy-server: at
+  <commit> …`, and last `Deployed: maxrecallcode.service at <commit> …,
+  running.`
+- **If it says** `master on GitHub is …, not DEPLOY_EXPECT …: it moved
+  after the owner's yes. Nothing changed`: a merge landed in the seconds
+  between the guard's fetch and the script's. The service still runs
+  what it ran. As the `else` above: survey, read the new handoffs, and
+  ask the owner again.
 - **If it fails** (a line `deploy-server: …` and no `Deployed:`): stop.
   Copy its last lines into the handoff and don't run it again without
   the owner's yes. Going back: §15.
 
 **5. Check it [read-only].** First, that the service's checkout got
-`<commit>` and nothing newer (the gap above):
+`<commit>` and nothing newer. With `DEPLOY_EXPECT` it always should;
+this is a second look, from outside the script:
 
 ```bash
 runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net rev-parse HEAD
@@ -261,8 +281,9 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
 git rev-parse <commit>
 ```
 - The second runs in root's checkout. **Expect the same id twice.**
-- **If they differ**, `master` moved during the deploy, and commits
-  the owner didn't approve are live. List them in the service's
+- **If they differ**, commits the owner didn't approve are live (with
+  `DEPLOY_EXPECT`, a bug in the script: report it to infrastructure and
+  security). List them in the service's
   checkout:
   `runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net log --oneline <commit>..HEAD`.
   Tell the owner, who either says yes to them now or has them taken
