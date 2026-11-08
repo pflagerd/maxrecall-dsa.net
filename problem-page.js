@@ -760,6 +760,10 @@ const IDLE_WARNING_MS = 5 * 60 * 1000;
 const IDLE_INPUT_EVENTS = ['keydown', 'pointerdown', 'pointermove', 'wheel'];
 const idleDialog = /** @type {HTMLDialogElement} */ (document.getElementById('idle-dialog'));
 const idleCountdownEl = /** @type {HTMLElement} */ (document.getElementById('idle-dialog-countdown'));
+// The bar under the countdown: full when the warning opens, empty when the
+// question closes. Its max is the warning's length, so the two can't differ.
+const idleProgressEl = /** @type {HTMLProgressElement} */ (document.getElementById('idle-dialog-progress'));
+idleProgressEl.max = IDLE_WARNING_MS;
 const idleDialogBtn = /** @type {HTMLButtonElement} */ (document.getElementById('idle-dialog-btn'));
 // createIdleTimeout is a global, from timer.js's <script>, like
 // createStopwatch (declared for make typecheck in browser-globals.d.ts).
@@ -778,7 +782,7 @@ function onIdleInput() {
 
 /**
  * Shows what the idle timeout says: nothing, the warning with its
- * countdown, or, once it's expired, the list of questions.
+ * countdown and progress bar, or, once it's expired, the list of questions.
  *
  * @returns {void}
  */
@@ -789,6 +793,7 @@ function checkIdle() {
   if (idle.state === 'warning') {
     // Rounded up, so it reads 0:01 in its last second, not 0:00.
     idleCountdownEl.textContent = formatElapsed(Math.ceil(idle.leaveInMs / 1000) * 1000);
+    idleProgressEl.value = idle.leaveInMs;
     if (!idleDialog.open) idleDialog.showModal();
     return;
   }

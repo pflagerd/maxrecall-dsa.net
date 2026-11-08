@@ -504,6 +504,33 @@ button.elapsed-timer.frozen {
 #idle-dialog-countdown {
   font-variant-numeric: tabular-nums;
 }
+/* The warning's time left (#102), draining with the countdown. A <progress>
+   is styled through non-standard pseudo-elements: the track is the element
+   itself in Firefox and ::-webkit-progress-bar in Chromium and Safari; the
+   filled part is ::-moz-progress-bar and ::-webkit-progress-value. */
+.idle-dialog-progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  margin: 0 0 1rem;
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.25);
+}
+.idle-dialog-progress::-webkit-progress-bar {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 999px;
+}
+.idle-dialog-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+}
+.idle-dialog-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 999px;
+}
 
 #editor-host {
   flex: 1;
