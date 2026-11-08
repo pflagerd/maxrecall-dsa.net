@@ -69,6 +69,16 @@ security (`judge/sandbox-selftest.js`).
     `'Accepted'` and `'Wrong Answer'` as strings, and reads its `total`
     and `results` (a Test's answer). Renaming a status fails `make test`
     (section 4 has the questions it judges).
+  - `judge/sandbox-selftest.js` matches `status` values as strings too:
+    `'Accepted'` (G7's ESCAPED: the C++ submission that includes the
+    owner-only canary header compiled), `'Compile Error'` (G7's
+    contained, with the compiler's own complaint about the header) and
+    `'Time Limit Exceeded'` (an after-timeout orphan probe really ran).
+    Renaming one of them still passes `make test`, which doesn't run the
+    self-test. `make sandbox-test`, run by hand, then fails with that
+    probe inconclusive, and G7 can no longer report ESCAPED. (Found
+    2026-11-08; the reliance was there already, and only this line is
+    new.)
 
 ## 3. The Test button's rules
 
