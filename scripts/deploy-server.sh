@@ -41,6 +41,11 @@ PORTS=(3000 3001)
 note() { echo "deploy-server: $*" >&2; }
 fail() { echo "deploy-server: $*" >&2; exit 1; }
 
+# Checked before anything changes: removing an old unit stops the site.
+for old in "${OLD_UNITS[@]}"; do
+  [ "$old" != "$UNIT" ] || fail "OLD_UNITS lists $UNIT itself; it would be removed as soon as it's installed. Nothing changed."
+done
+
 if [ "$(id -u)" -ne 0 ]; then
   note "needs root; running again with sudo (it may ask for your password)."
   exec sudo DEPLOY_CONFIRM="${DEPLOY_CONFIRM:-}" DEPLOY_REPO="$REPO_URL" DEPLOY_BRANCH="$BRANCH" PATH="$PATH" "$0" "$@"
@@ -109,7 +114,6 @@ fi
 # The service under an earlier name, if it's still around, holds ports 3000
 # and 3001: stop it (disable --now) and remove it before $UNIT starts.
 for old in "${OLD_UNITS[@]}"; do
-  [ "$old" != "$UNIT" ] || fail "OLD_UNITS lists $UNIT itself; it would be removed as soon as it's installed."
   if [ -f "/etc/systemd/system/$old" ]; then
     note "removing the old $old (renamed $UNIT)."
     systemctl disable --now "$old" >&2 || true
