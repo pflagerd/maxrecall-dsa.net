@@ -125,6 +125,12 @@ test('the valid samples pass, and so does one with learning text', () => {
   assert.deepEqual(checkQuestion({ ...valid(), alreadyLearned: ['two-sum'] }, 'sample.json', ['two-sum']), [], 'alreadyLearned with no Learning tab to link from');
 });
 
+test('every difficulty passes, Fundamentals (below Easy, #93) included', () => {
+  for (const difficulty of ['Fundamentals', 'Easy', 'Medium', 'Hard']) {
+    assert.deepEqual(checkQuestion({ ...valid(), difficulty }, 'sample.json'), [], difficulty);
+  }
+});
+
 test('alreadyLearned must name questions that exist, when the slugs are given', () => {
   const question = { ...valid(), alreadyLearned: ['no-such-question'] };
   assert.ok(checkQuestion(question, 'sample.json', ['two-sum']).some((p) => /alreadyLearned: there's no question "no-such-question"/.test(p)));
@@ -180,7 +186,7 @@ const BROKEN = [
   ['created not UTC', withChange(valid(), 'created', '2026-11-05T12:00:00-08:00'), /created must be a UTC time/],
   ['created not a real date', withChange(valid(), 'created', '2026-02-30T00:00:00Z'), /isn't a real date/],
   ['no title', withChange(valid(), 'title', ' '), /title must be text/],
-  ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Easy, Medium, Hard/],
+  ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Fundamentals, Easy, Medium, Hard/],
   ['topics not a list', withChange(valid(), 'topics', 'Linked List'), /topics must be a list of names/],
   ['sources missing', withChange(valid(), 'sources', DELETE), /sources must be a list of names/],
   ['alreadyLearned not a list', withChange(valid(), 'alreadyLearned', 'two-sum'), /alreadyLearned must be a list of question slugs/],

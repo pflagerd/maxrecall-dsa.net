@@ -2,7 +2,7 @@
   "slug": "is-unique-i",
   "created": "2026-10-30T04:26:42Z",
   "title": "Is Unique I",
-  "difficulty": "Easy",
+  "difficulty": "Fundamentals",
   "topics": ["String", "Hash Table"],
   "sources": ["Cracking the Coding Interview"],
   "alreadyLearned": ["to-uppercase-lowercase"],

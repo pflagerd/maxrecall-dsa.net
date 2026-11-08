@@ -36,7 +36,8 @@ function isQuestionFile(name) {
  *
  * @typedef {object} QuestionFile
  * @property {string} title
- * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard"
+ *   (DIFFICULTIES).
  * @property {string[]} topics
  * @property {string[]} sources
  * @property {string} created - UTC ISO 8601 (step 3).
@@ -105,8 +106,13 @@ function readRenamesText() {
 
 /** A question file's fields (readme.html, "Problem file format"). @type {readonly string[]} */
 const QUESTION_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']);
-/** The difficulties the list shows. @type {readonly string[]} */
-const DIFFICULTIES = Object.freeze(['Easy', 'Medium', 'Hard']);
+/**
+ * The difficulties the list shows, easiest first. Fundamentals (owner,
+ * 2026-11-08, #93) is for questions whose new concept is a feature of the
+ * language or its library (docs/roles/questions/how-to-write-a-question.md).
+ * @type {readonly string[]}
+ */
+const DIFFICULTIES = Object.freeze(['Fundamentals', 'Easy', 'Medium', 'Hard']);
 /** The languages whose judge harness needs a signature (judge/runner.js). @type {readonly string[]} */
 const TYPED_LANGUAGES = Object.freeze(['cpp', 'java', 'd']);
 // UTC ISO 8601 to the second, e.g. 2026-10-24T05:31:05Z. UTC only, so that

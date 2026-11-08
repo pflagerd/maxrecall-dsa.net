@@ -39,6 +39,19 @@ learned it. A rule with no source is marked as a guess.
   a new one; the second became Build a New String. In #86, joining a
   list and Java's `StringBuilder` came out of it to go in a joining
   question.)
+- **Its difficulty follows from its new concept** (owner, 2026-11-08,
+  #93). **Fundamentals**, the level below Easy: the one new concept is
+  something the language or its standard library already gives you,
+  learned by using it: syntax, an operator, how a built-in type behaves,
+  a library function, or a ready-made container such as Python's `set`.
+  **Easy or above**: the new concept is a data structure the learner
+  builds (e.g. linked nodes), or an algorithm, an idea for solving the
+  problem (e.g. Two Sum's looking up the complement), even if it uses a
+  library container along the way. So Is Unique I is Fundamentals (it
+  uses a `set` to remember what's been seen), Singly Linked List Hello
+  World is Easy (the learner makes and links the nodes). Fundamentals is
+  a difficulty, not a topic: Hello World's topic is "Output".
+  (`docs/decisions/20261108T113409-0800-fundamentals-difficulty.md`)
 - **Count concepts finely.** Two operators that do different things are
   two concepts, even when they look alike (owner, 2026-11-06: Build a New
   String taught both `+` and `+=`; it now teaches `+` alone, and `+=` has
@@ -209,3 +222,5 @@ Not decided; settle them with the owner and move them up as rules.
   questions (Build a New String and Add to a String, #89 and #91),
   counted with a script over `questions/*.json`.
 - 2026-11-06: the `author-question` skill exists; it links here.
+- 2026-11-08: section 1, the rule for a question's difficulty, with
+  Fundamentals below Easy (#93, the owner's decision).
