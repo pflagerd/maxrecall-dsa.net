@@ -129,13 +129,16 @@ questions as fixtures, below).
   - `alreadyLearned` (optional; #89, direct prerequisites only since
     #91): `questionInfos()` passes it on (#146), and users' `order.js`
     (`dependencyOrder`, through `allowedPairs`) puts each question of an
-    `"all"` backlog after the ones it names. It relies on an array of
-    slugs; an entry naming no question is ignored, and a missing field
-    means "builds on nothing". It relies on `checkQuestion` refusing a
-    loop only for the order to mean anything: a loop loses no pair (its
-    questions are appended in creation order; `order.test.js`). Not
-    relied on: entries being direct prerequisites only, or having no
-    duplicates (either gives the same order). It also reaches the
+    `"all"` backlog after the ones it names; `prerequisiteWarnings`
+    (#161, for `make learner-create` and `make backlog-add`) warns when a
+    chosen backlog puts a question before one it names, or leaves one
+    out. Both rely on an array of slugs; an entry naming no question is
+    ignored, and a missing field means "builds on nothing". They rely on
+    `checkQuestion` refusing a loop only for the order to mean anything:
+    a loop loses no pair (its questions are appended in creation order;
+    `order.test.js`). Not relied on: entries being direct prerequisites
+    only, or having no duplicates (the same order either way; a
+    duplicated entry repeats a warning line). It also reaches the
     problem page (`routes.js`'s `toPublicProblem` sends every field but
     `testCases`), where nothing of users' reads it yet; #88's links
     would be a further change to this contract.

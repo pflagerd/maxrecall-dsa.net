@@ -59,12 +59,16 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   is otherwise for reading. Run as root, `make test` can `apt-get
   install` (`scripts/toolchain-deps.sh`), and a server started without
   `HOST` listens on every interface.
-- **A deploy installs what `master` is when it pulls**, not what was
-  surveyed earlier (2026-11-07: three pull requests merged between the
-  survey and the pull, so the owner said yes to a different change).
-  So fetch, show what will be deployed (the commits and files between
-  the deployed commit and `origin/master`), and deploy in one go; stop
-  and ask again if it differs from what the owner was told. Say in the
+- **Deploy exactly the commit the owner said yes to**, with the guarded
+  deploy (`docs/deploy-vps.md`, "Updating: the guarded deploy"). It
+  passes that commit as `DEPLOY_EXPECT` (#162), so `make deploy-server`
+  installs it or stops with nothing changed if `master` has moved.
+  Without it, a deploy installs whatever `master` is when it pulls
+  (2026-11-07: three pull requests merged between the survey and the
+  pull, so the owner said yes to a different change). So fetch, show
+  what will be deployed (the commits and files between the deployed
+  commit and `origin/master`), and deploy that commit; if it stops,
+  survey again and ask the owner again. Say in the
   ask that `make deploy-server` can also install system packages
   (`toolchain-deps`, `sandbox-deps`), runs `npm install`, and installs
   the unit file if it changed (`scripts/deploy-server.sh`). A procedure
