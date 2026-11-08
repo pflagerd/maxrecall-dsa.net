@@ -2,6 +2,10 @@
 // (spaced-repetition plan, step 9; D7), one row per (question, language)
 // pair, from GET /api/queue. If that can't be had, a message and every
 // question by title (GET /api/questions), as before step 9 (detail 7).
+// With ?view=bank, the question bank instead (#133,
+// docs/plans/question-bank-page.md): every question, one row each, with
+// where each language of it is in your queue and backlog, from GET
+// /api/question-bank; only for a profile with canSeeQuestionBank.
 // Rows are built from elements with textContent, never innerHTML, so text
 // from question files can't inject markup.
 
@@ -11,6 +15,8 @@
 
 const rowsEl = /** @type {HTMLTableSectionElement} */ (document.getElementById('problem-rows')); // the <tbody>
 const nextLineEl = /** @type {HTMLElement} */ (document.getElementById('next-line'));
+const headEl = /** @type {HTMLTableSectionElement} */ (document.getElementById('problem-head')); // the <thead>
+const viewSwitchEl = /** @type {HTMLElement} */ (document.getElementById('view-switch'));
 
 // Each language's name as shown: the same names as problem-page.js's
 // LANGUAGE_LABELS. Another name, since the browser files share one global
@@ -237,4 +243,169 @@ async function loadProblems() {
   else await showAllQuestions(why, labels);
 }
 
-loadProblems();
+// --- The question bank (#133) ------------------------------------------------
+
+/**
+ * Where one pair is (GET /api/question-bank).
+ *
+ * @typedef {object} BankPair
+ * @property {'queue' | 'backlog'} where - The file it's in.
+ * @property {number} [position] - In the queue and listed: its number on
+ *   the problem list, 1 next.
+ * @property {boolean} listed - False for a language turned off: the list
+ *   doesn't show it.
+ */
+
+/**
+ * One question of GET /api/question-bank.
+ *
+ * @typedef {object} BankQuestion
+ * @property {string} slug - Its file name without .json.
+ * @property {string} created - UTC ISO 8601.
+ * @property {string[]} languages - The languages it has.
+ * @property {string} title
+ * @property {string} difficulty
+ * @property {string[]} topics
+ * @property {string[]} sources
+ * @property {Record<string, BankPair>} pairs - By language; a language in
+ *   neither file isn't there.
+ */
+
+/**
+ * GET /api/question-bank's answer.
+ *
+ * @typedef {object} QuestionBank
+ * @property {string[]} languages - The columns, in order.
+ * @property {BankQuestion[]} questions - By created, then slug.
+ */
+
+/**
+ * The cell for one language of a question in the bank: "#3" (in the queue,
+ * third on the list), "backlog", "—" (in neither), or empty if the question
+ * doesn't have that language. Each mark links to the question in that
+ * language. A pair in a language turned off is dimmed: it's in a file, but
+ * not on the list.
+ *
+ * @param {BankQuestion} question - The row's question.
+ * @param {string} language - The column's language.
+ * @returns {HTMLTableCellElement} The cell.
+ */
+function bankLanguageCell(question, language) {
+  const name = LANGUAGE_NAMES[language] || language;
+  if (!question.languages.includes(language)) return textCell('', 'bank-pair', `${question.title} has no ${name}`);
+  const pair = question.pairs[language];
+  let text = '—';
+  let title = `In neither your queue nor your backlog, in ${name}`;
+  if (pair && pair.where === 'queue') {
+    text = pair.position ? `#${pair.position}` : 'queue';
+    title = pair.position ? `In your queue in ${name}: number ${pair.position} on your list` : `In your queue in ${name}`;
+  } else if (pair) {
+    text = 'backlog';
+    title = `In your backlog in ${name}`;
+  }
+  if (pair && !pair.listed) title += `, but ${name} is turned off, so your list doesn't show it`;
+  const cell = textCell('', `bank-pair${pair ? '' : ' bank-neither'}${pair && !pair.listed ? ' bank-off' : ''}`);
+  const link = document.createElement('a');
+  link.href = questionUrl(question.slug, language);
+  link.textContent = text;
+  link.title = `${title}. Opens it in ${name}.`;
+  // The row's own click opens the usual language; this one is the link's.
+  link.addEventListener('click', (event) => event.stopPropagation());
+  cell.appendChild(link);
+  return cell;
+}
+
+/**
+ * Shows the question bank: its columns, a line saying what a row does, and
+ * one row per question, which opens it in the learner's usual language.
+ *
+ * @param {QuestionBank} bank - From GET /api/question-bank.
+ * @param {Awaited<ReturnType<typeof loadLabels>>} labels - From bubbles.js.
+ * @returns {void}
+ */
+function showBank(bank, labels) {
+  nextLineEl.textContent = 'Every question, in the order they were added, and where each language of it is: #n in your queue, backlog, or — for neither. '
+    + 'Opening a question changes nothing. A Submit or Skip moves it: from the backlog or neither, to near the front of your queue; from your queue, further back from where it is now.';
+  rowsEl.replaceChildren();
+  for (const q of bank.questions) {
+    const slugCell = textCell(q.slug, 'bank-slug');
+    const created = textCell(q.created.slice(0, 10), 'bank-created', q.created);
+    addRow([slugCell, textCell(q.title, 'problem-title'), ...bank.languages.map((l) => bankLanguageCell(q, l)), ...questionCells(q, labels), created], questionUrl(q.slug));
+  }
+}
+
+/**
+ * Replaces the table's header with the bank's columns.
+ *
+ * @param {string[]} languages - The language columns, in order.
+ * @returns {number} How many columns there are, for a message row.
+ */
+function showBankHead(languages) {
+  const row = document.createElement('tr');
+  const names = ['Slug', 'Title', ...languages.map((l) => LANGUAGE_NAMES[l] || l), 'Sources & topics', 'Difficulty', 'Created'];
+  for (const name of names) {
+    const th = document.createElement('th');
+    th.textContent = name;
+    row.appendChild(th);
+  }
+  headEl.replaceChildren(row);
+  return names.length;
+}
+
+/**
+ * Fills the page with the question bank (GET /api/question-bank), or says
+ * why it can't (a 403 for anyone but the owner, or an invalid file).
+ *
+ * @returns {Promise<void>} Never rejects: failures are shown on the page.
+ */
+async function loadBank() {
+  document.title = 'MaxRecall Code — Question bank';
+  // Wider than the queue's 800px: more columns (style.css, .bank-view).
+  /** @type {HTMLElement} */ (document.querySelector('.list-wrap')).classList.add('bank-view');
+  const labelsPromise = loadLabels();
+  try {
+    const res = await fetch('/api/question-bank');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const bank = /** @type {QuestionBank} */ (data);
+    showBankHead(bank.languages);
+    showBank(bank, await labelsPromise);
+  } catch (err) {
+    nextLineEl.textContent = '';
+    rowsEl.replaceChildren();
+    const cell = textCell(`The question bank couldn't be shown: ${/** @type {Error} */ (err).message}`);
+    cell.colSpan = headEl.rows[0] ? headEl.rows[0].cells.length : 6;
+    rowsEl.insertRow().appendChild(cell);
+  }
+}
+
+/**
+ * Shows the link between the two views: to the bank from the queue, for
+ * a profile with canSeeQuestionBank, and back to the queue from the bank.
+ *
+ * @param {boolean} inBank - Whether the bank is shown.
+ * @returns {Promise<void>} Never rejects: without the profile, no link to
+ *   the bank.
+ */
+async function showViewSwitch(inBank) {
+  const link = document.createElement('a');
+  if (inBank) {
+    link.href = '/';
+    link.textContent = '← Your queue';
+  } else {
+    try {
+      const res = await fetch('/api/profile');
+      if (!res.ok || !(await res.json()).canSeeQuestionBank) return;
+    } catch {
+      return;
+    }
+    link.href = '/?view=bank';
+    link.textContent = 'Question bank: every question →';
+  }
+  viewSwitchEl.replaceChildren(link);
+}
+
+const inBank = new URLSearchParams(window.location.search).get('view') === 'bank';
+showViewSwitch(inBank);
+if (inBank) loadBank();
+else loadProblems();
