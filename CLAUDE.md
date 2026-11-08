@@ -125,7 +125,10 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   such a change, write it as a request in your handoff doc instead.
 - Shared files: any role may edit `readme.html`, and any role may propose a
   change to `CLAUDE.md` (in its own pull request, saying so in the
-  description). The human approves and merges both.
+  description). The human approves and merges both. Any role may also
+  add a file to `docs/decisions/`, one per decision, in the same commit
+  as the change; none edits another's, and none is edited once merged
+  (`readme.html`, "Maintaining this file"; owner, 2026-11-08).
 - Your own handoffs may go straight to `master`, without a pull request
   (owner, 2026-11-05): push to `master` only commits that change nothing
   but files in `docs/session-handoff/<role>/`, your role's folder. Fetch
