@@ -115,7 +115,9 @@ cause, and it has been removed (see §5).
 
 Written 2026-11-08 (infrastructure and security; the VPS operator's
 request). The operator first ran it to deploy `38b6af3` (its handoff
-`docs/session-handoff/vps-operator/20261107T092844-0800.md`). **This is
+`docs/session-handoff/vps-operator/20261107T092844-0800.md`), and has
+deployed with it since: `64a2da8`, `c7fbafb`, and §16's `2651a33`
+(`20261107T210036-0800.md`). **This is
 how an update is deployed**: the owner says yes to one commit, and the
 deploy puts exactly that commit live, or stops.
 
@@ -165,6 +167,9 @@ git diff --stat <deployed> <commit>
 - `A..B`: the commits in `B` that aren't in `A`, i.e. what the deploy
   adds ([gitrevisions(7)](https://git-scm.com/docs/gitrevisions#_dotted_range_notations)).
   `diff --stat`: just the files, and how much changed in each.
+- **Read every handoff in that range in full** (`docs/session-handoff/`)
+  before asking the owner: one may bear on the deploy (owner,
+  2026-11-07, in the operator's `20261107T210036-0800.md`).
 - **Stop, and ask infrastructure and security first**, if `--stat`
   shows:
   - **a renamed unit file** under `deploy/` (a rename shows with `=>`):
@@ -206,7 +211,7 @@ git status --porcelain --untracked-files=no
 
 ```bash
 if git fetch origin master && [ "$(git rev-parse origin/master)" = "$(git rev-parse <commit>)" ]; then
-  git merge --ff-only <commit> && make deploy-server
+  git merge --ff-only <commit> && make deploy-server < /dev/null
 else
   echo "STOP: master is not <commit>"; git log --oneline <commit>..origin/master
 fi
@@ -224,10 +229,16 @@ fi
   This is why the guard checks root's checkout: the `Makefile` and
   script that then run as root are `<commit>`'s.
 - `&&`: each step runs only if the one before succeeded.
+- `< /dev/null`: the script gets no input. On an update it asks
+  nothing; if it ever asks its first-run question (`Set up the maxrecall
+  service on this machine?`), something is wrong, and with no input
+  `read` fails and the script stops before changing anything (it runs
+  under `set -euo pipefail`). The operator ran §16 this way.
 - `else`: `master` has moved on (or the fetch failed: git says so above
   the `STOP` line). Nothing changed but `origin/master`; the `git log`
-  lists what's new. Survey that (step 1) and ask the owner
-  again.
+  lists what's new. Survey it as step 1 does, reading every new handoff
+  in full, then ask the owner again, with advice: what each new commit
+  says, what bears on the deploy, go ahead or wait (owner, 2026-11-07).
 - **Expect**, among the script's lines: `deploy-server: updating
   /srv/maxrecall/maxrecall-dsa.net (master) with git pull --ff-only.`,
   `deploy-server: at <commit> …`, and last `Deployed: maxrecallcode.service
@@ -1948,7 +1959,10 @@ listed, each change with its time (UTC), and step 7's results.
 ## 16. Renaming the service to `maxrecallcode.service` (#123) [VPS]
 
 Written 2026-11-08 (infrastructure and security; owner's choice of the
-name). **Not yet run.** A one-time deploy: the first after the pull
+name). **Run 2026-11-08 at 04:56 UTC**, deploying `2651a33`, down about
+1.2 s, as step 2 expects (the VPS operator's
+`docs/session-handoff/vps-operator/20261107T210036-0800.md`); kept for
+its undo. A one-time deploy: the first after the pull
 request that renames `deploy/maxrecall-dsa.test.service` to
 `deploy/maxrecallcode.service` (call its merge commit `<commit>`; the
 owner names it). After it, deploys are as usual.
@@ -1983,12 +1997,15 @@ ls /etc/systemd/system/ | grep -F maxrecall
   behind), stop.
 
 ```bash
-systemctl cat maxrecall-dsa.test.service | grep '^# /'
+systemctl show maxrecall-dsa.test.service -p DropInPaths
 ```
-- `systemctl cat` shows the files a unit is made of, each after a comment
-  naming it ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)).
-  Expect only `# /etc/systemd/system/maxrecall-dsa.test.service`. Any
-  other file is a drop-in: stop.
+- `systemctl show -p`: one of the unit's properties
+  ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html)).
+  `DropInPaths` lists its drop-in files. Expect `DropInPaths=`, empty;
+  anything after the `=` is a drop-in: stop. (Until 2026-11-08 this was
+  `systemctl cat … | grep '^# /'`, which also matched the unit file's
+  own comments that begin `# /etc/…` and `# /sys/…`, so it said "stop"
+  with no drop-in: the operator's finding, `20261107T210036-0800.md`.)
 
 **2. The deploy [change]**, only of `<commit>`, surveyed and run in one
 go: the guarded deploy ("The quick way", "Updating: the guarded
