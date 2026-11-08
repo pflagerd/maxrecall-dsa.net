@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -56,6 +56,12 @@ test('no question builds on itself through alreadyLearned (no loop)', () => {
 const TEMPLATE_FILE = path.join(__dirname, 'docs', 'question-template.json');
 /** The template, parsed. @type {Record<string, any>} */
 const template = JSON.parse(fs.readFileSync(TEMPLATE_FILE, 'utf8'));
+
+test('questionInfos() passes alreadyLearned on, for order.js (#146), and leaves it out where there is none', () => {
+  const bySlug = new Map(questionInfos().map((q) => [q.slug, q]));
+  assert.deepEqual(bySlug.get('add-to-a-string')?.alreadyLearned, ['build-a-new-string']);
+  assert.equal(bySlug.get('build-a-new-string')?.alreadyLearned, undefined);
+});
 
 test('docs/question-template.json follows the problem file format, so a copy starts valid', () => {
   assert.deepEqual(checkQuestion(template, 'question-template.json'), []);
@@ -125,6 +131,12 @@ test('the valid samples pass, and so does one with learning text', () => {
   assert.deepEqual(checkQuestion({ ...valid(), alreadyLearned: ['two-sum'] }, 'sample.json', ['two-sum']), [], 'alreadyLearned with no Learning tab to link from');
 });
 
+test('every difficulty passes, Fundamentals (below Easy, #93) included', () => {
+  for (const difficulty of ['Fundamentals', 'Easy', 'Medium', 'Hard']) {
+    assert.deepEqual(checkQuestion({ ...valid(), difficulty }, 'sample.json'), [], difficulty);
+  }
+});
+
 test('alreadyLearned must name questions that exist, when the slugs are given', () => {
   const question = { ...valid(), alreadyLearned: ['no-such-question'] };
   assert.ok(checkQuestion(question, 'sample.json', ['two-sum']).some((p) => /alreadyLearned: there's no question "no-such-question"/.test(p)));
@@ -180,7 +192,7 @@ const BROKEN = [
   ['created not UTC', withChange(valid(), 'created', '2026-11-05T12:00:00-08:00'), /created must be a UTC time/],
   ['created not a real date', withChange(valid(), 'created', '2026-02-30T00:00:00Z'), /isn't a real date/],
   ['no title', withChange(valid(), 'title', ' '), /title must be text/],
-  ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Easy, Medium, Hard/],
+  ['an unknown difficulty', withChange(valid(), 'difficulty', 'easy'), /difficulty must be one of Fundamentals, Easy, Medium, Hard/],
   ['topics not a list', withChange(valid(), 'topics', 'Linked List'), /topics must be a list of names/],
   ['sources missing', withChange(valid(), 'sources', DELETE), /sources must be a list of names/],
   ['alreadyLearned not a list', withChange(valid(), 'alreadyLearned', 'two-sum'), /alreadyLearned must be a list of question slugs/],

@@ -29,7 +29,9 @@ the overall picture. Act as the human's lieutenant; the human decides.
 ## Each session
 1. Fetch every branch (not only claude/*: roles also push others, e.g.
    infra/* and the VPS operator's); read every role's latest handoff.
-2. Check for ownership violations and contract drift.
+2. Check for ownership violations and contract drift. A new file in
+   `docs/plans/` is its author's (`CLAUDE.md`, "Roles"): add it to that
+   role file's Plans list in the next role-files pull request.
 3. Apply cross-boundary requests that touch only files the architect
    owns; route the rest to the owning role, or ask the owner for an
    exception (below) where routing it doesn't fit.
