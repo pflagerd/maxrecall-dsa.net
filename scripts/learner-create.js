@@ -25,6 +25,7 @@ const path = require('path');
 const { USERS_DIR, EMAIL_PATTERN, createUser } = require('../users');
 const { questionInfos } = require('../question-files');
 const { splitList, newLearnerFiles } = require('../learner');
+const { prerequisiteWarnings } = require('../order');
 const { Refusal, checkName } = require('./question-admin');
 
 /**
@@ -63,9 +64,10 @@ function learnerCreate(dryRun) {
   if (!slugs.length) throw new Refusal('SLUGS is required: their questions, in order, e.g. SLUGS="hello-world two-sum" (make backlog-show EMAIL=<anyone> lists them all)');
   slugs.forEach((slug) => checkName('SLUGS', slug));
 
+  const questions = questionInfos();
   let files;
   try {
-    files = newLearnerFiles(languages, slugs, questionInfos());
+    files = newLearnerFiles(languages, slugs, questions);
   } catch (err) {
     throw new Refusal(/** @type {Error} */ (err).message);
   }
@@ -74,6 +76,8 @@ function learnerCreate(dryRun) {
   console.log(`  profile.json: ${JSON.stringify(files.profile)}`);
   console.log(`  backlog (${files.backlog.backlog.length}): ${files.backlog.backlog.map((p, i) => `${i + 1}. ${p.question} in ${p.language}`).join(', ')}`);
   console.log('  queue: empty');
+  // Warned, still written (#146, B(a)): the order may be meant.
+  for (const w of prerequisiteWarnings(questions, files.order, files.backlog, slugs)) console.log(`  warning: ${w}`);
   if (dryRun) {
     console.log('Dry run: nothing was written.');
     return;
