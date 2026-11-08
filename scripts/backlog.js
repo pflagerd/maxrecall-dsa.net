@@ -139,10 +139,11 @@ function show() {
   backlog.backlog.forEach((p, i) => where.set(named(p), `backlog ${i + 1}`));
   const questions = [...questionInfos()].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.slug < b.slug ? -1 : 1));
   const width = Math.max(...questions.map((q) => q.slug.length));
+  const difficultyWidth = Math.max(...questions.map((q) => q.difficulty.length)); // "Fundamentals" is 12 (#93)
   console.log(`Every question, oldest first (${questions.length}):`);
   for (const q of questions) {
     const pairs = profile.languages.filter((l) => q.languages.includes(l)).map((language) => `${language}: ${where.get(named({ question: q.slug, language })) ?? 'not chosen'}`);
-    console.log(`  ${q.slug.padEnd(width)}  ${q.created.slice(0, 10)}  ${q.difficulty.padEnd(6)}  ${pairs.join(', ') || '(none of your languages)'}  ${q.title}`);
+    console.log(`  ${q.slug.padEnd(width)}  ${q.created.slice(0, 10)}  ${q.difficulty.padEnd(difficultyWidth)}  ${pairs.join(', ') || '(none of your languages)'}  ${q.title}`);
   }
 }
 
