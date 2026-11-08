@@ -98,8 +98,9 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
 
 ## Shared files
 - None. Unlike the other roles, this one doesn't use `CLAUDE.md`'s
-  shared-file rule: a change it needs to `readme.html` or `CLAUDE.md` is
-  a request in its handoff, to the role that owns the subject.
+  shared-file rule: a change it needs to `readme.html` or `CLAUDE.md`,
+  or a new file in `docs/decisions/`, is a request in its handoff, to
+  the role that owns the subject.
 
 ## Out of scope
 - Writing code, documentation or configuration (infrastructure and

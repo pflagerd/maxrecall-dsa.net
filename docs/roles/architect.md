@@ -13,6 +13,9 @@ the overall picture. Act as the human's lieutenant; the human decides.
 ## Shared files (propose changes; owner approves/merges them)
 - readme.html: owner is the human (with the architect supporting the human)
 - CLAUDE.md: owner is the human (with the architect supporting the human)
+- docs/decisions/: any role adds a file, one per decision; none edits
+  another's, and none is edited once merged (readme.html, "Maintaining
+  this file")
 
 ## Must not
 - Edit source files, or any other file another role owns, without an

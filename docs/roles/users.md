@@ -49,6 +49,9 @@ records, and the scripts that set up and adjust a learner.
 ## Shared files (propose changes; owner approves/merges them)
 - readme.html: owner is the human (with the architect supporting the human)
 - CLAUDE.md: owner is the human (with the architect supporting the human)
+- docs/decisions/: any role adds a file, one per decision; none edits
+  another's, and none is edited once merged (readme.html, "Maintaining
+  this file")
 
 ## Out of scope
 - Anything touching the code runner or hidden test cases
