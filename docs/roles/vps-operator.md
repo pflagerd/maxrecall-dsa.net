@@ -37,6 +37,14 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   stopping, starting or signalling a process; deploys; apt; files under
   `/etc`, `/srv` or another user's home; users, groups, the firewall,
   nginx, systemd, cron and timers.
+- **`git fetch` in root's checkout needs the owner's yes too, until #119
+  is done** (owner, 2026-11-08). It changes nothing under `/etc` or
+  `/srv`, but it reaches GitHub with root's SSH key, which until #119 is
+  the owner's own key for every repository on the account, and it
+  rewrites `origin/*`. A yes for a deploy covers the fetch in that
+  deploy's command. Once #119's deploy key has replaced root's key, a
+  fetch needs no yes (the architect's recommendation, which the owner
+  accepted).
 - Follow `docs/deploy-vps.md` where it covers the change. Where it
   doesn't, or turns out wrong, stop and report: fixing it is a request
   to infrastructure and security.
