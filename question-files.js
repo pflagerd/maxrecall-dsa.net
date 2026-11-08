@@ -401,4 +401,35 @@ function findRedundantLearned(learnedBySlug) {
   return problems;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS };
+/**
+ * Languages a question has that a question it builds on lacks. A "Learned
+ * earlier" link opens the earlier question as a refresher in the language
+ * of the page it was clicked on (#88; plan
+ * docs/plans/fundamentals-learned-links-concept-checks.md, Q8), so each
+ * question in alreadyLearned must have every language of the question
+ * that lists it. Only direct entries are checked: with each of those
+ * checked, the questions they build on have the languages too.
+ *
+ * @param {Record<string, { languages: readonly string[], alreadyLearned?: readonly string[] }>} questionsBySlug
+ *   Each question's slug, its languages (its starterCode's keys) and its
+ *   alreadyLearned (missing for none). Entries naming a question not in it
+ *   are ignored (checkQuestion reports those).
+ * @returns {string[]} A message for each entry lacking a language, naming
+ *   the question, the entry and the languages; empty if none.
+ */
+function findMissingLearnedLanguages(questionsBySlug) {
+  /** @type {string[]} */
+  const problems = [];
+  for (const slug of Object.keys(questionsBySlug).sort()) {
+    const { languages, alreadyLearned = [] } = questionsBySlug[slug];
+    for (const entry of alreadyLearned) {
+      const earlier = questionsBySlug[entry];
+      if (!earlier) continue;
+      const missing = languages.filter((language) => !earlier.languages.includes(language));
+      if (missing.length > 0) problems.push(`${slug}: alreadyLearned lists ${entry}, which has no ${missing.join(', ')}: a "Learned earlier" link opens it in the language it was clicked from, so add ${missing.length === 1 ? 'that language' : 'those languages'} to ${entry} first`);
+    }
+  }
+  return problems;
+}
+
+module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, findMissingLearnedLanguages, QUESTION_FIELDS };

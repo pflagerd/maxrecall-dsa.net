@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, findMissingLearnedLanguages } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -45,6 +45,16 @@ test('no question builds on itself through alreadyLearned (no loop)', () => {
   }
   assert.equal(findLearnedLoop(learnedBySlug), null);
   assert.deepEqual(findRedundantLearned(learnedBySlug), [], 'alreadyLearned lists only the questions each builds on directly');
+});
+
+test('each question a question builds on has all of its languages (a refresher opens in the clicked language, #88)', () => {
+  /** @type {Record<string, { languages: string[], alreadyLearned?: string[] }>} */
+  const questionsBySlug = {};
+  for (const name of files) {
+    const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    questionsBySlug[name.replace(/\.json$/, '')] = { languages: Object.keys(question.starterCode), alreadyLearned: question.alreadyLearned };
+  }
+  assert.deepEqual(findMissingLearnedLanguages(questionsBySlug), []);
 });
 
 // --- docs/question-template.json -------------------------------------------
@@ -148,6 +158,16 @@ test('findLearnedLoop finds a loop, and only a loop', () => {
   assert.deepEqual(findLearnedLoop({ a: ['a'] }), ['a', 'a']);
   assert.equal(findLearnedLoop({ a: ['b', 'c'], b: ['c'], c: [] }), null, 'two paths to one question are not a loop');
   assert.equal(findLearnedLoop({ a: ['missing'] }), null, 'an unknown question is checkQuestion\'s to report');
+});
+
+test('findMissingLearnedLanguages finds an earlier question lacking a language, and only that', () => {
+  assert.deepEqual(findMissingLearnedLanguages({ a: { languages: ['python', 'java'], alreadyLearned: ['b'] }, b: { languages: ['python'] } }),
+    ['a: alreadyLearned lists b, which has no java: a "Learned earlier" link opens it in the language it was clicked from, so add that language to b first']);
+  assert.deepEqual(findMissingLearnedLanguages({ a: { languages: ['python', 'java', 'd'], alreadyLearned: ['b'] }, b: { languages: ['python'] } }),
+    ['a: alreadyLearned lists b, which has no java, d: a "Learned earlier" link opens it in the language it was clicked from, so add those languages to b first']);
+  assert.deepEqual(findMissingLearnedLanguages({ a: { languages: ['python'], alreadyLearned: ['b'] }, b: { languages: ['python', 'java'] } }), [], 'the earlier one may have more');
+  assert.deepEqual(findMissingLearnedLanguages({ a: { languages: ['java'], alreadyLearned: ['gone'] } }), [], 'an entry naming no question is checkQuestion\'s to report');
+  assert.deepEqual(findMissingLearnedLanguages({ a: { languages: ['java'] } }), [], 'no alreadyLearned');
 });
 
 test('findRedundantLearned finds an entry already reached through another', () => {
