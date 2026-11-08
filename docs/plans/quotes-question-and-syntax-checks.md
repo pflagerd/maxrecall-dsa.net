@@ -1,5 +1,7 @@
 # Proposal: a question on `"` and `'` in Python, and checking the syntax a learner used
 
+Status: **proposed** (questions, 2026-11-08; written by questions 2).
+
 Questions 2, 2026-11-08, at the owner's request: "propose a new question
 which teaches the learner about the use of `"` and `'` in Python strings
 … explore how we can check to make sure the learner uses specific
