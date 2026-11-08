@@ -7,7 +7,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { parseOrder, parseBacklog, parseQueueFiles, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
+const { parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences } = require('./order');
 const { effectiveProfile } = require('./profile');
 
 /** A valid queue. @type {import('./order').OrderFile} */
@@ -86,6 +86,48 @@ test('with no profile, every language each question has, in menu order', () => {
   assert.deepEqual(allowedPairs(QUESTIONS, effectiveProfile(undefined)).map((p) => `${p.question}/${p.language}`), [
     'a-tied/python', 'a-tied/cpp', 'a-tied/java', 'b-tied/python', 'later/javascript', 'later/python', 'later/cpp',
   ]);
+});
+
+/**
+ * A question for dependencyOrder()'s tests: in Python only, created on the
+ * given day of 2026-10.
+ *
+ * @param {string} slug - Its name.
+ * @param {number} day - The day of 2026-10 it was created (two digits).
+ * @param {string[]} [alreadyLearned] - The questions it builds on.
+ * @returns {import('./order').QuestionInfo} The question.
+ */
+function built(slug, day, alreadyLearned) {
+  return { slug, created: `2026-10-${String(day).padStart(2, '0')}T00:00:00Z`, languages: ['python'], alreadyLearned };
+}
+
+test('a question comes after the ones it builds on, even created before them (#146, A(a))', () => {
+  // The string chain's shape (#146): created almost backwards.
+  const questions = [
+    built('swap-case', 13, ['upper-lower']),
+    built('build-string', 20),
+    built('upper-lower', 12, ['double-each']),
+    built('add-to-string', 21, ['build-string']),
+    built('is-unique', 11, ['upper-lower']),
+    built('double-each', 13, ['add-to-string']),
+    built('two-sum', 1),
+    built('hello-world', 15),
+  ];
+  assert.deepEqual(dependencyOrder(questions).map((q) => q.slug), [
+    'two-sum', 'hello-world', // building on nothing: creation order, as before
+    'build-string', 'add-to-string', 'double-each', 'upper-lower',
+    'is-unique', 'swap-case', // both ready at once: the earlier created first
+  ]);
+  assert.deepEqual(allowedPairs(questions, effectiveProfile(undefined)).map((p) => p.question), dependencyOrder(questions).map((q) => q.slug));
+});
+
+test('a question that builds on one that isn\'t there is placed as if it built on nothing', () => {
+  assert.deepEqual(dependencyOrder([built('b', 2), built('a', 1, ['deleted'])]).map((q) => q.slug), ['a', 'b']);
+});
+
+test('a loop (which checkQuestion refuses) loses no question: its questions come last, by creation time', () => {
+  const questions = [built('x', 3, ['y']), built('free', 9), built('y', 1, ['x'])];
+  assert.deepEqual(dependencyOrder(questions).map((q) => q.slug), ['free', 'y', 'x']);
 });
 
 test('filling appends only the pairs in neither file, and leaves the given backlog alone', () => {

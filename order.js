@@ -64,6 +64,9 @@ const SCHEMA_VERSION = 1;
  * @property {string} created - When it was created, UTC ISO 8601 (step 3).
  * @property {string[]} languages - The languages it can be answered in
  *   (its starterCode's keys).
+ * @property {string[]} [alreadyLearned] - The questions it builds on
+ *   directly (its file's alreadyLearned; #146): allowedPairs() puts it
+ *   after them. Missing means none.
  */
 
 /**
@@ -258,11 +261,48 @@ function parseQueueFiles(orderText, backlogText) {
 }
 
 /**
+ * Questions in the order a backlog takes them (D6; #146, choice A(a)): each
+ * after every question it builds on (alreadyLearned), and otherwise by
+ * creation time, ties by file name. At each step it takes the earliest
+ * question whose alreadyLearned are all placed (a topological sort, Kahn's
+ * algorithm with creation time choosing among the ready ones), so questions
+ * that build on nothing keep plain creation order.
+ *
+ * An alreadyLearned entry naming no question here is ignored. A loop, which
+ * checkQuestion refuses (make test), would leave its questions never ready:
+ * they're appended in creation order rather than lost, since a pair left out
+ * of the backlog would never be introduced.
+ *
+ * @param {QuestionInfo[]} questions - Every question.
+ * @returns {QuestionInfo[]} The same questions, in that order.
+ */
+function dependencyOrder(questions) {
+  const byCreated = [...questions].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+  const present = new Set(byCreated.map((q) => q.slug));
+  /** @type {Set<string>} */
+  const placed = new Set();
+  /** @type {QuestionInfo[]} */
+  const ordered = [];
+  let waiting = byCreated;
+  while (waiting.length > 0) {
+    const next = waiting.find((q) => (q.alreadyLearned ?? []).every((s) => placed.has(s) || !present.has(s)));
+    if (!next) {
+      ordered.push(...waiting); // a loop: see above
+      break;
+    }
+    ordered.push(next);
+    placed.add(next.slug);
+    waiting = waiting.filter((q) => q !== next);
+  }
+  return ordered;
+}
+
+/**
  * Every (question, language) pair the profile allows, in the order they
- * come into a backlog (D6, decision 2 of D2): questions by creation time,
- * ties by file name; within a question, the languages turned on in the
- * learner's order, then the allowed ones turned off (kept for when they're
- * turned on: D2, decision 1).
+ * come into a backlog (D6, decision 2 of D2): questions in dependencyOrder()
+ * (after the ones they build on, then by creation time; #146); within a
+ * question, the languages turned on in the learner's order, then the
+ * allowed ones turned off (kept for when they're turned on: D2, decision 1).
  *
  * @param {QuestionInfo[]} questions - Every question.
  * @param {import('./profile').EffectiveProfile} profile - The learner's profile.
@@ -270,8 +310,7 @@ function parseQueueFiles(orderText, backlogText) {
  */
 function allowedPairs(questions, profile) {
   const languageOrder = [...profile.languages, ...profile.allowedLanguages.filter((l) => !profile.languages.includes(l))];
-  const sorted = [...questions].sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
-  return sorted.flatMap((q) => languageOrder.filter((l) => q.languages.includes(l)).map((language) => ({ question: q.slug, language })));
+  return dependencyOrder(questions).flatMap((q) => languageOrder.filter((l) => q.languages.includes(l)).map((language) => ({ question: q.slug, language })));
 }
 
 /**
@@ -646,4 +685,4 @@ function canOpenPair(profile, questions) {
   return (pair) => profile.languages.includes(pair.language) && available.has(`${pair.question}/${pair.language}`);
 }
 
-module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };
+module.exports = { SCHEMA_VERSION, QueueFileError, parseOrder, parseBacklog, parseQueueFiles, dependencyOrder, allowedPairs, backlogPairs, fillBacklog, pairsToAdd, addToBacklog, removeFromBacklog, passFor, recordSubmit, nextPair, listPairs, removeReferences, renameReferences, canOpenPair };
