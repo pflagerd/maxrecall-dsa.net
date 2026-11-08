@@ -1,0 +1,54 @@
+# Checks from outside that https://maxrecallcode.net answers, every 15
+# minutes. A failed run is the alarm: GitHub emails it to whoever gets this
+# workflow's notifications (readme.html, Decisions, 2026-11-08: the owner
+# turns on Actions notifications, then disables and re-enables this
+# workflow once so they're that person).
+#
+# Owner: infrastructure and security (docs/roles/infrastructure-and-security.md).
+# Design: docs/session-handoff/infrastructure-and-security/20261106T173312-0800.md, 4b.
+# Syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+
+name: Site is up
+
+on:
+  # Minutes 7, 22, 37 and 52 of every hour, UTC. Not on the hour: GitHub
+  # says scheduled runs "can be delayed during periods of high loads ...
+  # High load times include the start of every hour", and may be dropped.
+  # Schedules run only from the default branch (master).
+  # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  # A "Run workflow" button in the Actions tab, to check by hand.
+  workflow_dispatch:
+
+# The job's GITHUB_TOKEN gets no permissions at all: it only runs curl.
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    # A run that hangs is cancelled (the default is 360 minutes).
+    timeout-minutes: 5
+    steps:
+      # No third-party actions, so nothing to pin or trust: curl is in
+      # GitHub's Ubuntu 24.04 image.
+      #
+      # /login.html is one of server.js's PUBLIC_PATHS, and nginx passes
+      # every path to the app on port 3000 (deploy/nginx-maxrecallcode.conf),
+      # so a 200 means the app itself answered. Exactly 200: a redirect
+      # would mean the sign-in gate is wrong. When the app is down nginx
+      # answers 502, which curl's --retry counts as transient, as it does
+      # a timeout; --retry-connrefused adds nginx itself being down. Three
+      # retries 20 s apart ride out a restart (a deploy's is under a
+      # second) without an alarm; an outage over about a minute fails.
+      - name: GET https://maxrecallcode.net/login.html answers 200
+        run: |
+          url=https://maxrecallcode.net/login.html
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+                   --retry 3 --retry-delay 20 --retry-connrefused "$url") \
+            || { echo "No answer from $url (curl exit $?)."; exit 1; }
+          if [ "$code" != 200 ]; then
+            echo "$url answered $code, not 200."
+            exit 1
+          fi
+          echo "$url answered 200."
