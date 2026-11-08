@@ -1,8 +1,9 @@
 # Fundamentals, "Learned earlier" links, and checking the concept was used (#93, #88, #92): a proposal
 
-Status: **Part 1 decided** (owner, 2026-11-08: Q1 to Q3, below), not yet
-built; **Q5 moved to #146**; **Parts 2 and 3 still proposed**, to be
-decided later (owner, 2026-11-08). Proposed by questions, 2026-11-08
+Status: **Part 1 decided and built** (owner, 2026-11-08: Q1 to Q3; #154);
+**Q5 moved to #146** (built: #153, #155); **Part 2 decided** (owner,
+2026-11-08: a refresher, not a queue swap; below), questions' Q8 being
+built, the rest users'; **Part 3 still proposed**, to be decided later. Proposed by questions, 2026-11-08
 (#145). The owner answers the questions below in this file; each part
 can be decided and built on its own. Where this disagrees with
 `readme.html`, `readme.html` wins: it describes what's built.
@@ -176,8 +177,45 @@ with nothing to catch it, not a backwards one.
 
 ## Part 2. #88: clicking a "Learned earlier" link
 
-Not decided yet: the owner chose to decide Parts 2 and 3 later
-(2026-11-08), after Part 1 is built.
+**Decided** (owner, 2026-11-08), replacing the issue's queue swap:
+
+- **A click opens a refresher**: the earlier question's full page, in the
+  language of the page it was clicked on. "The Learning tab is not
+  enough. I want the learner to PROVE he has remembered by passing the
+  submission (again)" (owner).
+- **A refresher doesn't change the schedule** (owner): its Submit is
+  judged as any other, but no pair moves in the queue or backlog, and
+  nothing comes in from the backlog. (Why it matters, from `order.js`'s
+  `recordSubmit` and `advance.js`: a Submit moves the pair 1.3^k places
+  from where it is, and a Skip, or a fail, sets its passes in a row back
+  to 0. So a refresher that counted would bring the question back sooner
+  than its schedule, and a refresher left with a Skip would lose its
+  streak.)
+- **It pre-empts** the question it was clicked from, which is left
+  without a Submit or Skip, so it doesn't move either. **No gate**: after
+  a pass, the learner gets whatever the queue gives next (users'
+  `nextPair`), "it might be the question they clicked from and it might
+  not" (owner).
+- No preference (owner); questions' recommendations, for users to settle
+  in their design:
+  - **Same tab**, which fits "pre-empts". The page keeps no drafts (its
+    `localStorage` holds only the pane width and the timer's
+    visibility), so the code in progress is lost; #88's warning says so
+    before the page changes.
+  - **Every refresher Submit is saved**, pass or fail, marked as a
+    refresher, so the proof is on record. Today `routes.js` saves a
+    Submit and then calls `updateQueue`; a refresher would skip the
+    second.
+- **Users'**: the page (catching the click, the warning, the refresher's
+  address, e.g. `&language=…` and a refresher flag of users' choosing),
+  and the server (a refresher Submit saved, the queue left alone).
+  **Questions'**: Q6 to Q8, below.
+- Not decided, for later: what a Skip means on a refresher page (it
+  can't touch the queue either), and whether a refresher shows its own
+  past refresher Submits.
+
+The proposal as first written follows; each question's decision is
+under it.
 
 The issue: clicking a "Learned earlier" question loads it, with a warning,
 and swaps it into the queue: the clicked question becomes the current one,
@@ -223,6 +261,11 @@ recognise.
 **Recommendation: (a).** It works with the files as they are, and the
 form is already checked by `make test`.
 
+**Decided** (2026-11-08, with the refresher above): **(a)**. The 25
+links stay as they are; users' page catches a click on a Learning-tab
+link whose slug is in the problem's `alreadyLearned`, and builds the
+refresher's address itself.
+
 ### Q7. `target="_blank"`
 
 With #88 the click opens the question in the same tab and changes the
@@ -230,6 +273,12 @@ queue, so the new tab no longer fits. Users' handler can stop the default
 action either way, so this isn't required. **Recommendation:** leave the
 attribute until users' change lands, then remove it in a questions pull
 request, so that a page without users' handler still works meanwhile.
+
+**Follows users' choice of tab** (2026-11-08; the owner had no
+preference). With questions' recommendation, the **same tab**,
+`target="_blank"` comes out of the 25 links in a questions pull request
+**after** users' handler is merged; until then a link still opens a new
+tab, as today. If users choose a new tab instead, the attribute stays.
 
 ### Q8. A language for the swapped-in pair
 
@@ -244,13 +293,22 @@ build on one a learner can't open in their language. **Recommendation:
 add it with #88.** Whether the learner must already have that pair in
 their queue or backlog is users' to decide.
 
+**Decided** (2026-11-08; the owner had no preference, and the refresher
+makes it needed): **add the check now**, before users' #88 change. The
+refresher opens the earlier question in the clicked page's language, so
+that question must have it. It passes today. (No queue pair is swapped
+in any more, but the refresher needs the same language.)
+
 ### What it changes
 
 - **Contract 4**: users start relying on `alreadyLearned` (through
   `toPublicProblem`) and on the link form above; and on Q8's check.
 - **Questions' files**: `question-files.js` and `questions.test.js` (Q8),
   later the 25 links (Q7).
-- **Merge order**: questions' Q8 check first, then users' #88.
+- **Contract 2 or users' own** (users' to say): a Submit that's judged
+  and saved but doesn't move the queue.
+- **Merge order**: questions' Q8 check first, then users' #88, then
+  questions' Q7 (`target="_blank"` out).
 
 ## Part 3. #92 (and #11): checking the learner used the concept
 
