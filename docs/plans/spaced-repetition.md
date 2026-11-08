@@ -18,6 +18,7 @@ reasoning behind it.
 | 2026-11-03 | **D7 (owner):** (a), **stay on the results** after a Submit, but **the Submit button itself turns into a Next button**, rather than being grayed out with a second button beside it. Details, all accepted: per language, as now; **"Next" on the button, what's next in its tooltip**; Next **ignores clicks for its first second** (a double click on Submit mustn't leave the results unread); a **reload shows Submit again**; an **unsaved Submit stays Submit**. The server says what's next (`GET /api/next`), and the page takes **`?language=`** in its address. | Replaces issue #18's grayed-out Submit (`updateSubmitButton` in `problem-page.js`), so `readme.html`'s Front end section changes when it's built. |
 | 2026-11-03 | **D8 (owner):** Skip **marks the current pair `pass` = `"no"`**, then **loads the next pair as Next would**. Skips are **treated as the learner failing**, and **a Skip is saved as a submission record with `"skipped": "yes"`**; ordinary Submits **leave the field out**. Details, all accepted: a Skip counts **exactly like a failed Submit** (`passesInARow` to 0, moved `advance(0)` places, counted towards `submitsSinceLastIntroduced`); Skip is **hidden once the button says Next**; a **confirmation** when `passesInARow` is more than 0; a **backlog pair moves into the queue** when skipped or submitted; records go to **`schemaVersion` 3**; a Skip record has the **same fields as a Submit**, with `status`, `passed`, `total`, `runtimeMs`, `stdout` and `stderr` `null` and `results` `[]`, since it isn't judged; the **Submissions tab lists Skips** as "Skipped"; a Skip **doesn't count as having answered** (the Learning/Applying tab rule). | **Changes the 2026-10-29 decision** that Skips aren't recorded: they are now, in the same `submissions/` folder. Check 6 and the later recalculation read a Skip record as a fail, so `order.json` and the records agree. Anything reading `submissions/` has to check `skipped`. |
 | 2026-11-07 | **D7 changed (owner):** Submit turns into Next only after a **passing** Submit (`Accepted`). After a failed one, saved and counted as a fail as before, it **stays Submit, so the learner can try again**; Skip stays shown, and the timer keeps running. Each try is an ordinary Submit: recorded, and moving the pair (a fail sets `passesInARow` to 0 and moves it `advance(0)`, about 1 place; a later pass counts from there). Skip after a failed Submit is **unchanged** (owner): a Skip record, a second fail. Reported by the owner as a bug on `add-to-a-string`; it was D7 as decided, every saved Submit turning into Next. | `POST /api/questions/:slug/submit` answers `pass` (`"yes"` or `"no"`, from `order.js`'s `passFor`, the one place D3's rule lives), and `problem-page.js` turns Submit into Next, and freezes the timer, only on `"yes"`. Changes T3 of `docs/plans/elapsed-timer.md` the same way. |
+| 2026-11-08 | **D6 changed (owner, #146):** a backlog `"all"` is ordered by **dependencies first**: each question after the ones it builds on (`alreadyLearned`), otherwise by creation time, ties by file name, a topological sort (choice A(a)). For a chosen backlog, `make learner-create` and `make backlog-add` **warn**, and still write, when `SLUGS` puts a question before one it builds on or leaves one out (B(a)). **Existing backlogs are left as they are** (C(a)): only pairs added from now on follow the new order. | `order.js`'s `dependencyOrder()`, used by `allowedPairs()`; the warning in the two scripts. Takes effect once `questionInfos()` passes `alreadyLearned` on (questions'; contract 4). |
 
 ## What the owner asked for (from `TODO`)
 
@@ -373,6 +374,15 @@ go in will depend on the courses a learner is doing, and their order on
 dependencies between questions: some assume others are already mastered
 (concepts: a *prerequisite graph*, which is a *directed acyclic graph*,
 put in order by a *topological sort*). For now, creation order only.**
+
+**Changed 2026-11-08 (owner, #146):** dependencies came first, with
+`alreadyLearned` (each question's direct prerequisites) as the graph:
+`order.js`'s `dependencyOrder()` takes, at each step, the earliest-created
+question whose prerequisites are all placed (Kahn's algorithm, creation time
+choosing among the ready ones), so questions that build on nothing keep
+creation order. Courses are still later. Backlogs already written keep
+their order (`fillBacklog` only appends); the pairs appended, and a new
+user's backlog, follow the new one.
 
 - **Creation order comes from a `created` field in each question file**
   (an ISO 8601 date and time), filled in once from the full history on

@@ -50,7 +50,7 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @typedef {object} Problem
  * @property {string} slug - Its id; should match the file name.
  * @property {string} title
- * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard".
  * @property {string[]} topics
  * @property {string[]} sources
  * @property {string} created - When it was created, as UTC ISO 8601
