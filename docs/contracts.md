@@ -136,11 +136,14 @@ questions as fixtures, below).
     `QuestionInfo` from `order.js` (`import('./order').QuestionInfo &
     Pick<…>`, line 50; since #112). A type only, nothing at run time,
     but it ties the two in `make typecheck`: renaming or moving
-    `QuestionInfo` fails questions' check, and a field that
-    `questionInfos()` starts passing on must be in users' `QuestionInfo`
-    first, or questions' change fails with TS2353. So such a field
-    merges users' change first, then questions' (#146; users' finding,
-    checked locally by users, 2026-11-08).
+    `QuestionInfo` fails questions' check. A field that `questionInfos()`
+    starts passing on must be in `QuestionListing`, or questions' change
+    fails with TS2353: either in users' `QuestionInfo` (then users'
+    change merges first) or in questions' own `Pick<QuestionFile, …>`,
+    with `QuestionFile` declaring it (then no change of users' is
+    needed). #146's `alreadyLearned` takes the second way, so its two
+    pull requests merge in either order (questions' and users' findings,
+    2026-11-08).
   - **Three questions are users' test fixtures** (questions' finding,
     users agreeing, 2026-11-07). `routes.test.js` (in `make test`) judges
     through a real server, which reads the real `questions/`:
