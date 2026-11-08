@@ -404,7 +404,7 @@ descriptionPaneEl.addEventListener(
  * @typedef {object} PublicProblem
  * @property {string} slug
  * @property {string} title
- * @property {string} difficulty - "Easy", "Medium" or "Hard".
+ * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard".
  * @property {string[]} [topics]
  * @property {string[]} [sources]
  * @property {Record<string, string>} [learning] - The Learning tab's HTML, by language.
