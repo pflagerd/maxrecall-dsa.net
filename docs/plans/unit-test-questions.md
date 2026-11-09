@@ -1,6 +1,6 @@
 # Unit-test questions: tests written as code, in each language's framework
 
-Status: **proposed** (questions, questions 1 session, 2026-11-09; issue
+Status: **proposed** (questions, questions-1 session, 2026-11-09; issue
 #174). On hold from 2026-11-08 ("Everything on hold") until the owner
 chose its prototype, 2026-11-09. Some of the design is decided (below);
 a prototype in Python has run ("Prototype", below); nothing is built into

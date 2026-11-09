@@ -2,7 +2,7 @@
 
 2026-11-09 · decided by the owner · written by questions
 
-**Decided** (owner, 2026-11-08 and 2026-11-09, in the questions 1
+**Decided** (owner, 2026-11-08 and 2026-11-09, in the questions-1
 session; `docs/plans/unit-test-questions.md`, on hold, nothing built):
 
 - A planned third way of judging, where a test case is code in the
