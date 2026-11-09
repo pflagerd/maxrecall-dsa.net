@@ -16,8 +16,23 @@
 // `blank` a string no longer than the question's maxLength, and no other
 // field. judgeFillInTheBlank checks again, cheaply, in case a route ever doesn't.
 
+const crypto = require('crypto');
+const fs = require('fs');
+
 const { QUESTIONS_DIR, kindOf, fillInTheBlankMaxLength } = require('../question-files');
 const { resolveInside } = require('../paths');
+
+/**
+ * Each loaded judge file's SHA-256, in hex, by its absolute path: the hash
+ * of the bytes read when it was loaded, for records version 4's
+ * judgeSha256 (users' D6, #168; owner, 2026-11-09, option b). Node keeps
+ * the first-loaded code (require's cache) until the server restarts, so a
+ * judge file changed under a running server would be judged by the old
+ * code; hashing at load keeps the hash matching the code that ran (as
+ * infrastructure and security's #160 review advised).
+ * @type {Map<string, string>}
+ */
+const judgeHashes = new Map();
 
 /** The longest message a judge may give, in UTF-16 code units (#171). @type {number} */
 const MESSAGE_MAX_LENGTH = 500;
@@ -163,6 +178,12 @@ function loadJudge(question, dir = QUESTIONS_DIR) {
   /** @type {unknown} */
   let mod;
   try {
+    // Hash the bytes just before the first require of the file, or after
+    // its cache entry was dropped. The one gap: a change to the file in the
+    // moment between this read and the require.
+    if (!judgeHashes.has(file) || require.cache[file] === undefined) {
+      judgeHashes.set(file, crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'));
+    }
     mod = require(file);
   } catch (err) {
     throw new JudgeFailedError(question.slug, `its judge file couldn't be loaded: ${/** @type {Error} */ (err).message}`);
@@ -230,4 +251,29 @@ function judgeFillInTheBlank(question, answer, language, dir = QUESTIONS_DIR) {
   }
 }
 
-module.exports = { judgeFillInTheBlank, loadJudge, judgeFilePath, checkVerdict, plainCopy, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };
+/**
+ * The SHA-256, in hex, of a fill-in-the-blank question's judge file as it
+ * was loaded: the code that judges its answers until the server restarts
+ * (users' D6, #168; owner, 2026-11-09, option b). Loads the judge if it
+ * isn't yet, as judging would, so a Skip, which judges nothing, gets the
+ * same hash a Submit would. Not part of judgeFillInTheBlank's result, which
+ * routes.js sends to the browser as it is (contract 4: nothing of the
+ * judge is sent).
+ *
+ * @param {{ slug: string, kind?: string }} question - The question, as
+ *   loaded from its file (routes.js's loadProblem).
+ * @param {string} [dir] - The folder of questions; QUESTIONS_DIR unless a
+ *   test gives its own.
+ * @returns {string} The judge file's SHA-256, 64 hex digits.
+ * @throws {TypeError} If the question isn't a fill-in-the-blank question.
+ * @throws {JudgeFailedError} If its judge file can't be loaded, or doesn't
+ *   export a judge function (as loadJudge).
+ */
+function judgeSha256Of(question, dir = QUESTIONS_DIR) {
+  loadJudge(question, dir);
+  // Casts: loadJudge returned, so judgeFilePath gave a path (not null) and
+  // that path's hash was set.
+  return /** @type {string} */ (judgeHashes.get(/** @type {string} */ (judgeFilePath(question.slug, dir))));
+}
+
+module.exports = { judgeFillInTheBlank, judgeSha256Of, loadJudge, judgeFilePath, checkVerdict, plainCopy, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };
