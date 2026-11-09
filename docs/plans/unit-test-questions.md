@@ -1,7 +1,7 @@
 # Unit-test questions: tests written as code, in each language's framework
 
-Status: **proposed** (questions, questions 1 session, 2026-11-09), **on
-hold** (owner, 2026-11-08: "Everything on hold"). Some of the design is
+Status: **proposed** (questions, questions 1 session, 2026-11-09; issue
+#174), **on hold** (owner, 2026-11-08: "Everything on hold"). Some of the design is
 decided (below); nothing is built, and no pull request is open. Where this
 disagrees with `readme.html`, `readme.html` wins: it describes what's
 built.
