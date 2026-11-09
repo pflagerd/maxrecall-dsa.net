@@ -496,7 +496,24 @@ const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze([
   'require', 'constructor', '__proto__', 'caller', 'callee',
   'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', 'getPrototypeOf', 'setPrototypeOf', 'defineProperty', 'defineProperties',
   '__lookupGetter__', '__lookupSetter__', '__defineGetter__', '__defineSetter__',
+  // owner, 2026-11-09, (a): no judge needs it, and it's the door to
+  // changing a built-in for the whole server (String.prototype.startsWith).
+  'prototype',
 ]);
+/**
+ * The built-ins a judge file may refer to without declaring them (R1's
+ * allow-list; owner, 2026-11-09, (a)). Anything else not declared in the
+ * judge file is refused, so a name nobody thought of (fetch, Promise,
+ * WebSocket, console, Buffer, exports, …) is refused too. Each may only be
+ * called (`String(x)`, `new Set()`) or have a property read
+ * (`Math.max(a, b)`, `JSON.parse(s)`), never be used as a value
+ * (`const M = Math`, `arr.map(Number)`): an alias would let a write to it
+ * pass as a write to the judge's own variable.
+ * @type {readonly string[]}
+ */
+const JUDGE_ALLOWED_BUILTINS = Object.freeze(['String', 'Number', 'Boolean', 'Math', 'JSON', 'Array', 'Set', 'Map', 'RegExp']);
+/** Built-in values a judge file may use anywhere, as they're not objects (R1's allow-list). @type {readonly string[]} */
+const JUDGE_ALLOWED_VALUES = Object.freeze(['undefined', 'NaN', 'Infinity']);
 
 /**
  * What a judge file breaks of R1, read with TypeScript's parser. Closed by
@@ -511,6 +528,17 @@ const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze([
  *   JUDGE_FORBIDDEN_PROPERTIES wherever a property's name is written;
  * - a computed key (x[k], { [k]: v }, { [k]: y } = x) only as a string or
  *   number literal, so every property's name can be read here.
+ * Then an allow-list of names (owner, 2026-11-09, (a)), for the ways round
+ * that need no forbidden name (a built-in changed, fetch, code run later):
+ * - every name refers to something the judge file declares (found with
+ *   TypeScript's checker, which knows each name's scope), or is in
+ *   JUDGE_ALLOWED_BUILTINS, only called or read from, or in
+ *   JUDGE_ALLOWED_VALUES;
+ * - every write (=, +=, ++, --, delete, a destructuring or for-in/of
+ *   target) is to a variable the judge file declares, or a property of
+ *   one, or of module.exports;
+ * - no async, await, generators or yield: each runs code after the judge
+ *   returns.
  * Not a sandbox (a determined author can get round it): it makes a judge
  * that reaches past its blank a failing test, not something a reviewer
  * must spot. Review (R3) is the guard against a deliberate evasion.
@@ -519,7 +547,18 @@ const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze([
  * @returns {string[]} The problems, each with its line; empty if none.
  */
 function judgeSourceProblems(source) {
-  const file = ts.createSourceFile('judge.js', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  const fileName = '/judge.js';
+  const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  // A program of this one file, with no lib: TypeScript's checker then
+  // resolves each name to its declaration in the file, by scope, and a
+  // built-in or any other global resolves to nothing.
+  /** @type {import('typescript6').CompilerOptions} */
+  const options = { allowJs: true, noLib: true, noResolve: true, types: [], target: ts.ScriptTarget.ES2022 };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name) => (name === fileName ? file : undefined);
+  host.fileExists = (name) => name === fileName;
+  host.readFile = (name) => (name === fileName ? source : undefined);
+  const checker = ts.createProgram([fileName], options, host).getTypeChecker();
   /** @type {string[]} */
   const problems = [];
   /**
@@ -569,6 +608,74 @@ function judgeSourceProblems(source) {
       || ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent) || ts.isPropertyDeclaration(parent)) && parent.name === node)
       || (ts.isBindingElement(parent) && parent.propertyName === node);
   };
+  /**
+   * Whether a name is declared in the judge file, in a scope it's used in:
+   * a variable, function, class, parameter or catch binding of its own.
+   *
+   * @param {import('typescript6').Identifier} node - A name, used as a reference.
+   * @returns {boolean} True if it resolves to the judge file's own declaration.
+   */
+  const isDeclaredHere = (node) => {
+    const parent = node.parent;
+    const symbol = ts.isShorthandPropertyAssignment(parent) && parent.name === node ? checker.getShorthandAssignmentValueSymbol(parent) : checker.getSymbolAtLocation(node);
+    // Only a real declaration counts. In a JavaScript file TypeScript also
+    // treats an assignment like `Math.max = …` as declaring Math (its
+    // "expando" assignments), which would let any write declare its own
+    // target.
+    return !!symbol && (symbol.declarations || []).some((d) => d.getSourceFile() === file && (ts.isVariableDeclaration(d) || ts.isParameter(d) || ts.isFunctionDeclaration(d) || ts.isFunctionExpression(d) || ts.isClassDeclaration(d) || ts.isClassExpression(d) || ts.isBindingElement(d)));
+  };
+  /**
+   * What a write changes: the targets of an assignment's left side,
+   * looking inside a destructuring pattern ([a, b.c] = …, ({ x: d.e } = …)).
+   *
+   * @param {import('typescript6').Expression} target - The left side, or an element of it.
+   * @returns {import('typescript6').Expression[]} Each place written to.
+   */
+  const writeTargets = (target) => {
+    while (ts.isParenthesizedExpression(target)) target = target.expression;
+    if (ts.isArrayLiteralExpression(target)) return target.elements.flatMap((e) => (ts.isOmittedExpression(e) ? [] : writeTargets(ts.isSpreadElement(e) ? e.expression : e)));
+    if (ts.isObjectLiteralExpression(target)) {
+      return target.properties.flatMap(
+        /**
+         * One property of a destructuring pattern: where it writes.
+         *
+         * @param {import('typescript6').ObjectLiteralElementLike} p - The property.
+         * @returns {import('typescript6').Expression[]} Each place written to.
+         */
+        (p) => {
+          if (ts.isPropertyAssignment(p)) return writeTargets(p.initializer);
+          if (ts.isShorthandPropertyAssignment(p)) return [p.name];
+          if (ts.isSpreadAssignment(p)) return writeTargets(p.expression);
+          return [];
+        },
+      );
+    }
+    if (ts.isBinaryExpression(target) && target.operatorToken.kind === ts.SyntaxKind.EqualsToken) return writeTargets(target.left); // a default: [a = 1] = …
+    return [target];
+  };
+  /**
+   * Checks one place a write changes: a variable the judge file declares,
+   * a property of one (o.x, o["x"], o.x.y), or of module.exports.
+   * Anything else (a built-in, a global, a property of a call's result) is
+   * a problem.
+   *
+   * @param {import('typescript6').Expression} target - The place written to.
+   * @returns {void}
+   */
+  const checkWriteTarget = (target) => {
+    /** @type {import('typescript6').Expression} */
+    let root = target;
+    /** @type {import('typescript6').Expression | null} */
+    let below = null;
+    for (;;) {
+      if (ts.isParenthesizedExpression(root)) root = root.expression;
+      else if (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root)) { below = root; root = root.expression; }
+      else break;
+    }
+    const exportsOf = below !== null && ts.isPropertyAccessExpression(below) && below.name.text === 'exports';
+    if (ts.isIdentifier(root) && (isDeclaredHere(root) || (root.text === 'module' && exportsOf))) return;
+    problems.push(`${at(target)}: a write must be to something the judge file declares (or module.exports), not ${target.getText(file)}`);
+  };
 
   const first = file.statements[0];
   const strict = first && ts.isExpressionStatement(first) && ts.isStringLiteral(first.expression) && ["'use strict'", '"use strict"'].includes(first.expression.getText(file));
@@ -591,15 +698,28 @@ function judgeSourceProblems(source) {
     }
     if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isPropertyDeclaration(node)) checkPropertyName(node.name);
     if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) checkPropertyName(node.propertyName || node.name);
-    if (ts.isIdentifier(node) && !isPropertyName(node)) {
+    if (ts.isFunctionLike(node) && (ts.getCombinedModifierFlags(/** @type {import('typescript6').Declaration} */ (node)) & ts.ModifierFlags.Async)) problems.push(`${at(node)}: async is not allowed`);
+    if ((ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isMethodDeclaration(node)) && node.asteriskToken) problems.push(`${at(node)}: a generator is not allowed`);
+    if (ts.isAwaitExpression(node) || (ts.isForOfStatement(node) && node.awaitModifier)) problems.push(`${at(node)}: await is not allowed`);
+    if (ts.isYieldExpression(node)) problems.push(`${at(node)}: yield is not allowed`);
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment) writeTargets(node.left).forEach(checkWriteTarget);
+    if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) && (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken)) checkWriteTarget(node.operand);
+    if (ts.isDeleteExpression(node)) checkWriteTarget(node.expression);
+    if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && !ts.isVariableDeclarationList(node.initializer)) writeTargets(node.initializer).forEach(checkWriteTarget);
+    const isLabel = ts.isIdentifier(node) && (ts.isLabeledStatement(node.parent) || ts.isBreakOrContinueStatement(node.parent)) && /** @type {{ label?: import('typescript6').Node }} */ (node.parent).label === node;
+    if (ts.isIdentifier(node) && !isPropertyName(node) && !isLabel) {
       const parent = node.parent;
       if (JUDGE_FORBIDDEN_NAMES.includes(node.text)) problems.push(`${at(node)}: ${node.text} is not allowed`);
-      if (node.text === 'module' && !(ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'exports')) problems.push(`${at(node)}: module may be used only as module.exports`);
-      if (node.text === 'require') {
+      else if (node.text === 'module') {
+        if (!(ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'exports')) problems.push(`${at(node)}: module may be used only as module.exports`);
+      } else if (node.text === 'require') {
         const call = ts.isCallExpression(parent) && parent.expression === node ? parent : null;
         const target = call && call.arguments.length === 1 && ts.isStringLiteral(call.arguments[0]) ? call.arguments[0].text : null;
         if (target === null) problems.push(`${at(node)}: require may only be called with a helper's path`);
         else if (!JUDGE_HELPERS.includes(target)) problems.push(`${at(node)}: require(${JSON.stringify(target)}) is not an allowed judge/ helper`);
+      } else if (!isDeclaredHere(node) && !JUDGE_ALLOWED_VALUES.includes(node.text)) {
+        if (!JUDGE_ALLOWED_BUILTINS.includes(node.text)) problems.push(`${at(node)}: ${node.text} is neither declared in the judge file nor an allowed built-in`);
+        else if (!((ts.isCallExpression(parent) || ts.isNewExpression(parent) || ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node)) problems.push(`${at(node)}: ${node.text} may only be called or have a property read, not be used as a value`);
       }
     }
     ts.forEachChild(node, visit);
@@ -608,7 +728,7 @@ function judgeSourceProblems(source) {
   return problems;
 }
 
-test('R1: a judge file may use none of process, globalThis, eval, Function, import(), or require but of a helper, nor any way round them found so far', () => {
+test('R1: a judge file uses only its own names and allowed built-ins, writes only its own, and none of the ways round found so far', () => {
   assert.deepEqual(judgeSourceProblems(QUOTE_JUDGE), []);
   /**
    * A judge file that keeps every rule, judging with `body`.
@@ -620,6 +740,27 @@ test('R1: a judge file may use none of process, globalThis, eval, Function, impo
   assert.deepEqual(judgeSourceProblems(ok('({ pass: b.process === 1 })')), [], 'a property named process is fine');
   assert.deepEqual(judgeSourceProblems(ok('({ pass: b[0] === "x" && b["length"] === 1 && b.at(-1) === "x" })')), [], 'literal keys are fine');
   assert.deepEqual(judgeSourceProblems(`"use strict";\nconst { length } = "x";\nmodule.exports = { judge: () => ({ pass: length === 1 }) };`), [], 'double quotes, and a harmless destructuring');
+  // What a judge may do under the allow-list (owner, 2026-11-09, (a)).
+  const allowed = `'use strict';
+const QUOTES = new Set(["'", '\u2019']);
+const hints = [];
+let count = 0;
+function hintFor(blank, language) {
+  const fetch = blank.trim();
+  count += 1;
+  outer: for (const c of fetch) { if (c === '\\\\') break outer; }
+  return String(fetch.length) + Math.max(1, Number(language === 'python')) + JSON.stringify([undefined, NaN, Infinity]) + Array.isArray(hints) + RegExp('x').test(fetch);
+}
+const state = { seen: 0, list: [0] };
+state.seen += 1;
+state.list.push(1);
+[count] = [0];
+({ seen: state.seen } = { seen: 2 });
+try { hints.push(hintFor('x', 'python')); } catch (e) { hints.push(String(e)); }
+module.exports = { judge(blank, { language }) { return { pass: QUOTES.has(blank) && language !== '' }; }, cases: [] };
+module.exports.extra = Boolean(new Map().size);
+`;
+  assert.deepEqual(judgeSourceProblems(allowed), [], 'its own names (a local named fetch included), the allowed built-ins called or read from, writes to its own variables and to module.exports, a label');
   for (const [bad, pattern] of [
     ['const fs = require("fs");', /require\("fs"\) is not an allowed/],
     ['const r = require; r("fs");', /require may only be called/],
@@ -666,6 +807,41 @@ test('R1: a judge file may use none of process, globalThis, eval, Function, impo
     ['new Proxy({}, {});', /Proxy is not allowed/],
     ['function f() { return arguments; }', /arguments is not allowed/],
     ['const s = "abc"; const i = 0; s[i];', /x\[k\] needs a string or number literal/],
+    // The architect's R3 re-review of #181 at 313d85f: three kinds with no
+    // forbidden name, closed by the allow-list (owner, 2026-11-09, (a)).
+    // 1. changing a built-in for the whole server;
+    ['String.prototype.startsWith = () => true;', /"prototype" is not allowed/],
+    ['Math.max = () => 0;', /a write must be to something the judge file declares/],
+    // 2. the network;
+    ['fetch("http://127.0.0.1:3001/");', /fetch is neither declared in the judge file nor an allowed built-in/],
+    // 3. code run after judging returns, with a name or with none.
+    ['Promise.resolve().then(() => 0);', /Promise is neither declared/],
+    ['const later = async () => { await 0; };', /async is not allowed/],
+    // An alias of a built-in (questions 2, 2026-11-09): run, it set
+    // Math.max(1, 2) to 0 for the whole process; M is the judge's own
+    // variable, so the write rule alone wouldn't see it.
+    ['const M = Math; M.max = () => 0;', /Math may only be called or have a property read/],
+    // Each rule on its own.
+    ['console.log("x");', /console is neither declared/],
+    ['exports.judge = () => ({ pass: true });', /exports is neither declared/],
+    ['function f(fetch) { return fetch; }\nfetch("x");', /line 3: fetch is neither declared/],
+    ['const o = { fetch };', /fetch is neither declared/],
+    ['[1].map(Number);', /Number may only be called/],
+    ['const x = [] instanceof Array;', /Array may only be called/],
+    ['JSON.parse = () => ({});', /a write must be to something/],
+    ['delete Math.PI;', /a write must be to something/],
+    ['Math.random.x = 1;', /a write must be to something/],
+    ['Math.x++;', /a write must be to something/],
+    ['[Math.x] = [1];', /a write must be to something/],
+    ['({ a: JSON.x } = { a: 1 });', /a write must be to something/],
+    ['for (Math.x of [1]) {}', /a write must be to something/],
+    ['[].x = 1;', /a write must be to something/],
+    ['undefinedThing = 1;', /a write must be to something|undefinedThing is neither declared/],
+    ['async function f() {}', /async is not allowed/],
+    ['const o = { async m() {} };', /async is not allowed/],
+    ['function* g() { yield 1; }', /a generator is not allowed/],
+    ['function* g() { yield 1; }', /yield is not allowed/],
+    ['const o = { *m() {} };', /a generator is not allowed/],
   ]) {
     const source = String(bad).startsWith("'use") || String(bad).startsWith('module.exports') ? String(bad) : `'use strict';\n${bad}`;
     assert.ok(judgeSourceProblems(source).some((p) => /** @type {RegExp} */ (pattern).test(p)), `${source}\n  gave ${JSON.stringify(judgeSourceProblems(source))}`);
