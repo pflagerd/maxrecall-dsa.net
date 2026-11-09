@@ -103,6 +103,30 @@ function checkVerdict(result) {
 }
 
 /**
+ * A judge's result, read once into plain data before it's checked (the
+ * architect's R3 review of #181): its own fields' values, and a copy of
+ * hints if that's a list. A getter is called once here, inside
+ * judgeFillIn's try, so it can neither throw past the check nor give one
+ * value to checkVerdict and another to the result (a time-of-check to
+ * time-of-use gap). Anything that isn't a plain, non-promise object is
+ * returned as it is, for checkVerdict to refuse.
+ *
+ * @param {unknown} result - What the judge returned.
+ * @returns {unknown} A plain copy, or result itself.
+ * @throws {Error} Whatever a getter, or a then property, throws.
+ */
+function plainCopy(result) {
+  if (typeof result !== 'object' || result === null || Array.isArray(result)) return result;
+  if (typeof (/** @type {{ then?: unknown }} */ (result).then) === 'function') return result;
+  const source = /** @type {Record<string, unknown>} */ (result);
+  /** @type {Record<string, unknown>} */
+  const copy = {};
+  for (const key of Object.keys(source)) copy[key] = source[key];
+  if (Array.isArray(copy.hints)) copy.hints = copy.hints.slice();
+  return copy;
+}
+
+/**
  * The path of a fill-in question's judge file, questions/<slug>.judge.js,
  * found through resolveInside so that no slug can reach outside the
  * folder (R2).
@@ -184,9 +208,17 @@ function judgeFillIn(question, answer, language, dir = QUESTIONS_DIR) {
     } catch (err) {
       throw new JudgeFailedError(question.slug, `it threw: ${/** @type {Error} */ (err).stack || err}`);
     }
-    const wrong = checkVerdict(result);
+    /** @type {unknown} */
+    let plain;
+    try {
+      plain = plainCopy(result);
+    } catch (err) {
+      // A getter in the verdict threw (architect's R3 review of #181).
+      throw new JudgeFailedError(question.slug, `reading its verdict threw: ${/** @type {Error} */ (err).stack || err}`);
+    }
+    const wrong = checkVerdict(plain);
     if (wrong) throw new JudgeFailedError(question.slug, `it returned ${wrong}`);
-    const verdict = /** @type {Verdict} */ (result);
+    const verdict = /** @type {Verdict} */ (plain);
     return {
       status: verdict.pass ? 'Accepted' : 'Wrong Answer',
       ...(verdict.message !== undefined && { message: verdict.message }),
@@ -198,4 +230,4 @@ function judgeFillIn(question, answer, language, dir = QUESTIONS_DIR) {
   }
 }
 
-module.exports = { judgeFillIn, loadJudge, judgeFilePath, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };
+module.exports = { judgeFillIn, loadJudge, judgeFilePath, checkVerdict, plainCopy, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };

@@ -331,6 +331,7 @@ const FIXTURES = judgeFolder({
   throws: 'module.exports = { judge() { throw new Error("oops"); } };',
   async: 'module.exports = { judge: async () => ({ pass: true }) };',
   shape: 'module.exports = { judge: () => ({ pass: "yes" }) };',
+  getter: 'module.exports = { judge: () => ({ get pass() { throw new Error("boom"); } }) };',
   long: `module.exports = { judge: () => ({ pass: false, message: "x".repeat(${MESSAGE_MAX_LENGTH + 1}) }) };`,
   nojudge: 'module.exports = {};',
   loops: 'module.exports = { judge() { for (;;) {} }, cases: [{ blank: "x", pass: true }] };',
@@ -353,9 +354,9 @@ test('judgeFillIn: a pass is Accepted; a fail is Wrong Answer with the judge\'s 
   assert.ok(!('passed' in fail) && !('total' in fail));
 });
 
-test('judgeFillIn: a judge that throws, is async, returns the wrong shape or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
+test('judgeFillIn: a judge that throws, is async, returns the wrong shape, a getter that throws, or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
   t.mock.method(console, 'error', () => {}); // judgeFillIn logs each failure; keep the test output clean
-  for (const slug of ['throws', 'async', 'shape', 'long', 'nojudge', 'no-such-judge']) {
+  for (const slug of ['throws', 'async', 'shape', 'getter', 'long', 'nojudge', 'no-such-judge']) {
     assert.throws(() => judgeFillIn(fillIn(slug), { blank: 'x' }, 'python', FIXTURES), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED', slug);
   }
   assert.throws(() => judgeFillIn(fillIn('../quote'), { blank: 'x' }, 'python', path.join(FIXTURES, 'sub')), /JUDGE_FAILED|outside/, 'a slug can\'t lead outside the folder (R2)');
@@ -470,13 +471,27 @@ test('the worker harness: a judge\'s cases pass, and a judge that never returns 
 
 /** The judge/ helpers a judge file may require (R1), by the path it requires them with; none yet. @type {readonly string[]} */
 const JUDGE_HELPERS = Object.freeze([]);
-/** What a judge file may not name (R1). @type {readonly string[]} */
-const JUDGE_FORBIDDEN_NAMES = Object.freeze(['process', 'globalThis', 'eval', 'Function']);
+/**
+ * What a judge file may not name (R1): the four the rule lists, and (the
+ * architect's R3 review of #181) `global`, which reaches process as
+ * global.process, and the timers, which run code after judging returns.
+ * @type {readonly string[]}
+ */
+const JUDGE_FORBIDDEN_NAMES = Object.freeze(['process', 'globalThis', 'eval', 'Function', 'global', 'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask']);
+/**
+ * What a judge file may not use as a property name either (the
+ * architect's R3 review of #181): module.require("fs") loads anything;
+ * ({}).constructor.constructor builds a Function from text;
+ * module.constructor._load loads anything; __proto__ reaches the same.
+ * @type {readonly string[]}
+ */
+const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze(['require', 'constructor', '__proto__']);
 
 /**
  * What a judge file breaks of R1, read with TypeScript's parser: a
  * require of anything but JUDGE_HELPERS, require used other than as such a
- * call, a dynamic import(), or a name in JUDGE_FORBIDDEN_NAMES. Not a
+ * call, a dynamic import(), a name in JUDGE_FORBIDDEN_NAMES, or a property
+ * in JUDGE_FORBIDDEN_PROPERTIES (x.constructor, x["constructor"]). Not a
  * sandbox (a determined author can get round it): it makes a judge that
  * reaches past its blank a failing test, not something a reviewer must
  * spot.
@@ -503,6 +518,8 @@ function judgeSourceProblems(source) {
    */
   const visit = (node) => {
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) problems.push(`${at(node)}: import() is not allowed`);
+    if (ts.isPropertyAccessExpression(node) && JUDGE_FORBIDDEN_PROPERTIES.includes(node.name.text)) problems.push(`${at(node)}: .${node.name.text} is not allowed`);
+    if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression) && JUDGE_FORBIDDEN_PROPERTIES.includes(node.argumentExpression.text)) problems.push(`${at(node)}: [${JSON.stringify(node.argumentExpression.text)}] is not allowed`);
     if (ts.isIdentifier(node)) {
       const parent = node.parent;
       const isPropertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node) || (ts.isPropertyAssignment(parent) && parent.name === node) || (ts.isMethodDeclaration(parent) && parent.name === node);
@@ -531,6 +548,14 @@ test('R1: a judge file may use none of process, globalThis, eval, Function, impo
     ['globalThis.x = 1;', /globalThis is not allowed/],
     ['eval("1");', /eval is not allowed/],
     ['new Function("return 1")();', /Function is not allowed/],
+    // The architect's R3 review of #181: ways round the names above.
+    ['global.process.exit(1);', /global is not allowed/],
+    ['module.require("fs");', /\.require is not allowed/],
+    ['({}).constructor.constructor("return 1")();', /\.constructor is not allowed/],
+    ['module.constructor._load("child_process");', /\.constructor is not allowed/],
+    ['setTimeout(() => {}, 1);', /setTimeout is not allowed/],
+    ['({})["constructor"];', /\["constructor"\] is not allowed/],
+    ['({}).__proto__;', /\.__proto__ is not allowed/],
   ]) {
     assert.ok(judgeSourceProblems(String(bad)).some((p) => /** @type {RegExp} */ (pattern).test(p)), String(bad));
   }
