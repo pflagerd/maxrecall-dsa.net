@@ -512,6 +512,17 @@ const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze([
  * @type {readonly string[]}
  */
 const JUDGE_ALLOWED_BUILTINS = Object.freeze(['String', 'Number', 'Boolean', 'Math', 'JSON', 'Array', 'Set', 'Map', 'RegExp']);
+/**
+ * The allowed built-ins that may only be called or constructed, never have
+ * a property read (the architect's R3 review of #191): RegExp's legacy
+ * statics (RegExp.input, lastMatch, $1–$9, leftContext, rightContext) hold
+ * the last match made anywhere in the process, and auth.js tests session
+ * tokens with a regular expression (auth.js:503). Of the allowed
+ * built-ins, only RegExp has such properties (checked on Node 22.23.4: the
+ * others' own properties are all functions or fixed constants).
+ * @type {readonly string[]}
+ */
+const JUDGE_CALL_ONLY_BUILTINS = Object.freeze(['RegExp']);
 /** Built-in values a judge file may use anywhere, as they're not objects (R1's allow-list). @type {readonly string[]} */
 const JUDGE_ALLOWED_VALUES = Object.freeze(['undefined', 'NaN', 'Infinity']);
 
@@ -532,8 +543,8 @@ const JUDGE_ALLOWED_VALUES = Object.freeze(['undefined', 'NaN', 'Infinity']);
  * that need no forbidden name (a built-in changed, fetch, code run later):
  * - every name refers to something the judge file declares (found with
  *   TypeScript's checker, which knows each name's scope), or is in
- *   JUDGE_ALLOWED_BUILTINS, only called or read from, or in
- *   JUDGE_ALLOWED_VALUES;
+ *   JUDGE_ALLOWED_BUILTINS, only called or read from (only called, for
+ *   JUDGE_CALL_ONLY_BUILTINS), or in JUDGE_ALLOWED_VALUES;
  * - every write (=, +=, ++, --, delete, a destructuring or for-in/of
  *   target) is to a variable the judge file declares, or a property of
  *   one, or of module.exports;
@@ -719,7 +730,9 @@ function judgeSourceProblems(source) {
         else if (!JUDGE_HELPERS.includes(target)) problems.push(`${at(node)}: require(${JSON.stringify(target)}) is not an allowed judge/ helper`);
       } else if (!isDeclaredHere(node) && !JUDGE_ALLOWED_VALUES.includes(node.text)) {
         if (!JUDGE_ALLOWED_BUILTINS.includes(node.text)) problems.push(`${at(node)}: ${node.text} is neither declared in the judge file nor an allowed built-in`);
-        else if (!((ts.isCallExpression(parent) || ts.isNewExpression(parent) || ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node)) problems.push(`${at(node)}: ${node.text} may only be called or have a property read, not be used as a value`);
+        else if (JUDGE_CALL_ONLY_BUILTINS.includes(node.text)) {
+          if (!((ts.isCallExpression(parent) || ts.isNewExpression(parent)) && parent.expression === node)) problems.push(`${at(node)}: ${node.text} may only be called or constructed, not have a property read or be used as a value`);
+        } else if (!((ts.isCallExpression(parent) || ts.isNewExpression(parent) || ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === node)) problems.push(`${at(node)}: ${node.text} may only be called or have a property read, not be used as a value`);
       }
     }
     ts.forEachChild(node, visit);
@@ -749,7 +762,7 @@ function hintFor(blank, language) {
   const fetch = blank.trim();
   count += 1;
   outer: for (const c of fetch) { if (c === '\\\\') break outer; }
-  return String(fetch.length) + Math.max(1, Number(language === 'python')) + JSON.stringify([undefined, NaN, Infinity]) + Array.isArray(hints) + RegExp('x').test(fetch);
+  return String(fetch.length) + Math.max(1, Number(language === 'python')) + JSON.stringify([undefined, NaN, Infinity]) + Array.isArray(hints) + RegExp('x').test(fetch) + new RegExp('y').test(fetch) + /z/.test(fetch);
 }
 const state = { seen: 0, list: [0] };
 state.seen += 1;
@@ -842,6 +855,13 @@ module.exports.extra = Boolean(new Map().size);
     ['function* g() { yield 1; }', /a generator is not allowed/],
     ['function* g() { yield 1; }', /yield is not allowed/],
     ['const o = { *m() {} };', /a generator is not allowed/],
+    // The architect's R3 review of #191: RegExp's legacy statics hold the
+    // last match made anywhere in the process (run: a judge's message
+    // carried a token tested before it).
+    ['const m = RegExp.input;', /RegExp may only be called or constructed/],
+    ['const m = RegExp.lastMatch + RegExp.$1;', /RegExp may only be called or constructed/],
+    ['const m = RegExp["leftContext"];', /RegExp may only be called or constructed/],
+    ['const R = RegExp;', /RegExp may only be called or constructed/],
   ]) {
     const source = String(bad).startsWith("'use") || String(bad).startsWith('module.exports') ? String(bad) : `'use strict';\n${bad}`;
     assert.ok(judgeSourceProblems(source).some((p) => /** @type {RegExp} */ (pattern).test(p)), `${source}\n  gave ${JSON.stringify(judgeSourceProblems(source))}`);
