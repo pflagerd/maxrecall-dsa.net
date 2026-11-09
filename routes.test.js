@@ -29,6 +29,7 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+const crypto = require('crypto');
 
 const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS, checkFillInTheBlankAnswer, judgeErrorAnswer, COULDNT_JUDGE } = require('./routes');
 const { QUESTION_FIELDS, checkQuestion } = require('./question-files');
@@ -764,6 +765,11 @@ test('Submit: a bad elapsedMs is 400; a wrong Submit is saved as a fail; an Acce
   assert.equal(record.status, 200);
   assert.equal(record.json.code, TWO_SUM_PY);
   assert.equal(record.json.elapsedMs, 1234);
+  // Records version 4: a code record is version 3 with schemaVersion 4 and
+  // kind "code", and nothing else changed (docs/plans/submission-records-v4.md).
+  assert.equal(record.json.schemaVersion, 4);
+  assert.equal(record.json.kind, 'code');
+  assert.deepEqual(Object.keys(record.json), ['id', 'schemaVersion', 'submittedAt', 'question', 'questionSha256', 'language', 'kind', 'judgeMode', 'code', 'status', 'passed', 'total', 'runtimeMs', 'elapsedMs', 'results', 'stdout', 'stderr']);
   assert.equal(pairNow().pass, 'yes');
   assert.equal(pairNow().passesInARow, 1);
 });
@@ -790,6 +796,7 @@ test('submissions: filtered by question and language, and refusals', async () =>
   const all = await as(LEARNER, 'GET', '/api/submissions?question=two-sum&language=python');
   assert.equal(all.status, 200);
   assert.equal(all.json.length, 3, 'the two Submits and the Skip');
+  assert.ok(all.json.every((/** @type {{ kind: string, message?: string }} */ s) => s.kind === 'code' && !('message' in s)), 'each summary says its kind (records v4)');
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=hello-world')).json.length, 0);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?language=klingon')).status, 400);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=a&question=b')).status, 400);
@@ -1071,21 +1078,99 @@ describe(
       }
     });
 
-    test('Submit and Skip are 501 until records version 4; Test is 400', async () => {
-      const body = { language: 'python', answer: { blank: "'" } };
-      assert.equal((await toBank('POST', '/api/questions/zz-quote/submit', body)).status, 501);
-      assert.equal((await toBank('POST', '/api/questions/zz-quote/skip', body)).status, 501);
-      const tested = await toBank('POST', '/api/questions/zz-quote/test', body);
+    test('Test is 400: for code questions only', async () => {
+      const tested = await toBank('POST', '/api/questions/zz-quote/test', { language: 'python', answer: { blank: "'" } });
       assert.equal(tested.status, 400);
       assert.match(tested.json.error, /Test is for code questions only/);
       assert.ok(!fs.existsSync(path.join(bankTmp, 'users', OWNER, 'submissions')), 'nothing recorded');
     });
 
-    test('a judge that throws: 500 "couldn\'t judge", the details only in the log', async () => {
+    /**
+     * The owner's pair for zz-quote in Python, from the test bank's order.json.
+     *
+     * @returns {{ pass?: string, passesInARow: number } | undefined} The pair, if queued.
+     */
+    const quotePair = () => JSON.parse(fs.readFileSync(path.join(bankTmp, 'users', OWNER, 'order.json'), 'utf8'))
+      .queue.find((/** @type {{ question: string, language: string }} */ p) => p.question === 'zz-quote' && p.language === 'python');
+
+    /**
+     * The SHA-256 of a file in the test bank, in hex.
+     *
+     * @param {string} name - The file's name.
+     * @returns {string} Its hash.
+     */
+    const bankSha256 = (name) => crypto.createHash('sha256').update(fs.readFileSync(path.join(bankTmp, 'questions', name))).digest('hex');
+
+    test('Submit: judged, saved as a version 4 record, and the queue moved', async () => {
+      const wrong = await toBank('POST', '/api/questions/zz-quote/submit', { language: 'python', answer: { blank: '"' }, elapsedMs: 4000 });
+      assert.equal(wrong.status, 200, wrong.body.toString());
+      assert.equal(wrong.json.status, 'Wrong Answer');
+      assert.deepEqual([wrong.json.pass, wrong.json.saved, wrong.json.queueUpdated], ['no', true, true]);
+      assert.equal(quotePair()?.pass, 'no');
+
+      const right = await toBank('POST', '/api/questions/zz-quote/submit', { language: 'python', answer: { blank: "'" }, elapsedMs: 5000 });
+      assert.equal(right.json.status, 'Accepted');
+      assert.equal(right.json.message, 'Yes: a single quote.');
+      assert.deepEqual([right.json.pass, right.json.saved, right.json.queueUpdated], ['yes', true, true]);
+      assert.equal(right.json.judgeSha256, undefined, 'the judge\'s hash stays on the server');
+      assert.equal(quotePair()?.pass, 'yes');
+      assert.equal(quotePair()?.passesInARow, 1);
+
+      // The record (docs/plans/submission-records-v4.md): kind, answer and
+      // no code (D1, D2); the judge's message (D3); nulls (D4); judgeSha256 (D6).
+      const record = (await toBank('GET', `/api/submissions/${right.json.submissionId}`)).json;
+      assert.deepEqual(Object.keys(record), ['id', 'schemaVersion', 'submittedAt', 'question', 'questionSha256', 'judgeSha256', 'language', 'kind', 'answer', 'status', 'message', 'passed', 'total', 'runtimeMs', 'elapsedMs', 'results', 'stdout', 'stderr']);
+      assert.equal(record.schemaVersion, 4);
+      assert.equal(record.kind, 'fill-in-the-blank');
+      assert.deepEqual(record.answer, { blank: "'" });
+      assert.equal(record.questionSha256, bankSha256('zz-quote.json'));
+      assert.equal(record.judgeSha256, bankSha256('zz-quote.judge.js'), 'the judge file\'s hash');
+      assert.deepEqual([record.passed, record.total, record.runtimeMs, record.stdout, record.stderr], [null, null, null, null, null]);
+      assert.deepEqual(record.results, []);
+      assert.equal(record.elapsedMs, 5000);
+      const wrongRecord = (await toBank('GET', `/api/submissions/${wrong.json.submissionId}`)).json;
+      assert.deepEqual(wrongRecord.hints, ['One character.'], 'hints kept (D3)');
+
+      const summaries = (await toBank('GET', '/api/submissions?question=zz-quote&language=python')).json;
+      assert.deepEqual(summaries.map((/** @type {{ kind: string, status: string, message: string, passed: null }} */ s) => [s.kind, s.status, s.message, s.passed]),
+        [['fill-in-the-blank', 'Accepted', 'Yes: a single quote.', null], ['fill-in-the-blank', 'Wrong Answer', 'Not a single quote.', null]]);
+    });
+
+    test('Skip: saves what the box held, and moves the queue as a fail', async () => {
+      const asked = await toBank('POST', '/api/questions/zz-quote/skip', { language: 'python', answer: { blank: 'x' } });
+      assert.equal(asked.status, 409, 'a streak of 1 needs confirming');
+      const refused = await toBank('POST', '/api/questions/zz-quote/skip', { language: 'python', answer: { blank: 'toolong' }, confirmed: true });
+      assert.equal(refused.status, 400, 'the box is checked as for Submit');
+      const skipped = await toBank('POST', '/api/questions/zz-quote/skip', { language: 'python', answer: { blank: 'x' }, confirmed: true });
+      assert.equal(skipped.status, 200, skipped.body.toString());
+      assert.equal(skipped.json.saved, true);
+      const record = (await toBank('GET', `/api/submissions/${skipped.json.submissionId}`)).json;
+      assert.equal(record.kind, 'fill-in-the-blank');
+      assert.equal(record.skipped, 'yes');
+      assert.deepEqual(record.answer, { blank: 'x' });
+      assert.equal(record.status, null);
+      assert.ok(!('message' in record) && !('code' in record));
+      assert.equal(record.judgeSha256, null, 'a Skip judges nothing, so no judge hash (owner, 2026-11-09, A)');
+      assert.equal(quotePair()?.passesInARow, 0);
+    });
+
+    test('a judge that throws: 500 "couldn\'t judge", the details only in the log, and a Submit records nothing', async () => {
       const failed = await toBank('POST', '/api/questions/zz-broken/run', { language: 'python', answer: { blank: "'" } });
       assert.equal(failed.status, 500);
       assert.deepEqual(failed.json, { error: COULDNT_JUDGE });
       assert.ok(bankServer.log.some((l) => /The judge for zz-broken failed: it threw: Error: this judge is broken on purpose/.test(l)), bankServer.log.join('\n'));
+      /**
+       * The owner's queue files in the test bank's users folder, as text.
+       *
+       * @returns {string[]} order.json's and backlog.json's contents.
+       */
+      const queueFiles = () => ['order.json', 'backlog.json'].map((f) => fs.readFileSync(path.join(bankTmp, 'users', OWNER, f), 'utf8'));
+      const before = queueFiles();
+      const submitted = await toBank('POST', '/api/questions/zz-broken/submit', { language: 'python', answer: { blank: "'" } });
+      assert.equal(submitted.status, 500);
+      assert.deepEqual(submitted.json, { error: COULDNT_JUDGE });
+      assert.equal((await toBank('GET', '/api/submissions?question=zz-broken')).json.length, 0, 'not recorded');
+      assert.deepEqual(queueFiles(), before, 'the queue files are unchanged');
     });
 
     test('a kind the server doesn\'t know: 501 for Run', async () => {

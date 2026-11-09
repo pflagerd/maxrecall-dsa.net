@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
-const { judgeFillInTheBlank } = require('./judge/fill-in-the-blank');
+const { judgeFillInTheBlank, judgeSha256Of } = require('./judge/fill-in-the-blank');
 const { canTestQuestions, revealHidden, markRevealed } = require('./playtest');
 const { resolveInside } = require('./paths');
 const { OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers, testBankRefusal } = require('./users');
@@ -92,13 +92,18 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @property {string} submittedAt
  * @property {string} question
  * @property {string} language
+ * @property {string} kind - "code" or "fill-in-the-blank"; "code" for a
+ *   record from before version 4, which has none.
  * @property {string | null} status - null for a Skip.
- * @property {number | null} passed - null for a Skip.
- * @property {number | null} total - null for a Skip.
- * @property {number | null} runtimeMs - null for a Skip.
+ * @property {number | null} passed - null for a Skip and a fill-in-the-blank
+ *   answer.
+ * @property {number | null} total - null as passed is.
+ * @property {number | null} runtimeMs - null as passed is.
  * @property {number | null} elapsedMs - null if the record doesn't have it.
  * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8); absent for a
  *   Submit.
+ * @property {string} [message] - A fill-in-the-blank judge's message, when
+ *   it gave one (records v4, D3).
  */
 
 /**
@@ -337,10 +342,10 @@ function checkFillInTheBlankAnswer(answer, problem) {
  *
  * By kind (#160 step 4; owner, 2026-11-09): a "fill-in-the-blank"
  * question takes { language, answer: { blank }, elapsedMs? } in place of
- * code, checked by checkFillInTheBlankAnswer() (400). Only Run takes one so
- * far: Test is for code questions (400), and Submit and Skip wait for
- * records version 4 (501, docs/plans/submission-records-v4.md). A kind
- * this server doesn't know gets 501 from all four.
+ * code, checked by checkFillInTheBlankAnswer() (400), for Run, Submit and
+ * Skip alike (a blank may be empty, as a Skip's code may); Test is for
+ * code questions (400). A kind this server doesn't know gets 501 from all
+ * four.
  *
  * @param {AppRequest} req - The request; its body should be
  *   { language, code, elapsedMs? }, or for a fill-in-the-blank question
@@ -383,9 +388,6 @@ function checkExecutionRequest(req, res, { codeRequired, action }) {
   }
   if (kind === 'fill-in-the-blank' && action === 'test') {
     return refuse(400, 'Test is for code questions only: a fill-in-the-blank question has no test cases to show.');
-  }
-  if (kind === 'fill-in-the-blank' && action !== 'run') {
-    return refuse(501, `${action === 'submit' ? 'Submit' : 'Skip'} doesn't take fill-in-the-blank questions yet; Run does.`);
   }
   if (!SUPPORTED_LANGUAGES.includes(language)) {
     return refuse(400, `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}`);
@@ -440,12 +442,13 @@ function checkExecutionRequest(req, res, { codeRequired, action }) {
 }
 
 /**
- * A Submit or Skip record (readme.html, "Where data lives"). Version 3
- * (step 8, detail 6) added skipped: "yes" on a Skip; a Submit leaves it
- * out. A Skip isn't judged, so its judging fields are null and results
- * empty (D8).
+ * A code question's Submit or Skip record, version 4 (readme.html, "Where
+ * data lives"; docs/plans/submission-records-v4.md): version 3 with
+ * schemaVersion 4 and kind "code" (D2). Version 3 (step 8, detail 6) added
+ * skipped: "yes" on a Skip; a Submit leaves it out. A Skip isn't judged,
+ * so its judging fields are null and results empty (D8).
  *
- * @param {CheckedRequest} request - What was asked.
+ * @param {CheckedRequest} request - What was asked: a code question's.
  * @param {string} submittedAt - When, as UTC ISO 8601.
  * @param {import('./judge/runner').JudgeResult | null} result - The judge's
  *   result, or null for a Skip.
@@ -453,15 +456,15 @@ function checkExecutionRequest(req, res, { codeRequired, action }) {
  */
 function submissionRecord({ problem, sha256, language, code, elapsedMs }, submittedAt, result) {
   return {
-    // 2 added elapsedMs (2026-11-03), 3 skipped (step 8).
-    schemaVersion: 3,
+    // 2 added elapsedMs (2026-11-03), 3 skipped (step 8), 4 kind (#160).
+    schemaVersion: 4,
     submittedAt,
     question: problem.slug,
     questionSha256: sha256,
     language,
+    kind: 'code',
     judgeMode: problem.judgeMode || 'function',
-    // Only a code question's Submit or Skip gets here until records
-    // version 4 (checkExecutionRequest refuses the rest), so code is set.
+    // A code question's request always has code (checkExecutionRequest).
     code: /** @type {string} */ (code),
     ...(result === null && { skipped: /** @type {'yes'} */ ('yes') }),
     status: result ? result.status : null,
@@ -473,6 +476,96 @@ function submissionRecord({ problem, sha256, language, code, elapsedMs }, submit
     stdout: result ? result.stdout : null,
     stderr: result ? result.stderr : null,
   };
+}
+
+/**
+ * A fill-in-the-blank question's Submit or Skip record, version 4
+ * (docs/plans/submission-records-v4.md): kind (D2); the answer as the
+ * server checked it, and no code or judgeMode (D1); the judge's message
+ * and hints when it gave them (D3); judgeSha256 beside questionSha256
+ * (D6); and null for what this judge doesn't produce, as for a Skip (D4).
+ * A Skip keeps what the box held as answer, and has skipped: "yes".
+ *
+ * @param {CheckedRequest} request - What was asked: a fill-in-the-blank
+ *   question's.
+ * @param {string} submittedAt - When, as UTC ISO 8601.
+ * @param {{ status: string, message?: string, hints?: string[] } | null} verdict -
+ *   The judge's result, or null for a Skip.
+ * @param {string | null} judgeSha256 - The judge file's SHA-256 as loaded,
+ *   from judgeSha256Of; null for a Skip, which judges nothing and so never
+ *   loads the judge (owner, 2026-11-09, option A: a broken judge can't
+ *   block a Skip).
+ * @returns {import('./users').SubmissionRecord} The record to save.
+ */
+function fillInTheBlankRecord({ problem, sha256, language, answer, elapsedMs }, submittedAt, verdict, judgeSha256) {
+  return {
+    schemaVersion: 4,
+    submittedAt,
+    question: problem.slug,
+    questionSha256: sha256,
+    // null for a Skip, which judges nothing (owner, 2026-11-09, option A).
+    judgeSha256,
+    language,
+    kind: 'fill-in-the-blank',
+    // A fill-in-the-blank question's request always has answer, checked
+    // (checkExecutionRequest).
+    answer: /** @type {{ blank: string }} */ (answer),
+    ...(verdict === null && { skipped: /** @type {'yes'} */ ('yes') }),
+    status: verdict ? verdict.status : null,
+    ...(verdict && verdict.message !== undefined && { message: verdict.message }),
+    ...(verdict && verdict.hints !== undefined && { hints: verdict.hints }),
+    passed: null,
+    total: null,
+    runtimeMs: null,
+    elapsedMs: elapsedMs ?? null,
+    results: [],
+    stdout: null,
+    stderr: null,
+  };
+}
+
+/**
+ * Saves a Submit's record. A failed save mustn't cost the learner their
+ * result, so it's reported alongside it instead, and logged.
+ *
+ * @param {string} email - The learner.
+ * @param {string} slug - The question, for the log.
+ * @param {import('./users').SubmissionRecord} record - What to save.
+ * @returns {Promise<{ submissionId?: string, saved: boolean, saveError?: string }>}
+ *   saved, with submissionId or saveError, in the order the answer has
+ *   always had them.
+ */
+async function saveRecord(email, slug, record) {
+  try {
+    // saveSubmission checks the user again.
+    const submissionId = await saveSubmission(email, record);
+    return { submissionId, saved: true };
+  } catch (err) {
+    console.error(`Failed to save submission for ${slug}:`, err);
+    return { saved: false, saveError: publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM) };
+  }
+}
+
+/**
+ * Moves the pair through the queue after a saved Submit (D3). Like a
+ * failed save, a failed update doesn't cost the learner their result (step
+ * 6, detail 5). Synchronous, and called with no await between it and the
+ * response: see updateQueue().
+ *
+ * @param {string} email - The learner.
+ * @param {{ question: string, language: string }} pair - The pair.
+ * @param {'yes' | 'no'} pass - passFor()'s verdict.
+ * @returns {{ queueUpdated: boolean, queueError?: string }} What happened,
+ *   for the answer.
+ */
+function moveQueue(email, pair, pass) {
+  try {
+    updateQueue(email, pair, pass);
+    return { queueUpdated: true };
+  } catch (err) {
+    console.error(`Queue not updated for ${pair.question} in ${pair.language}: ${/** @type {Error} */ (err).message}`);
+    return { queueUpdated: false, queueError: publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM) };
+  }
 }
 
 /**
@@ -500,16 +593,30 @@ async function handleExecution(req, res, { mode }) {
   if (!request) return;
   const { problem, email, language } = request;
 
-  // A fill-in-the-blank question: only Run gets here (checkExecutionRequest),
-  // and it's judged by its own judge, in this process, synchronously (no
-  // sandbox or queue: nothing the learner typed is run). Its result is
-  // status, message and hints (contract 2); nothing is recorded.
+  // A fill-in-the-blank question (Run or Submit; checkExecutionRequest
+  // refuses Test): judged by its own judge, in this process, synchronously
+  // (no sandbox or queue: nothing the learner typed is run). Its result is
+  // status, message and hints (contract 2). A judge that fails throws
+  // before anything is saved, so nothing is recorded and the queue doesn't
+  // move (Q9a).
   if (request.kind === 'fill-in-the-blank') {
+    const submittedAt = new Date().toISOString();
+    /** @type {{ status: string, message?: string, hints?: string[] }} */
+    let verdict;
+    /** @type {string} */
+    let judgeSha256;
     try {
-      return res.json(judgeFillInTheBlank(problem, /** @type {{ blank: string }} */ (request.answer), language));
+      ({ verdict, judgeSha256 } = judgeWithHash(problem, /** @type {{ blank: string }} */ (request.answer), language));
     } catch (err) {
       return sendJudgeError(res, /** @type {JudgeError} */ (err), problem.slug, language);
     }
+    if (mode === 'run') return res.json(verdict);
+    const pass = passFor(verdict.status);
+    /** @type {{ status: string, message?: string, hints?: string[], pass?: 'yes' | 'no', saved?: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string }} */
+    const answer = { ...verdict, pass };
+    Object.assign(answer, await saveRecord(email, problem.slug, fillInTheBlankRecord(request, submittedAt, verdict, judgeSha256)));
+    if (answer.saved) Object.assign(answer, moveQueue(email, { question: problem.slug, language }, pass));
+    return res.json(answer);
   }
   // A code question's, checked by checkExecutionRequest.
   const code = /** @type {string} */ (request.code);
@@ -546,33 +653,37 @@ async function handleExecution(req, res, { mode }) {
       // function that decides it, rather than working it out again.
       const pass = passFor(result.status);
       result.pass = pass;
-      try {
-        // saveSubmission checks the user again.
-        result.submissionId = await saveSubmission(email, submissionRecord(request, submittedAt, result));
-        result.saved = true;
-      } catch (err) {
-        console.error(`Failed to save submission for ${problem.slug}:`, err);
-        result.saved = false;
-        result.saveError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
-      }
-      // Only a saved Submit moves the queue (D3). Like a failed save, a
-      // failed update doesn't cost the learner their result (step 6,
-      // detail 5). No await from here to the response: see updateQueue().
-      if (result.saved) {
-        try {
-          updateQueue(email, { question: problem.slug, language }, pass);
-          result.queueUpdated = true;
-        } catch (err) {
-          console.error(`Queue not updated for ${problem.slug} in ${language}: ${/** @type {Error} */ (err).message}`);
-          result.queueUpdated = false;
-          result.queueError = publicMessage(/** @type {Error} */ (err), SERVER_PROBLEM);
-        }
-      }
+      Object.assign(result, await saveRecord(email, problem.slug, submissionRecord(request, submittedAt, result)));
+      // Only a saved Submit moves the queue (D3). No await from here to
+      // the response: see updateQueue().
+      if (result.saved) Object.assign(result, moveQueue(email, { question: problem.slug, language }, pass));
     }
     res.json(result);
   } catch (err) {
     sendJudgeError(res, /** @type {JudgeError} */ (err), problem.slug, language);
   }
+}
+
+/**
+ * Judges a fill-in-the-blank answer (judgeFillInTheBlank, questions'), and
+ * gives the SHA-256 of the judge file as it was loaded, for the record
+ * (D6; owner, 2026-11-09, option b: hashed at load, so it's always the
+ * code that judged, which a per-request hash isn't once Node has cached
+ * the judge and the file then changes). The hash comes from questions'
+ * judgeSha256Of (#208), asked after judging, so the judge it names is the
+ * one already loaded.
+ *
+ * @param {Problem} problem - The fill-in-the-blank question.
+ * @param {{ blank: string }} answer - The answer, checked.
+ * @param {string} language - Its language.
+ * @returns {{ verdict: { status: string, message?: string, hints?: string[] }, judgeSha256: string }}
+ *   The verdict, for the page and the record, and the hash, for the record only.
+ * @throws {Error} What judgeFillInTheBlank or judgeSha256Of throws:
+ *   'JUDGE_FAILED' for a judge that failed or can't be loaded (contract 2).
+ */
+function judgeWithHash(problem, answer, language) {
+  const verdict = judgeFillInTheBlank(problem, answer, language);
+  return { verdict, judgeSha256: judgeSha256Of(problem) };
 }
 
 /** What the page shows for a judge that failed (contract 2; #160's Q9a). @type {string} */
@@ -706,8 +817,14 @@ async function handleSkip(req, res) {
 
   /** @type {{ saved: boolean, submissionId?: string, saveError?: string, queueUpdated?: boolean, queueError?: string, next?: (import('./order').BacklogElement & { title: string }) | null, nextError?: string }} */
   const answer = { saved: false };
+  const skippedAt = new Date().toISOString();
+  // By kind (records version 4): a fill-in-the-blank Skip keeps what the
+  // box held as its answer (D1).
+  const record = request.kind === 'fill-in-the-blank'
+    ? fillInTheBlankRecord(request, skippedAt, null, null)
+    : submissionRecord(request, skippedAt, null);
   try {
-    answer.submissionId = await saveSubmission(email, submissionRecord(request, new Date().toISOString(), null));
+    answer.submissionId = await saveSubmission(email, record);
     answer.saved = true;
   } catch (err) {
     console.error(`Failed to save skip for ${problem.slug}:`, err);
@@ -755,8 +872,16 @@ router.post(
  * @param {SavedSubmission} record - A saved Submit.
  * @returns {SubmissionSummary} Its summary.
  */
-function toSubmissionSummary({ id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs, skipped }) {
-  return { id, submittedAt, question, language, status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null, ...(skipped === 'yes' && { skipped }) };
+function toSubmissionSummary({ id, submittedAt, question, language, kind, status, passed, total, runtimeMs, elapsedMs, skipped, message }) {
+  return {
+    id, submittedAt, question, language,
+    // Records before version 4 have no kind: they're all code questions'.
+    kind: kind ?? 'code',
+    status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null,
+    ...(skipped === 'yes' && { skipped }),
+    // The judge's message, for the Submissions tab (records v4, D3).
+    ...(message !== undefined && { message }),
+  };
 }
 
 // Newest first. Optional ?question=<slug> and ?language=<language> narrow
