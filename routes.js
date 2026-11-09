@@ -158,11 +158,12 @@ function listProblems() {
  * on the server, so a new field in the problem format is private until it's
  * added on purpose. testCases is never named (contract 4: the hidden test
  * cases are never sent); toPublicProblem() sends visibleTestCases and
- * hiddenCount in its place. Today's list is everything else the format has
- * (question-files.js, QUESTION_FIELDS), so what's sent didn't change when
- * the deny-list became this list.
+ * hiddenCount in its place. Not sent either, since the page doesn't use
+ * them (owner, 2026-11-08): created (the question bank has its own route,
+ * GET /api/question-bank), and the judge's judgeMode, functionName and
+ * signature.
  */
-const PUBLIC_CODE_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature']);
+const PUBLIC_CODE_FIELDS = Object.freeze(['slug', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'learning', 'description', 'examples', 'constraints', 'starterCode']);
 
 /**
  * What GET /api/questions/:slug sends for a question: the fields

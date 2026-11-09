@@ -563,7 +563,8 @@ test('questions: the public view sends only allowed fields, in the file\'s order
     testCases: [{ args: [1], expected: 1 }, { args: [2], expected: 2, hidden: true }],
   });
   const sent = toPublicProblem(question);
-  assert.deepEqual(Object.keys(sent), ['title', 'slug', 'difficulty', 'topics', 'sources', 'created', 'starterCode', 'visibleTestCases', 'hiddenCount']);
+  // created is in the file but not on the list (owner, 2026-11-08).
+  assert.deepEqual(Object.keys(sent), ['title', 'slug', 'difficulty', 'topics', 'sources', 'starterCode', 'visibleTestCases', 'hiddenCount']);
   assert.deepEqual(sent.visibleTestCases, [{ args: [1], expected: 1 }]);
   assert.equal(sent.hiddenCount, 1);
 });
