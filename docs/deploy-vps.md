@@ -2236,14 +2236,57 @@ hostname; id -un
 - Expect `srv702017` and `root`. Anything else: stop.
 
 ```bash
-systemctl list-dependencies --reverse networking.service --no-pager
+systemctl show networking.service -p WantedBy -p RequiredBy -p RequisiteOf -p BoundBy -p UpheldBy -p ConsistsOf
 ```
-- `--reverse` lists the units that pull `networking.service` in;
-  `--no-pager` prints straight to the terminal
-  ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html#list-dependencies)).
-- Expect only targets, such as `multi-user.target` and
-  `network-online.target`, which it's installed under. **Any service
-  listed: stop and report it.**
+- The units that depend on `networking.service` **directly**, one line
+  per kind of dependency
+  ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html),
+  `show`; the properties are the reverse of `Wants=`, `Requires=`,
+  `Requisite=`, `BindsTo=`, `Upholds=`, `PartOf=`).
+- Expect `WantedBy=` to name only `multi-user.target` and
+  `network-online.target`, and every other line empty (`RequiredBy=`
+  and so on). **Anything else: stop and report it.**
+- **Not** `systemctl list-dependencies --reverse`: it expands targets
+  recursively, so it also lists every service that waits for
+  `network-online.target` (nginx among them), and those don't depend
+  on this unit ("By default, only target units are recursively
+  expanded", systemd v255
+  [`man/systemctl.xml`](https://github.com/systemd/systemd/blob/v255/man/systemctl.xml#L374-L405)).
+  This section's first version used it, and the operator stopped there
+  on 11-09.
+
+```bash
+systemctl show network-online.target -p Wants; systemctl is-enabled systemd-networkd-wait-online.service; systemctl is-active systemd-networkd-wait-online.service
+```
+- `network-online.target` is what nginx and others wait for. Its
+  `Wants=` should name `networking.service` and
+  `systemd-networkd-wait-online.service`, and the second should be
+  `enabled` and `active`. Once `networking.service` is disabled, that
+  one alone decides when the network counts as up: networkd's `eth0`.
+  Not so: stop.
+
+```bash
+grep -rn -E '^(Wants|Requires|Requisite|BindsTo|Upholds|PartOf)=.*networking\.service' /etc/systemd/system /usr/lib/systemd/system /run/systemd/system
+```
+- `systemctl show` sees only units that are loaded now (systemctl(1),
+  the same note), so this searches the unit files on disk as well, drop-ins
+  included: `-r` every file below each folder, `-n` with line numbers,
+  `-E` the pattern as an extended regular expression
+  ([grep(1)](https://man7.org/linux/man-pages/man1/grep.1.html)). It
+  matches only lines that **pull the unit in**.
+- Expect nothing, or only `ifupdown`'s own units (`dpkg -S <file>` says
+  which package a file is from). **Any other file: stop and report it**
+  with its line.
+
+```bash
+grep -rn -E '^(After|Before)=.*networking\.service' /etc/systemd/system /usr/lib/systemd/system /run/systemd/system
+```
+- For the record only, no stop: lines that only **order** a unit
+  against `networking.service` (cloud-init's units may have some, a
+  guess). Ordering against a unit that doesn't start pulls nothing in:
+  `After=`/`Before=` are "independent of and orthogonal to the
+  requirement dependencies"
+  ([systemd.unit(5)](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html#Before=)).
 
 ```bash
 dpkg --verify ifupdown
