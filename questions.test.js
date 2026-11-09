@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInMaxLength } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -123,6 +123,44 @@ function validProgram() {
   };
 }
 
+/**
+ * A small valid fill-in question (#160), in Python only, as a new object
+ * each time.
+ *
+ * @returns {Record<string, any>} The question.
+ */
+function validFillIn() {
+  return {
+    slug: 'sample',
+    created: '2026-11-08T12:00:00Z',
+    title: 'Sample',
+    difficulty: 'Fundamentals',
+    topics: ['String'],
+    sources: [],
+    kind: 'fill-in',
+    description: { python: '<p>Fill in the blank.</p>' },
+    template: { python: 'print("A quote (___) here.")\n' },
+    blank: '___',
+  };
+}
+
+test('a valid fill-in question passes, with or without maxLength', () => {
+  assert.deepEqual(checkQuestion(validFillIn(), 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...validFillIn(), maxLength: 100 }, 'sample.json'), [], 'maxLength at the cap');
+  assert.deepEqual(checkQuestion({ ...validFillIn(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...valid(), kind: 'code' }, 'sample.json'), [], 'kind "code" may be written out');
+});
+
+test('kindOf: absent means "code"; languagesOf follows the kind; fillInMaxLength defaults to 10', () => {
+  assert.equal(kindOf(valid()), 'code');
+  assert.equal(kindOf(validFillIn()), 'fill-in');
+  assert.deepEqual(languagesOf(valid()), ['python', 'cpp']);
+  assert.deepEqual(languagesOf(validFillIn()), ['python']);
+  assert.deepEqual(languagesOf({ kind: 'quiz' }), [], 'an unknown kind has no languages');
+  assert.equal(fillInMaxLength(validFillIn()), 10);
+  assert.equal(fillInMaxLength({ ...validFillIn(), maxLength: 3 }), 3);
+});
+
 test('the valid samples pass, and so does one with learning text', () => {
   assert.deepEqual(checkQuestion(valid(), 'sample.json'), []);
   assert.deepEqual(checkQuestion(validProgram(), 'sample.json'), []);
@@ -224,6 +262,21 @@ const BROKEN = [
   ['every test case hidden', withChange(valid(), 'testCases.0.hidden', true), /at least one must be visible/],
   ['a program test case without input', withChange(validProgram(), 'testCases.0.input', DELETE), /testCases\[0\]\.input must be the program's standard input/],
   ['a program test case expecting a number', withChange(validProgram(), 'testCases.0.expected', 5), /testCases\[0\]\.expected must be the expected standard output, as text/],
+  // Kinds and fill-in questions (#160).
+  ['an unknown kind', withChange(valid(), 'kind', 'quiz'), /kind must be "code" or "fill-in"/],
+  ['a fill-in question with test cases', withChange(validFillIn(), 'testCases', []), /testCases is only for kind "code", not "fill-in"/],
+  ['a fill-in question with examples', withChange(validFillIn(), 'examples', { python: [] }), /examples is only for kind "code"/],
+  ['a code question with a template', withChange(valid(), 'template', { python: 'x' }), /template is only for kind "fill-in", not "code"/],
+  ['a fill-in question with no template', withChange(validFillIn(), 'template', DELETE), /template must give the code, with the blank, for at least one language/],
+  ['a fill-in template in an unknown language', withChange(validFillIn(), 'template.Python', 'x ___'), /template\.Python: not a language the judge knows/],
+  ['a fill-in description for a language with no template', withChange(validFillIn(), 'description.cpp', '<p>x</p>'), /description\.cpp: template has no cpp/],
+  ['a fill-in question with no blank', withChange(validFillIn(), 'blank', DELETE), /blank must be the text that marks the blank/],
+  ['a blank marker on two lines', withChange(validFillIn(), 'blank', '__\n_'), /blank must be the text that marks the blank in each template, on one line/],
+  ['a template without the blank', withChange(validFillIn(), 'template.python', 'print("no blank")'), /template\.python must contain the blank, "___", exactly once \(it has it 0 times\)/],
+  ['a template with the blank twice', withChange(validFillIn(), 'template.python', 'print("___ ___")'), /exactly once \(it has it 2 times\)/],
+  ['maxLength over the cap (#160, Q15)', withChange(validFillIn(), 'maxLength', 101), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength 0', withChange(validFillIn(), 'maxLength', 0), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength not a whole number', withChange(validFillIn(), 'maxLength', 2.5), /maxLength must be a whole number/],
 ];
 
 for (const [what, question, pattern] of BROKEN) {
