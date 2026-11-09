@@ -16,7 +16,7 @@
 // $TRUSTED_PORT), since a Submit rewrites backlog.json too. Then they write
 // backlog.json only (unless DRY_RUN). Exit 0 when done, 1 when refused.
 
-const { EMAIL_PATTERN, listUsers, readUserFile, writeUserFile } = require('../users');
+const { EMAIL_PATTERN, listUsers, readUserFile, writeUserFile, testBankRefusal } = require('../users');
 const { questionInfos } = require('../question-files');
 const { parseProfile } = require('../profile');
 const { parseQueueFiles, pairsToAdd, addToBacklog, prerequisiteWarnings, removeFromBacklog } = require('../order');
@@ -220,6 +220,9 @@ async function main() {
   const command = process.argv[2];
   const dryRun = Boolean(process.env.DRY_RUN);
   try {
+    // A test question bank only with a test users folder (owner, 2026-11-09, B2).
+    const refused = testBankRefusal();
+    if (refused) throw new Refusal(refused);
     if (command === 'show') show();
     else if (command === 'add') await add(dryRun);
     else if (command === 'remove') await remove(dryRun);

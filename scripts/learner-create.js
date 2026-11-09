@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { USERS_DIR, EMAIL_PATTERN, createUser } = require('../users');
+const { USERS_DIR, EMAIL_PATTERN, createUser, testBankRefusal } = require('../users');
 const { questionInfos } = require('../question-files');
 const { splitList, newLearnerFiles } = require('../learner');
 const { prerequisiteWarnings } = require('../order');
@@ -99,6 +99,9 @@ function learnerCreate(dryRun) {
  */
 function main() {
   try {
+    // A test question bank only with a test users folder (owner, 2026-11-09, B2).
+    const refused = testBankRefusal();
+    if (refused) throw new Refusal(refused);
     learnerCreate(Boolean(process.env.DRY_RUN));
   } catch (err) {
     if (!(err instanceof Refusal)) throw err;

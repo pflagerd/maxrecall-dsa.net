@@ -13,7 +13,8 @@ const path = require('path');
 
 const USERS = fs.mkdtempSync(path.join(os.tmpdir(), 'users-test-'));
 process.env.MAXRECALL_USERS_DIR = USERS;
-const { readProfileFile, writeProfileFile, readUserFile, writeUserFile, createUser, listUsers } = require('./users');
+const { readProfileFile, writeProfileFile, readUserFile, writeUserFile, createUser, listUsers, testBankRefusal, TEST_USERS_MARKER } = require('./users');
+const { spawnSync } = require('child_process');
 
 after(() => fs.rmSync(USERS, { recursive: true, force: true }));
 
@@ -155,4 +156,51 @@ test('a temporary folder is never listed as a user: its name has no "@"', () => 
   fs.writeFileSync(path.join(USERS, '.new-user-abc123', 'profile.json'), '{}');
   assert.ok(!listUsers().some((u) => u.startsWith('.new-user-')));
   fs.rmSync(path.join(USERS, '.new-user-abc123'), { recursive: true });
+});
+
+// ---- A test question bank needs a test users folder (owner, 2026-11-09, B2) ----
+
+test('testBankRefusal: no test bank, or a users folder marked as test data, is fine; anything else refuses', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-bank-'));
+  try {
+    assert.equal(testBankRefusal({}, dir), null, 'no MAXRECALL_QUESTIONS_DIR');
+    assert.equal(testBankRefusal({ MAXRECALL_QUESTIONS_DIR: '' }, dir), null, 'empty counts as unset, as question-files.js reads it');
+    const bank = { MAXRECALL_QUESTIONS_DIR: '/somewhere/test-questions' };
+    assert.match(String(testBankRefusal(bank, dir)), /MAXRECALL_QUESTIONS_DIR is set .*has no TEST-USERS file/, 'a test bank, an unmarked folder');
+    // MAXRECALL_USERS_DIR being set says nothing: the live service sets it for its real folder.
+    assert.notEqual(testBankRefusal({ ...bank, MAXRECALL_USERS_DIR: dir }, dir), null, 'MAXRECALL_USERS_DIR alone isn\'t a mark');
+    fs.mkdirSync(path.join(dir, TEST_USERS_MARKER));
+    assert.notEqual(testBankRefusal(bank, dir), null, 'a folder named like the marker isn\'t the marker');
+    fs.rmdirSync(path.join(dir, TEST_USERS_MARKER));
+    fs.writeFileSync(path.join(dir, TEST_USERS_MARKER), '');
+    assert.equal(testBankRefusal(bank, dir), null, 'the marker file: a test users folder');
+    assert.ok(!listUsers().includes(TEST_USERS_MARKER), 'the marker is never taken for a user');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the admin scripts refuse a test question bank with an unmarked users folder, and write nothing', () => {
+  const usersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-bank-users-'));
+  const questionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-bank-questions-'));
+  try {
+    const env = { PATH: process.env.PATH, HOME: process.env.HOME, MAXRECALL_USERS_DIR: usersDir, MAXRECALL_QUESTIONS_DIR: questionsDir };
+    // Each script's usual way of refusing: "Refused:" and 1, or the consistency check's "not run" and 2.
+    /** @type {[string, string[], number, RegExp][]} */
+    const scripts = [
+      ['scripts/backlog.js', ['show'], 1, /^Refused: MAXRECALL_QUESTIONS_DIR is set/m],
+      ['scripts/learner-create.js', [], 1, /^Refused: MAXRECALL_QUESTIONS_DIR is set/m],
+      ['scripts/recalculate-queue.js', [], 1, /^Refused: MAXRECALL_QUESTIONS_DIR is set/m],
+      ['scripts/consistency-check.js', [], 2, /^Consistency check not run: MAXRECALL_QUESTIONS_DIR is set/m],
+    ];
+    for (const [script, args, status, message] of scripts) {
+      const run = spawnSync(process.execPath, [script, ...args], { cwd: __dirname, env: { ...env, EMAIL: 'learner@example.com' }, encoding: 'utf8' });
+      assert.equal(run.status, status, `${script}: ${run.stderr}`);
+      assert.match(run.stderr, message, script);
+    }
+    assert.deepEqual(fs.readdirSync(usersDir), [], 'nothing written');
+  } finally {
+    fs.rmSync(usersDir, { recursive: true, force: true });
+    fs.rmSync(questionsDir, { recursive: true, force: true });
+  }
 });

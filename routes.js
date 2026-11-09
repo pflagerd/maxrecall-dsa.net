@@ -16,7 +16,7 @@ const { runSubmission } = require('./judge/runner');
 const { judgeFillInTheBlank } = require('./judge/fill-in-the-blank');
 const { canTestQuestions, revealHidden, markRevealed } = require('./playtest');
 const { resolveInside } = require('./paths');
-const { OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
+const { OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers, testBankRefusal } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
 const { QUESTIONS_DIR, isQuestionFile, questionInfos, kindOf, fillInTheBlankMaxLength } = require('./question-files');
 const { checkConsistency, countLevels, formatFinding, describeCounts } = require('./consistency');
@@ -1345,10 +1345,18 @@ async function logConsistency() {
  * user's queue files (prepareQueues()), then the consistency check's log
  * (logConsistency(), which finishes after the server is listening).
  * Separate from loading this file, so requiring it does nothing by itself.
+ * First, it refuses a test question bank with a users folder not marked
+ * as test data (users.js, testBankRefusal; owner, 2026-11-09, option B2),
+ * before prepareQueues() could add the test bank's questions to real
+ * learners' backlogs.
  *
  * @returns {void}
+ * @throws {Error} If testBankRefusal() refuses, so the server doesn't
+ *   start; the message says why and what to change.
  */
 function start() {
+  const refused = testBankRefusal();
+  if (refused) throw new Error(refused);
   prepareQueues();
   logConsistency();
 }

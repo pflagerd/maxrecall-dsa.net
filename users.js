@@ -49,6 +49,41 @@ const USERS_DIR = process.env.MAXRECALL_USERS_DIR
   : path.join(__dirname, 'users');
 const DEFAULT_USER = 'daniel.pflager@gmail.com';
 
+/**
+ * The empty file that marks a users folder as test data (owner,
+ * 2026-11-09, option B2): only such a folder may be used with a test
+ * question bank (testBankRefusal). Tests create it in their temporary
+ * folder; a real users folder never has it. listUsers() ignores it, as it
+ * isn't a folder named by an email.
+ * @type {string}
+ */
+const TEST_USERS_MARKER = 'TEST-USERS';
+
+/**
+ * Why a test question bank mustn't be used with this users folder, or null
+ * if it may (owner, 2026-11-09, option B2). MAXRECALL_QUESTIONS_DIR moves
+ * the question bank for tests (question-files.js); with a real users
+ * folder, the server's start-up would add the test bank's questions to
+ * every learner's backlog (routes.js, prepareQueues), and the admin scripts
+ * would act on learners' files against it. So a test bank needs a users
+ * folder holding a TEST_USERS_MARKER file. Not "MAXRECALL_USERS_DIR is
+ * set": the live service sets that for its real folder
+ * (deploy/maxrecallcode.service).
+ *
+ * @param {NodeJS.ProcessEnv} [env] - Where MAXRECALL_QUESTIONS_DIR is read,
+ *   as question-files.js reads it (an empty value counts as unset);
+ *   process.env unless a test gives its own.
+ * @param {string} [usersDir] - The users folder; USERS_DIR unless a test
+ *   gives its own.
+ * @returns {string | null} The reason, for a refusal, or null.
+ */
+function testBankRefusal(env = process.env, usersDir = USERS_DIR) {
+  if (!env.MAXRECALL_QUESTIONS_DIR) return null;
+  const marker = fs.statSync(path.join(usersDir, TEST_USERS_MARKER), { throwIfNoEntry: false });
+  if (marker && marker.isFile()) return null;
+  return `MAXRECALL_QUESTIONS_DIR is set (a test question bank: ${env.MAXRECALL_QUESTIONS_DIR}), but the users folder ${usersDir} has no ${TEST_USERS_MARKER} file, so it may hold real learners' data. Unset MAXRECALL_QUESTIONS_DIR, or point MAXRECALL_USERS_DIR at a test folder holding an empty ${TEST_USERS_MARKER} file.`;
+}
+
 // Strict on purpose: the address becomes a directory name, and RFC 5322
 // allows characters in addresses (such as "/") that mustn't reach a path.
 const EMAIL_PATTERN = /^[a-z0-9._+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
@@ -409,4 +444,4 @@ function listUsers() {
     .sort();
 }
 
-module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, backupUserFile, createUser, UserExistsError, listUsers };
+module.exports = { USERS_DIR, OWNER_EMAIL, EMAIL_PATTERN, TEST_USERS_MARKER, testBankRefusal, saveSubmission, listSubmissions, readAllRecords, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, backupUserFile, createUser, UserExistsError, listUsers };

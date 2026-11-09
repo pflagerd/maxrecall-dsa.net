@@ -28,7 +28,7 @@ const http = require('http');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const { spawn, execFileSync } = require('child_process');
+const { spawn, spawnSync, execFileSync } = require('child_process');
 
 const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS, checkFillInTheBlankAnswer, judgeErrorAnswer, COULDNT_JUDGE } = require('./routes');
 const { QUESTION_FIELDS } = require('./question-files');
@@ -471,6 +471,26 @@ test('start(): logConsistency() reports, and names the learner with an invalid q
 });
 
 // ---- The gate in front of the router (contract 9) ----
+
+test('start-up: a test question bank with an unmarked users folder stops the server before it listens (owner, 2026-11-09, B2)', async () => {
+  const [port, trusted] = await twoPorts();
+  const usersDir = fs.mkdtempSync(path.join(os.tmpdir(), 'maxrecall-routes-test-bank-'));
+  try {
+    const run = spawnSync(process.execPath, ['server.js'], {
+      cwd: REPO,
+      // MAXRECALL_USERS_DIR set, as the live service sets it, but no TEST-USERS file.
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, PORT: String(port), TRUSTED_PORT: String(trusted), MAXRECALL_USER: OWNER, MAXRECALL_USERS_DIR: usersDir, MAXRECALL_AUTH_DIR: usersDir, MAXRECALL_QUESTIONS_DIR: path.join(REPO, 'questions') },
+      encoding: 'utf8',
+      timeout: 30000, // a server that starts never exits: then status is null and this fails
+    });
+    assert.notEqual(run.status, 0, `exited with ${run.status} (signal ${run.signal})`);
+    assert.notEqual(run.status, null, 'it started instead of refusing');
+    assert.match(run.stderr, /MAXRECALL_QUESTIONS_DIR is set .*has no TEST-USERS file/);
+    assert.doesNotMatch(run.stdout, /Server listening/);
+  } finally {
+    fs.rmSync(usersDir, { recursive: true, force: true });
+  }
+});
 
 test('the gate: signed out, every feature route is 401 and gives nothing away', async () => {
   /** @type {[string, string, unknown?][]} */
