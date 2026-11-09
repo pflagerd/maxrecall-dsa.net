@@ -30,7 +30,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 
-const { toPublicProblem, PUBLIC_CODE_FIELDS } = require('./routes');
+const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS } = require('./routes');
 const { QUESTION_FIELDS } = require('./question-files');
 
 const REPO = __dirname;
@@ -563,15 +563,48 @@ test('questions: the public view sends only allowed fields, in the file\'s order
     testCases: [{ args: [1], expected: 1 }, { args: [2], expected: 2, hidden: true }],
   });
   const sent = toPublicProblem(question);
-  // created is in the file but not on the list (owner, 2026-11-08).
-  assert.deepEqual(Object.keys(sent), ['title', 'slug', 'difficulty', 'topics', 'sources', 'starterCode', 'visibleTestCases', 'hiddenCount']);
+  // created is in the file but not on the list (owner, 2026-11-08). kind is
+  // added, "code" for a file without one (kindOf).
+  assert.deepEqual(Object.keys(sent), ['title', 'slug', 'difficulty', 'topics', 'sources', 'starterCode', 'kind', 'visibleTestCases', 'hiddenCount']);
+  assert.equal(sent.kind, 'code');
   assert.deepEqual(sent.visibleTestCases, [{ args: [1], expected: 1 }]);
   assert.equal(sent.hiddenCount, 1);
 });
 
+// The tests below cast this through unknown to Problem, whose starterCode
+// and testCases a code question has and this one doesn't: Problem only
+// describes the code paths so far, and toPublicProblem doesn't read them
+// for this kind.
+/** A fill-in-the-blank question file's contents, as the format allows, plus a field no list names. */
+const FILL_IN_THE_BLANK = Object.freeze({
+  slug: 'f', title: 'F', difficulty: 'Fundamentals', topics: [], sources: [], created: '2026-11-09T00:00:00Z',
+  kind: 'fill-in-the-blank', description: { python: '<p>Fill it in.</p>' },
+  template: { python: 'print("It___s")' }, blank: '___', secret: 'not for the browser',
+});
+
+test('questions: a fill-in-the-blank question\'s public view: its template and blank, maxLength with its default (#160)', () => {
+  const sent = toPublicProblem(/** @type {import('./routes').Problem} */ (/** @type {unknown} */ (FILL_IN_THE_BLANK)));
+  assert.deepEqual(Object.keys(sent), ['slug', 'title', 'difficulty', 'topics', 'sources', 'description', 'template', 'blank', 'kind', 'maxLength']);
+  assert.equal(sent.kind, 'fill-in-the-blank');
+  assert.equal(sent.maxLength, 10, 'the default, from fillInTheBlankMaxLength');
+  const given = toPublicProblem(/** @type {import('./routes').Problem} */ (/** @type {unknown} */ ({ ...FILL_IN_THE_BLANK, maxLength: 3 })));
+  assert.equal(given.maxLength, 3);
+});
+
+test('questions: a kind the server doesn\'t know sends only the common fields and its kind', () => {
+  const sent = toPublicProblem(/** @type {import('./routes').Problem} */ (/** @type {unknown} */ ({ ...FILL_IN_THE_BLANK, kind: 'quiz', starterCode: { python: '' } })));
+  assert.deepEqual(Object.keys(sent), ['slug', 'title', 'difficulty', 'topics', 'sources', 'description', 'kind']);
+  assert.equal(sent.kind, 'quiz');
+});
+
 test('questions: every allowed field is one of the format\'s, and testCases isn\'t allowed', () => {
-  for (const field of PUBLIC_CODE_FIELDS) assert.ok(QUESTION_FIELDS.includes(field), `${field} isn't in QUESTION_FIELDS`);
-  assert.ok(!PUBLIC_CODE_FIELDS.includes('testCases'));
+  for (const list of [PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS]) {
+    for (const field of list) assert.ok(QUESTION_FIELDS.includes(field), `${field} isn't in QUESTION_FIELDS`);
+    assert.ok(!list.includes('testCases'));
+  }
+  for (const field of PUBLIC_COMMON_FIELDS) {
+    assert.ok(PUBLIC_CODE_FIELDS.includes(field) && PUBLIC_FILL_IN_THE_BLANK_FIELDS.includes(field), `${field} is common but not in every kind's list`);
+  }
 });
 
 test('questions: an unknown slug, or one that tries to leave questions/, is 404', async () => {
