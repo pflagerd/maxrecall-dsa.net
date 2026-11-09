@@ -21,14 +21,14 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { listUsers, readUserFile, writeUserFile } = require('../users');
-const { QUESTIONS_DIR, RENAMES_FILE, readRenamesText } = require('../question-files');
+const { REPO_QUESTIONS_DIR, RENAMES_FILE, readRenamesText } = require('../question-files');
 const { parseRenames, updateRenames } = require('../consistency');
 const { parseQueueFiles, removeReferences, renameReferences } = require('../order');
 
 /** A question's name: lowercase letters and digits, joined by single hyphens (detail 5). @type {RegExp} */
 const NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-/** The repository, for git. @type {string} */
-const REPO = path.dirname(QUESTIONS_DIR);
+/** The repository, for git: the folder holding its own questions/, never MAXRECALL_QUESTIONS_DIR's. @type {string} */
+const REPO = path.dirname(REPO_QUESTIONS_DIR);
 
 /**
  * Why the command stops without changing anything.
@@ -212,7 +212,7 @@ async function renameQuestion(dryRun) {
     git(['mv', '--', fromFile, toFile]);
     if (moveJudge) git(['mv', '--', fromJudge, toJudge]);
     fs.writeFileSync(path.join(REPO, toFile), text.replace(slugLine, `"slug": ${JSON.stringify(to)}`));
-    fs.writeFileSync(path.join(QUESTIONS_DIR, RENAMES_FILE), `${JSON.stringify(updateRenames(renames, from, to), null, 2)}\n`);
+    fs.writeFileSync(path.join(REPO_QUESTIONS_DIR, RENAMES_FILE), `${JSON.stringify(updateRenames(renames, from, to), null, 2)}\n`);
     git(['add', '--', toFile, `questions/${RENAMES_FILE}`]);
   }
   for (const { q, result } of changes) writeQueues(q.email, q, result);
@@ -228,6 +228,10 @@ async function renameQuestion(dryRun) {
 async function main() {
   const dryRun = Boolean(process.env.DRY_RUN);
   try {
+    // Renames and deletes are of the repository's own bank, committed with
+    // git. With the questions folder moved (#160), readRenamesText() and
+    // the server would read another folder's rename log and questions.
+    if (process.env.MAXRECALL_QUESTIONS_DIR) throw new Refusal('MAXRECALL_QUESTIONS_DIR is set: this changes only the repository\'s own questions/, so unset it first');
     const command = process.argv[2];
     if (command === 'delete') await deleteQuestion(dryRun);
     else if (command === 'rename') await renameQuestion(dryRun);
