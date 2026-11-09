@@ -53,9 +53,13 @@ judge/, is server code, under these rules:
   in length (the limit is set when built, and named here); they're text,
   never HTML.
 - **Tests**: each judge exports its own cases, which questions.test.js
-  runs, **each with a timeout**: until judging moves to a worker thread
-  that can be stopped (`worker_threads`), that timeout is the only guard
-  against a judge that never returns, which would freeze the server.
+  runs, **each in a worker thread (or child process) stopped when its
+  time runs out** (`worker.terminate()`,
+  https://nodejs.org/api/worker_threads.html#workerterminate). That's the
+  only guard in `make test` against a judge that never returns, which
+  would freeze the server. node:test's own `timeout` option can't stop a
+  synchronous loop: its timer never gets the thread (tried 2026-11-08 on
+  Node 22.23.4, by questions 2 and the architect: it hung).
 - **R3**: the architect reviews every such pull request before the owner
   merges it; the owner approves in the pull request
   (docs/roles/architect.md, "Reviews").
