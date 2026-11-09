@@ -62,7 +62,7 @@ security (`judge/sandbox-selftest.js`).
     through it to prove the sandbox holds.
   - `routes.js` answers 503 for an error whose `code` is
     `'SANDBOX_UNAVAILABLE'` or `'JUDGE_BUSY'`, and sets `Retry-After` from
-    `retryAfterSeconds` for `'JUDGE_BUSY'`; `'JUDGE_FAILED'` (a fill-in
+    `retryAfterSeconds` for `'JUDGE_BUSY'`; `'JUDGE_FAILED'` (a fill-in-the-blank
     judge that failed, below) gets the generic "couldn't judge" answer;
     anything else is a 500. It matches the strings, not the classes:
     renaming a code passes `make typecheck` and turns every busy judge
@@ -90,15 +90,15 @@ security (`judge/sandbox-selftest.js`).
     probes inconclusive: G7 and G6d can no longer report ESCAPED, and
     G9 counts no Accepted judgings. (Infrastructure and security found the four
     places the first version of this item missed.)
-  - **Fill-in questions** (#160; decided 2026-11-08, being built). What
-    users rely on when the question's `kind` is `"fill-in"`:
+  - **Fill-in-the-blank questions** (#160; decided 2026-11-08, being built). What
+    users rely on when the question's `kind` is `"fill-in-the-blank"`:
     - **The answer** is the kind's own object, `{ blank }`; a `"code"`
       question's answer stays `code`, unchanged.
     - **Users' routes check it first**: `blank` must be a string
       (`typeof`, since `express.json()` would pass an array or
       `{ length: 1 }`) no longer than the question's `maxLength`
       (`.length`, which counts UTF-16 units as HTML's `maxlength` does),
-      and the answer may have no field but the kind's own (for fill-in,
+      and the answer may have no field but the kind's own (for fill-in-the-blank,
       only `blank`; #160's Q12, owner, 2026-11-08). Anything else is
       refused before questions' judging is called, and nothing is
       recorded for it. Questions' judging may rely on all of this.
@@ -148,12 +148,12 @@ questions as fixtures, below).
     `alreadyLearned` and the languages of `starterCode`, which
     `questionInfos()` passes on.
   - **`kind`, what type of question it is** (#160; decided 2026-11-08,
-    being built): `"code"` (every question so far) or `"fill-in"`.
+    being built): `"code"` (every question so far) or `"fill-in-the-blank"`.
     - An absent `kind` means `"code"`, filled in by one function in
       `question-files.js` that every reader calls, so no file needs
       editing and no record's `questionSha256` changes.
     - Each kind has its own fields: `"code"` today's (`starterCode`,
-      `judgeMode`, `testCases` and the rest); `"fill-in"` has
+      `judgeMode`, `testCases` and the rest); `"fill-in-the-blank"` has
       `template`, `blank` and `maxLength` (default 10, and at most 100:
       `make test` refuses more, #160's Q15, owner, 2026-11-08, so no one
       question file can lift the limit users' routes check). `blank` is
@@ -161,9 +161,9 @@ questions as fixtures, below).
       `template` (e.g. `"___"`); `make test` checks that it occurs exactly
       once in each (owner, 2026-11-08, #160 step 3). `make test` refuses
       an unknown kind, and another kind's fields.
-    - Every kind declares its languages (a fill-in question's are its
+    - Every kind declares its languages (a fill-in-the-blank question's are its
       `template`'s keys), so users' `{ question, language }` pairs hold.
-    - **A fill-in question's judge is a file beside it**,
+    - **A fill-in-the-blank question's judge is a file beside it**,
       `questions/<slug>.judge.js`, questions' (its rules:
       `docs/roles/questions.md`, "Judge files"). `questionInfos()` lists
       only `.json` files, so a judge is never taken for a question.
@@ -175,7 +175,7 @@ questions as fixtures, below).
     - **Never sent to the browser**, whatever a kind's public view says:
       for `"code"`, the hidden test cases (`toPublicProblem` sends
       `visibleTestCases` and `hiddenCount` in place of `testCases`); for
-      `"fill-in"`, nothing of its judge (the file, its source, its cases).
+      `"fill-in-the-blank"`, nothing of its judge (the file, its source, its cases).
       **Each kind's public view is users'** (owner, 2026-11-08): an
       allow-list in `routes.js`, replacing `toPublicProblem`'s deny-list,
       within these never-sent fields. Questions adding a field to a kind
@@ -285,8 +285,8 @@ Provider: questions (`scripts/question-admin.js`). Used by: users
 
 Provider: infrastructure and security (`paths.js`). Used by: users
 (`routes.js`, for `loadProblem`; `users.js`); questions (loading a
-fill-in question's judge file, #160, being built: only by a known
-fill-in slug, through `resolveInside`, since a `require` of a chosen path
+fill-in-the-blank question's judge file, #160, being built: only by a known
+fill-in-the-blank slug, through `resolveInside`, since a `require` of a chosen path
 runs code). And the other way: users
 (`users.js`) provides `EMAIL_PATTERN` to `auth.js`, and `OWNER_EMAIL` and
 `USERS_DIR` to `server.js` (infrastructure and security).
