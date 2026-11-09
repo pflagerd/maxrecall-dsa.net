@@ -341,7 +341,7 @@ for (const [what, question, pattern] of BROKEN) {
 const os = require('os');
 const { Worker } = require('node:worker_threads');
 const ts = require('typescript6');
-const { judgeFillInTheBlank, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in-the-blank');
+const { judgeFillInTheBlank, judgeSha256Of, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in-the-blank');
 
 /** How long one judge case may take before it counts as never returning. @type {number} */
 const JUDGE_CASE_TIMEOUT_MS = 1000;
@@ -412,6 +412,22 @@ test('judgeFillInTheBlank: an answer the route should have refused, or a code qu
   }
   assert.doesNotThrow(() => judgeFillInTheBlank({ ...fillInTheBlank('quote'), maxLength: 11 }, { blank: 'x'.repeat(11) }, 'python', FIXTURES), 'maxLength raises the limit');
   assert.throws(() => judgeFillInTheBlank({ slug: 'quote' }, { blank: 'x' }, 'python', FIXTURES), TypeError, 'a question with no kind is a code question');
+});
+
+test('judgeSha256Of: the judge file\'s SHA-256 as it was loaded, the code that judges until a restart (users\' D6; owner, 2026-11-09, b)', () => {
+  const v1 = "'use strict';\nmodule.exports = { judge: (blank) => ({ pass: blank === 'a' }) };\n";
+  const dir = judgeFolder({ hashed: v1 });
+  const question = { slug: 'hashed', kind: 'fill-in-the-blank' };
+  const expected = require('crypto').createHash('sha256').update(v1).digest('hex');
+  assert.equal(judgeSha256Of(question, dir), expected, 'the SHA-256 of the file\'s bytes, in hex');
+  assert.deepEqual(judgeFillInTheBlank(question, { blank: 'a' }, 'python', dir), { status: 'Accepted' }, 'the result carries no hash: routes.js sends it to the browser as it is');
+  // Changed under a running server: the old code still judges, and the hash
+  // still says so.
+  fs.writeFileSync(path.join(dir, 'hashed.judge.js'), v1.replace("'a'", "'b'"));
+  assert.deepEqual(judgeFillInTheBlank(question, { blank: 'a' }, 'python', dir), { status: 'Accepted' }, 'the code loaded first still judges');
+  assert.equal(judgeSha256Of(question, dir), expected, 'and the hash is still the code\'s that ran');
+  assert.throws(() => judgeSha256Of({ slug: 'no-such-judge', kind: 'fill-in-the-blank' }, dir), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED');
+  assert.throws(() => judgeSha256Of({ slug: 'hashed' }, dir), TypeError, 'a code question has no judge');
 });
 
 test('checkVerdict: only { pass, message?, hints? }, within the caps (#171)', () => {
