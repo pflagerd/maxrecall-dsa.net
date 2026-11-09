@@ -8,7 +8,7 @@
 // `--verbose` (VERBOSE=1 for make) lists each backlog pair with records.
 // server.js uses readSources() too, for its log at start.
 
-const { USERS_DIR, listUsers, readUserFile, readAllRecords } = require('../users');
+const { USERS_DIR, listUsers, readUserFile, readAllRecords, testBankRefusal } = require('../users');
 const { questionInfos, readRenamesText } = require('../question-files');
 const { checkConsistency, countLevels, formatFinding, describeCounts } = require('../consistency');
 
@@ -44,9 +44,14 @@ async function readSources() {
  * Prints every finding, grouped by user, then the totals, and sets the
  * exit code (1 if there's an error).
  *
- * @returns {Promise<void>} Rejects if the sources can't be read.
+ * @returns {Promise<void>} Rejects if the sources can't be read, or if
+ *   testBankRefusal() refuses.
  */
 async function main() {
+  // A test question bank only with a test users folder (owner, 2026-11-09,
+  // B2): reported below as "Consistency check not run", exit code 2.
+  const refused = testBankRefusal();
+  if (refused) throw new Error(refused);
   const verbose = process.argv.includes('--verbose');
   const sources = await readSources();
   const findings = checkConsistency(sources, { verbose });

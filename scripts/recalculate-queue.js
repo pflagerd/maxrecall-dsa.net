@@ -14,7 +14,7 @@
 // <UTC time to the millisecond>) and writes the new ones, backlog.json first. Exits 0 when
 // done, 1 when refused.
 
-const { EMAIL_PATTERN, listUsers, readUserFile, writeUserFile, backupUserFile, readAllRecords } = require('../users');
+const { EMAIL_PATTERN, listUsers, readUserFile, writeUserFile, backupUserFile, readAllRecords, testBankRefusal } = require('../users');
 const { questionInfos, readRenamesText } = require('../question-files');
 const { parseProfile } = require('../profile');
 const { parseQueueFiles, canOpenPair } = require('../order');
@@ -123,6 +123,9 @@ async function recalculateQueue(dryRun) {
  */
 async function main() {
   try {
+    // A test question bank only with a test users folder (owner, 2026-11-09, B2).
+    const refused = testBankRefusal();
+    if (refused) throw new Refusal(refused);
     await recalculateQueue(Boolean(process.env.DRY_RUN));
   } catch (err) {
     console.error(`Refused: ${/** @type {Error} */ (err).message}`);
