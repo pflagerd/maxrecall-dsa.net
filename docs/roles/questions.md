@@ -84,19 +84,21 @@ judge/, is server code, under these rules:
     since its legacy properties (`RegExp.input`, `$1`, …) hold the last
     match made anywhere in the server (the architect's R3 review of
     #191);
-  - writes only to its own variables, their properties, or
-    `module.exports`;
+  - **writes only to variables it declares, or to `module.exports`
+    itself, exactly: no property writes at all** (owner, 2026-11-09,
+    option (i); built in #200), in every form of write (`=`, `+=`, `++`,
+    `delete`, a destructuring or `for (… of …)` target). Otherwise a
+    write to a property of a shared built-in function the judge has read
+    into its own variable (`const h = ({}).hasOwnProperty; h.call = () =>
+    true;`) would change that function for the whole server (#191's R3
+    re-review). Method calls on its own objects (`list.push(x)`) aren't
+    writes, and are allowed;
   - names no `prototype` property, and uses no `async`, `await`,
     generators or `yield`.
 
-  **Still to come** (owner, 2026-11-09, option (i); #160's comment of
-  that day): **no property writes at all**. A judge file assigns only to
-  variables it declares, or to `module.exports` itself, exactly. Until
-  then a write to a property of a shared built-in function the judge
-  has read into its own variable (`const h = ({}).hasOwnProperty;
-  h.call = () => true;`) passes, and changes that function for the whole
-  server (#191's R3 re-review). In questions' follow-up, before #160's
-  step 5.
+  If a further way round turns up, the next step is #185 (the judge
+  outside the server process), not another rule (the architect's
+  recommendation, given with option (i)).
 - **R2**: a judge is loaded only by the slug of a known fill-in-the-blank question,
   through paths.js's `resolveInside` (docs/contracts.md, contract 7).
 - **Q7**: the length is checked before a judge is called (contract 2); a

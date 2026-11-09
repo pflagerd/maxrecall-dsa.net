@@ -403,6 +403,16 @@ infrastructure and security. That review is what #76 itself had.
     a request is from stay `server.js`'s.
   - `start()` does users' start-up work, `prepareQueues()` and
     `logConsistency()`, and loading the module starts nothing else.
+    **It may throw**, before any of that and so before `app.listen`
+    (PR 204; owner, 2026-11-09, option B2): when `MAXRECALL_QUESTIONS_DIR`
+    names a test question bank and the users folder has no `TEST-USERS`
+    file (`users.js`, `testBankRefusal`), since a test bank would
+    otherwise be filled into real learners' backlogs. `server.js` calls
+    it bare (`server.js:364`), so the throw ends the process, by design;
+    under systemd's `Restart=always` it would restart until the
+    start-rate limit stops it (a guess from systemd's defaults, not
+    tested). The live service never sets the variable (infrastructure
+    and security).
   - A new page or file to serve is a request to infrastructure and
     security to add it to `STATIC_FILES`.
 - **Checking it** (owner, 2026-11-06, #106; both users'):
