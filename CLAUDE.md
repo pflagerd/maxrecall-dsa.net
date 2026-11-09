@@ -195,9 +195,7 @@ that, **one session polls and tells the others**:
 
 Any session may ask another role's session to do something, with
 `send_message`, when its work needs that role to act: a change in the
-other role's files, a review, an answer, an operation on the VPS. (Not
-an owner-directed session: only the architect messages one, "Several
-sessions of one role".)
+other role's files, a review, an answer, an operation on the VPS.
 
 - **Finding it**: by its title, `maxrecallcode.net:<YYMMDD>:<role>`, the
   newest one, as above, or as "Several sessions of one role" says where
@@ -238,19 +236,14 @@ A role may have more than one session on a day.
 - **Each says what work is its**, in its handoff and, when that work is
   split or changes, in a message to the architect's session. Sessions
   of one role agree a split between themselves and may send each other
-  news (but not an owner-directed one, below).
+  news.
 - **News** goes to the session whose work it concerns; where that's
-  unclear, to each of the role's sessions (but an owner-directed one,
-  below).
+  unclear, to each of the role's sessions.
 - **A request** goes to the session whose work it concerns; where that's
-  unclear, to one session: the lowest-numbered that isn't
-  owner-directed, which passes it on if the work is another's. Sending
-  it to all of them could get it done twice.
-- **An owner-directed session** is one whose work the owner assigns it
-  directly; the owner says so, and its handoff records it. It tells the
-  architect what work the owner gave it. **Only the architect messages
-  it** (owner, 2026-11-08), news and requests alike; no other session
-  does, its own role's included. A session that needs something from
-  it asks the architect, who relays it, or asks the owner. The owner
-  still assigns its work: a request from the architect is acted on as
-  "Requests between sessions" says.
+  unclear, to one session: the lowest-numbered, which passes it on if
+  the work is another's. Sending it to all of them could get it done
+  twice.
+- **Every session of a role follows the same rules** (owner,
+  2026-11-09). There are no owner-directed sessions: the owner may still
+  assign a session work directly, as for any session, and any session
+  may message it.
