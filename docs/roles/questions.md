@@ -21,9 +21,10 @@ template for writing one.
   judge/line-numbers-test.js
 - Fill-in judging (#160; decided 2026-11-08, being built): each fill-in
   question's judge, questions/<slug>.judge.js (under questions/**), and
-  the code this role adds to judge/ for it (the dispatch by kind, loading
-  a judge, the shared helpers). Name those files here when they're
-  added. Both are server code: see "Judge files", below.
+  the code this role adds to judge/ for it: judge/fill-in.js (the
+  dispatch by kind, loading a judge, `JudgeFailedError`, the shared
+  helpers; #160 step 3). Name any further files here when they're added.
+  Both are server code: see "Judge files", below.
 - The topic and source bubbles: labels.json (their colours) and
   bubbles.js (drawing them on the problem list and the problem page)
 - The Test button's rules: playtest.js, playtest.test.js

@@ -62,9 +62,11 @@ security (`judge/sandbox-selftest.js`).
     through it to prove the sandbox holds.
   - `routes.js` answers 503 for an error whose `code` is
     `'SANDBOX_UNAVAILABLE'` or `'JUDGE_BUSY'`, and sets `Retry-After` from
-    `retryAfterSeconds` for `'JUDGE_BUSY'`; anything else is a 500. It
-    matches the strings, not the classes: renaming a code passes
-    `make typecheck` and turns every busy judge into a 500.
+    `retryAfterSeconds` for `'JUDGE_BUSY'`; `'JUDGE_FAILED'` (a fill-in
+    judge that failed, below) gets the generic "couldn't judge" answer;
+    anything else is a 500. It matches the strings, not the classes:
+    renaming a code passes `make typecheck` and turns every busy judge
+    into a 500.
   - `routes.test.js` matches a `JudgeResult`'s `status` values
     `'Accepted'` and `'Wrong Answer'` as strings, and reads its `total`
     and `results` (a Test's answer). Renaming a status fails `make test`
@@ -110,9 +112,11 @@ security (`judge/sandbox-selftest.js`).
       `{ pass, message?, hints? }`) gives a distinct "couldn't judge"
       outcome, not a status: users record nothing, change no queue, and
       show only "We couldn't judge this answer; it wasn't recorded." The
-      details go to the server's log, never to the page. Its name is
-      questions' to choose when built, and goes here then; users will
-      match it as a string, as they do `'JUDGE_BUSY'`.
+      details go to the server's log, never to the page. Questions'
+      judging throws it as a `JudgeFailedError` whose `code` is
+      `'JUDGE_FAILED'`, as the queue throws `JudgeBusyError`
+      (`'JUDGE_BUSY'`); users' routes match the string (owner, 2026-11-08,
+      #160 step 3).
 
 ## 3. The Test button's rules
 
@@ -152,8 +156,11 @@ questions as fixtures, below).
       `judgeMode`, `testCases` and the rest); `"fill-in"` has
       `template`, `blank` and `maxLength` (default 10, and at most 100:
       `make test` refuses more, #160's Q15, owner, 2026-11-08, so no one
-      question file can lift the limit users' routes check). `make test`
-      refuses an unknown kind, and another kind's fields.
+      question file can lift the limit users' routes check). `blank` is
+      the marker text that stands for the blank in each language's
+      `template` (e.g. `"___"`); `make test` checks that it occurs exactly
+      once in each (owner, 2026-11-08, #160 step 3). `make test` refuses
+      an unknown kind, and another kind's fields.
     - Every kind declares its languages (a fill-in question's are its
       `template`'s keys), so users' `{ question, language }` pairs hold.
     - **A fill-in question's judge is a file beside it**,
