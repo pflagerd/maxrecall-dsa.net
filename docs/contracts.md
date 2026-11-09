@@ -95,9 +95,11 @@ security (`judge/sandbox-selftest.js`).
     - **Users' routes check it first**: `blank` must be a string
       (`typeof`, since `express.json()` would pass an array or
       `{ length: 1 }`) no longer than the question's `maxLength`
-      (`.length`, which counts UTF-16 units as HTML's `maxlength` does).
-      Anything else is refused before questions' judging is called, which
-      may rely on it.
+      (`.length`, which counts UTF-16 units as HTML's `maxlength` does),
+      and the answer may have no field but the kind's own (for fill-in,
+      only `blank`; #160's Q12, owner, 2026-11-08). Anything else is
+      refused before questions' judging is called, and nothing is
+      recorded for it. Questions' judging may rely on all of this.
     - **The result's `status`** is `'Accepted'` or `'Wrong Answer'`,
       mapped from the judge's `pass` in one place in questions' code; no
       judge names a status. It adds `message` and `hints`, the judge's,
