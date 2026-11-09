@@ -1,7 +1,8 @@
 # Submission records, version 4: a fill-in answer (#160, Q11)
 
-Status: **proposed** (users, 2026-11-08). Nothing built. The owner
-decides D1 to D5 below. Where this disagrees with `readme.html`,
+Status: **decided** (users, 2026-11-08; the owner chose D1 to D5 as
+recommended, 2026-11-08). Nothing built: it waits for questions' side
+of #160 (B7). Where this disagrees with `readme.html`,
 `readme.html` wins: it describes what's built.
 
 #160 (questions 2's fill-in-the-blank proposal) leaves Q11 to users: what
@@ -88,31 +89,32 @@ An example, a failed fill-in Submit:
 A code Submit in version 4 differs from version 3 only in
 `"schemaVersion": 4` and `"kind": "code"`.
 
-## Decisions for the owner
+## Decisions (owner, 2026-11-08: each as recommended)
 
-- **D1. Where a non-code answer goes.**
+- **D1. Where a non-code answer goes.** Decided: (a).
   - (a) **`answer`, the kind's own object; `code` stays for code**
     (recommended). Q5 already keeps `code` for code questions, so every
     existing record, test and reader of `code` is untouched.
   - (b) `answer` for every kind, `{ "code": "…" }` for code. One shape,
     but it changes code records and every reader of `code`, which Q5
     ruled out.
-- **D2. `kind` in the record.**
+- **D2. `kind` in the record.** Decided: (a).
   - (a) **Always written in version 4** (recommended). A record says
     what it is without its question file, which may change kind later
     (`questionSha256` already shows a file changed, but not how).
   - (b) Only for kinds other than `"code"`. Shorter, but a reader has to
     know that absent means code, as with `skipped`.
-- **D3. The judge's `message` and `hints`.**
+- **D3. The judge's `message` and `hints`.** Decided: (a).
   - (a) **Kept** (recommended): the learner can see later why a fill-in
     answer failed, as a code answer's `stderr` shows why it failed.
   - (b) Not kept: the verdict only.
-- **D4. Fields a fill-in judge doesn't produce.**
+- **D4. Fields a fill-in judge doesn't produce.** Decided: (a).
   - (a) **`null`, as for a Skip** (recommended): every record has the
     same fields, and readers already handle `null` there.
   - (b) Left out. Smaller files, but readers must handle both `null`
     (Skips) and missing.
-- **D5. #88's refresher mark** (#88 on hold, owner, 2026-11-08). #88's
+- **D5. #88's refresher mark** (#88 on hold, owner, 2026-11-08).
+  Decided: (a). #88's
   refresher Submits would need `refresher: "yes"`, which consistency
   check 6 and the replay skip (users' finding, told to questions 1).
   - (a) **If #88 resumes before this is built, the mark joins version
