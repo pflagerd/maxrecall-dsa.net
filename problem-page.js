@@ -1774,9 +1774,10 @@ function showInSubmissionsPanel(...nodes) {
  * @property {string} question
  * @property {string} language
  * @property {string | null} status - null for a Skip.
- * @property {number | null} passed - null for a Skip.
- * @property {number | null} total - null for a Skip.
- * @property {number | null} runtimeMs - null for a Skip.
+ * @property {number | null} passed - null for a Skip, and for a
+ *   fill-in-the-blank answer (records v4, D4; none saved yet).
+ * @property {number | null} total - null as passed is.
+ * @property {number | null} runtimeMs - null as passed is.
  * @property {number | null} elapsedMs - null for submissions before the timer.
  * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8).
  */
@@ -1876,8 +1877,13 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(/*
     row.append(
       when,
       // A Skip isn't judged (step 8, detail 7): "Skipped", and no runtime.
-      s.skipped ? makeEl('td', 'Skipped', 'status-fail') : makeEl('td', `${s.status} · ${s.passed}/${s.total}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
-      makeEl('td', s.skipped ? '—' : `${s.runtimeMs} ms`)
+      // Counts and runtime show only when they're numbers, as renderResults
+      // checks: a fill-in-the-blank record has none (records v4, D4), and
+      // would otherwise read "Wrong Answer · null/null" and "null ms".
+      s.skipped
+        ? makeEl('td', 'Skipped', 'status-fail')
+        : makeEl('td', `${s.status}${typeof s.passed === 'number' ? ` · ${s.passed}/${s.total}` : ''}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
+      makeEl('td', !s.skipped && typeof s.runtimeMs === 'number' ? `${s.runtimeMs} ms` : '—')
     );
     // How long you took (issue #20); older submissions didn't record it.
     const took = makeEl('td', s.elapsedMs === null ? '—' : formatElapsed(s.elapsedMs));
