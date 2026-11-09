@@ -30,7 +30,7 @@ const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 
-const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS } = require('./routes');
+const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS, checkFillInTheBlankAnswer, judgeErrorAnswer, COULDNT_JUDGE } = require('./routes');
 const { QUESTION_FIELDS } = require('./question-files');
 
 const REPO = __dirname;
@@ -604,6 +604,60 @@ test('questions: every allowed field is one of the format\'s, and testCases isn\
   }
   for (const field of PUBLIC_COMMON_FIELDS) {
     assert.ok(PUBLIC_CODE_FIELDS.includes(field) && PUBLIC_FILL_IN_THE_BLANK_FIELDS.includes(field), `${field} is common but not in every kind's list`);
+  }
+});
+
+test('fill-in-the-blank answers: what the route lets through to the judge (contract 2; #160 Q12)', () => {
+  const question = /** @type {import('./routes').Problem} */ (/** @type {unknown} */ (FILL_IN_THE_BLANK)); // maxLength 10 by default
+  const three = /** @type {import('./routes').Problem} */ (/** @type {unknown} */ ({ ...FILL_IN_THE_BLANK, maxLength: 3 }));
+  /** @type {[string, unknown, import('./routes').Problem, RegExp | null][]} */
+  const cases = [
+    ['a valid blank', { blank: "'" }, question, null],
+    ['an empty blank (the judge says whether it\'s wrong)', { blank: '' }, question, null],
+    ['exactly maxLength', { blank: 'x'.repeat(10) }, question, null],
+    ['a given maxLength', { blank: 'abc' }, three, null],
+    ['not sent', undefined, question, /answer must be an object/],
+    ['null', null, question, /answer must be an object/],
+    ['a string', "'", question, /answer must be an object/],
+    ['an array', ["'"], question, /answer must be an object/],
+    ['no fields', {}, question, /one field, blank, and no other/],
+    ['another field too', { blank: "'", code: 'x' }, question, /one field, blank, and no other/],
+    ['__proto__ as a field (JSON.parse makes it an own key)', JSON.parse('{"blank":"x","__proto__":{}}'), question, /one field, blank, and no other/],
+    ['blank a number', { blank: 1 }, question, /blank must be a string/],
+    ['blank an array, which has a length', { blank: ["'"] }, question, /blank must be a string/],
+    ['blank { length: 1 }', { blank: { length: 1 } }, question, /blank must be a string/],
+    ['over the default maxLength', { blank: 'x'.repeat(11) }, question, /at most 10 characters/],
+    ['over a given maxLength', { blank: 'abcd' }, three, /at most 3 characters/],
+    // .length counts UTF-16 code units, as HTML's maxlength does: an emoji is two.
+    ['five emoji are ten units', { blank: '😀'.repeat(5) }, question, null],
+    ['six emoji are twelve units', { blank: '😀'.repeat(6) }, question, /at most 10 characters/],
+  ];
+  for (const [name, answer, q, expected] of cases) {
+    const why = checkFillInTheBlankAnswer(answer, q);
+    if (expected === null) assert.equal(why, null, name);
+    else assert.match(String(why), expected, name);
+  }
+});
+
+test('a failed judging: 503 for an unavailable or busy judge, 500 "couldn\'t judge" for JUDGE_FAILED, 500 otherwise', () => {
+  /**
+   * An error as judging throws it.
+   *
+   * @param {string | undefined} code - Its code.
+   * @param {object} [more] - Other fields.
+   * @returns {import('./routes').JudgeError} The error.
+   */
+  const thrown = (code, more = {}) => Object.assign(new Error(`message for ${code}`), { code }, more);
+  assert.deepEqual(judgeErrorAnswer(thrown('SANDBOX_UNAVAILABLE')), { status: 503, error: 'message for SANDBOX_UNAVAILABLE' });
+  assert.deepEqual(judgeErrorAnswer(thrown('JUDGE_BUSY', { retryAfterSeconds: 7 })), { status: 503, error: 'message for JUDGE_BUSY', retryAfterSeconds: 7 });
+  // The owner's choice, 2026-11-09; the judge's own message never reaches the page.
+  assert.deepEqual(judgeErrorAnswer(thrown('JUDGE_FAILED')), { status: 500, error: COULDNT_JUDGE });
+  assert.equal(COULDNT_JUDGE, "We couldn't judge this answer; it wasn't recorded.");
+  for (const code of [undefined, 'ENOENT']) {
+    const answer = judgeErrorAnswer(thrown(code));
+    assert.equal(answer.status, 500);
+    assert.match(answer.error, /^Execution failed: /);
+    assert.doesNotMatch(answer.error, /message for/, 'the error\'s own message isn\'t sent');
   }
 });
 
