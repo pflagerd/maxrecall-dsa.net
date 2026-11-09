@@ -31,7 +31,11 @@ records, and the scripts that set up and adjust a learner.
 - docs/how-to-put-a-question-directly-into-my-queue-by-slug.html
   (queueing a question of the learner's choice, by its slug: #81)
 - Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
-  docs/plans/elapsed-timer.md, docs/plans/question-bank-page.md (#133)
+  docs/plans/elapsed-timer.md, docs/plans/question-bank-page.md (#133),
+  docs/plans/submission-records-v4.md (#168)
+- Each question kind's public view (#160; owner, 2026-11-08; being
+  built): the allow-list of fields the browser is sent, in routes.js,
+  within docs/contracts.md contract 4's never-sent fields
 - The format of users/<email>/ (gitignored, on each machine)
 
 ## May read, must not edit
