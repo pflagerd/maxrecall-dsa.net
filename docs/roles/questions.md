@@ -47,10 +47,15 @@ judge/, is server code, under these rules:
   through paths.js's `resolveInside` (docs/contracts.md, contract 7).
 - **Q7**: the length is checked before a judge is called (contract 2); a
   judge is synchronous and fast, since the server runs on one thread; its
-  errors are caught (contract 2's "couldn't judge"); its message and
-  hints are text, never HTML.
+  errors are caught, and its result's shape is checked
+  (`{ pass: boolean, message?: string, hints?: string[] }`; anything else
+  is contract 2's "couldn't judge"); its message and each hint are capped
+  in length (the limit is set when built, and named here); they're text,
+  never HTML.
 - **Tests**: each judge exports its own cases, which questions.test.js
-  runs.
+  runs, **each with a timeout**: until judging moves to a worker thread
+  that can be stopped (`worker_threads`), that timeout is the only guard
+  against a judge that never returns, which would freeze the server.
 - **R3**: the architect reviews every such pull request before the owner
   merges it; the owner approves in the pull request
   (docs/roles/architect.md, "Reviews").
