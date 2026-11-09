@@ -40,6 +40,15 @@ the overall picture. Act as the human's lieutenant; the human decides.
    "state of the project" summary all roles read at startup.
 6. Commit and push.
 
+## Reviews (owner, 2026-11-08, #160)
+- **Judge files**: the architect reviews every pull request that adds or
+  changes a fill-in question's judge (`questions/<slug>.judge.js`) or
+  questions' fill-in code in `judge/`, against `docs/roles/questions.md`,
+  "Judge files" (R1, R2, Q7) and `docs/contracts.md` contract 2, and
+  says so in the pull request. The owner approves in the pull request.
+  Reviewing moves no ownership: the files stay questions', and the
+  architect doesn't edit them.
+
 ## Exceptions: editing another role's files (owner, 2026-11-06)
 The architect may ask the owner for an exception to change a file
 another role owns: source code or any other artifact it can reach.

@@ -88,6 +88,29 @@ security (`judge/sandbox-selftest.js`).
     probes inconclusive: G7 and G6d can no longer report ESCAPED, and
     G9 counts no Accepted judgings. (Infrastructure and security found the four
     places the first version of this item missed.)
+  - **Fill-in questions** (#160; decided 2026-11-08, being built). What
+    users rely on when the question's `kind` is `"fill-in"`:
+    - **The answer** is the kind's own object, `{ blank }`; a `"code"`
+      question's answer stays `code`, unchanged.
+    - **Users' routes check it first**: `blank` must be a string
+      (`typeof`, since `express.json()` would pass an array or
+      `{ length: 1 }`) no longer than the question's `maxLength`
+      (`.length`, which counts UTF-16 units as HTML's `maxlength` does).
+      Anything else is refused before questions' judging is called, which
+      may rely on it.
+    - **The result's `status`** is `'Accepted'` or `'Wrong Answer'`,
+      mapped from the judge's `pass` in one place in questions' code; no
+      judge names a status. It adds `message` and `hints`, the judge's,
+      which users' page shows as text, never as HTML. It leaves out
+      `passed` and `total`, which the page would print as "0/1 test cases
+      passed".
+    - **A judge that fails** (throws, or returns something other than
+      `{ pass, message?, hints? }`) gives a distinct "couldn't judge"
+      outcome, not a status: users record nothing, change no queue, and
+      show only "We couldn't judge this answer; it wasn't recorded." The
+      details go to the server's log, never to the page. Its name is
+      questions' to choose when built, and goes here then; users will
+      match it as a string, as they do `'JUDGE_BUSY'`.
 
 ## 3. The Test button's rules
 
@@ -118,6 +141,35 @@ questions as fixtures, below).
     `created`, `title`, `difficulty`, `topics`, `sources`,
     `alreadyLearned` and the languages of `starterCode`, which
     `questionInfos()` passes on.
+  - **`kind`, what type of question it is** (#160; decided 2026-11-08,
+    being built): `"code"` (every question so far) or `"fill-in"`.
+    - An absent `kind` means `"code"`, filled in by one function in
+      `question-files.js` that every reader calls, so no file needs
+      editing and no record's `questionSha256` changes.
+    - Each kind has its own fields: `"code"` today's (`starterCode`,
+      `judgeMode`, `testCases` and the rest); `"fill-in"` has
+      `template`, `blank` and `maxLength` (default 10). `make test`
+      refuses an unknown kind, and another kind's fields.
+    - Every kind declares its languages (a fill-in question's are its
+      `template`'s keys), so users' `{ question, language }` pairs hold.
+    - **A fill-in question's judge is a file beside it**,
+      `questions/<slug>.judge.js`, questions' (its rules:
+      `docs/roles/questions.md`, "Judge files"). `questionInfos()` lists
+      only `.json` files, so a judge is never taken for a question.
+      `make rename-question` and `make delete-question` are to move or
+      remove it with its question (today they handle only the `.json`,
+      `scripts/question-admin.js`). Users' records hash it as
+      `judgeSha256` (#168),
+      so they rely on that path.
+    - **Never sent to the browser**, whatever a kind's public view says:
+      for `"code"`, the hidden test cases (`toPublicProblem` sends
+      `visibleTestCases` and `hiddenCount` in place of `testCases`); for
+      `"fill-in"`, nothing of its judge (the file, its source, its cases).
+      **Each kind's public view is users'** (owner, 2026-11-08): an
+      allow-list in `routes.js`, replacing `toPublicProblem`'s deny-list,
+      within these never-sent fields. Questions adding a field to a kind
+      says here whether it may be sent; users' list sends only what it
+      names, so a field left off is missing from the page, not leaked.
   - `difficulty`'s values, matched as strings: `Fundamentals` (below
     Easy, for language features; #93), `Easy`, `Medium`, `Hard`. Users'
     pages make it the CSS class `difficulty-<value in lowercase>`
@@ -221,7 +273,10 @@ Provider: questions (`scripts/question-admin.js`). Used by: users
 ## 7. Paths, and who the users are
 
 Provider: infrastructure and security (`paths.js`). Used by: users
-(`routes.js`, for `loadProblem`; `users.js`). And the other way: users
+(`routes.js`, for `loadProblem`; `users.js`); questions (loading a
+fill-in question's judge file, #160, being built: only by a known
+fill-in slug, through `resolveInside`, since a `require` of a chosen path
+runs code). And the other way: users
 (`users.js`) provides `EMAIL_PATTERN` to `auth.js`, and `OWNER_EMAIL` and
 `USERS_DIR` to `server.js` (infrastructure and security).
 
