@@ -1,8 +1,10 @@
 # Unit-test questions: tests written as code, in each language's framework
 
 Status: **proposed** (questions, questions 1 session, 2026-11-09; issue
-#174), **on hold** (owner, 2026-11-08: "Everything on hold"). Some of the design is
-decided (below); nothing is built, and no pull request is open. Where this
+#174). On hold from 2026-11-08 ("Everything on hold") until the owner
+chose its prototype, 2026-11-09. Some of the design is decided (below);
+a prototype in Python has run ("Prototype", below); nothing is built into
+the app. Where this
 disagrees with `readme.html`, `readme.html` wins: it describes what's
 built.
 
@@ -85,7 +87,10 @@ Two kinds:
    hint is open.
 6. **One process for the suite, or one per test.** In one process, the
    sandbox's 5 s kill stops a hung test, but every test's result in that
-   run is lost (Time Limit Exceeded for all). A framework's own per-test
+   run is lost (Time Limit Exceeded for all). **Corrected by the
+   prototype** (2026-11-09): only if the results are written at the end.
+   Written one line per test as each ends, the ones before the hung test
+   are kept; it and those after it are lost. A framework's own per-test
    timeout can't be relied on to stop a synchronous loop in-process
    (architect, #172: `node:test`'s timeout option hung on Node 22.23.4).
    One process per test, as program mode does per case, keeps the others'
@@ -149,9 +154,65 @@ Not installed: pytest, any C++ test framework, JUnit 5 (only a JUnit 4
 jar inside Gradle, `/opt/gradle-8.14.3/lib`). Kubuntu and the VPS not
 checked.
 
-## Next, when the hold lifts
+## Prototype: Python with `unittest` (2026-11-09)
 
-A prototype in one language (JavaScript with `node:test`, or Python with
-`unittest`) to show: results read without leaking hidden tests, what
-cheating looks like, how long a run takes. Then the open points above,
-for the owner to answer here.
+The owner chose Python first, with the prototype's code committed:
+`docs/plans/prototypes/unit-test-questions-python/` (its `README.md` has
+how to run it, how it works, and every probe's result). It runs in the
+real sandbox, as `judge/runner.js` runs Python. What it showed, in the
+cloud container (bubblewrap 0.9.0, Python 3.13.18):
+
+- **Item 2, reading results without leaking**: a harness of our own runs
+  each test with `TestCase.run` and writes a report line per test; for a
+  hidden test, its number and pass or fail only. No probe's ordinary
+  failure showed anything of a hidden test.
+- **The likely accidental leak is stopped**: the learner's code printing
+  its argument shows under visible tests only; output during a hidden
+  test is captured and dropped.
+- **Item 4**: a visible test's failure keeps `unittest`'s own message:
+  the test's line with Python 3.13's `~~~^^^` marks, then the learner's.
+- **Item 6**: the report is written as each test ends, so a test that
+  hangs loses only itself and those after it (one process: 5004 ms, both
+  visible results kept). One process per test keeps the rest too, at 5 s
+  per hung test (10,186 ms with two); it would need program mode's 20 s
+  total cap (`PROGRAM_TOTAL_RUN_MS`).
+- **Item 7, speed**: one sandboxed run of all five tests took 49 to 75 ms;
+  one per test, five runs, 230 to 326 ms. Python only; the VPS not tried.
+- **The test list comes from the author's reference solution**, run once,
+  never from the learner's code, so a submission can't shrink it.
+- **Deliberate code beats it, as predicted**:
+  - reading `/work/hidden_tests.py` and printing it during a visible test
+    shows the whole hidden file;
+  - replacing `unittest.TestCase.assertEqual` with a no-op passes every
+    test;
+  - reading the report's nonce from the harness's memory lets it write a
+    report of its own.
+
+  A random nonce in each report line stopped only a fake written without
+  it. Like R1 for judge files, this guards against accidents, not against
+  deliberate cheating; everything runs in the learner's process.
+- **Not shown**: item 3 (compile errors quoting hidden tests) can't occur
+  in Python; C++, Java and D need their own prototype.
+
+## Next
+
+For the owner:
+
+1. **The two deliberate gaps** (hidden file readable; verdict fakeable):
+   accept them for invited learners the owner trusts (D4), and say so in
+   `readme.html` §10, as suggested above? A step up that's cheap: send the
+   hidden tests on standard input rather than as a file, so reading them
+   means digging in the harness's memory rather than `open()`. Still
+   deliberate-possible.
+2. **One process or one per test**: one process with a report line per
+   test (recommended: the cheaper, and only a hung test and those after it
+   lose their result), or one per test (keeps every other result; costs a
+   process start each, small in Python, a JVM start each in Java).
+3. **The next prototype**: a compiled language, for item 3 and the
+   framework's start-up cost (item 7): Java with JUnit 5, or C++ with a
+   single-header framework (doctest). Each needs infrastructure and
+   security to install the framework.
+4. **Item 8** (a kind or a `judgeMode`): ask questions-2 (Issue 160's
+   `kind`) before deciding. Since PR 192, a new kind shows "This page
+   can't show this kind of question yet" until users build its page; a
+   `judgeMode` keeps the code page.
