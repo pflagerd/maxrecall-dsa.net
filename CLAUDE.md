@@ -230,9 +230,13 @@ other role's files, a review, an answer, an operation on the VPS.
 
 A role may have more than one session on a day.
 
-- **Titles are numbered**: `maxrecallcode.net:<YYMMDD>:<role> <n>`,
-  e.g. `maxrecallcode.net:261108:questions 1` and `… questions 2`. A
-  role with one session keeps the plain title.
+- **Titles are numbered**: `maxrecallcode.net:<YYMMDD>:<role>-<n>`,
+  e.g. `maxrecallcode.net:261109:questions-1` and `… questions-2`, for
+  every role (a second users session is `users-2`; owner, 2026-11-09).
+  In writing, a numbered session is named the same way: "questions-2",
+  not "questions 2". A role with one session keeps the plain title.
+  (Sessions and handoffs before 2026-11-09 wrote "questions 1",
+  "questions 2"; they stay as written.)
 - **Each says what work is its**, in its handoff and, when that work is
   split or changes, in a message to the architect's session. Sessions
   of one role agree a split between themselves and may send each other

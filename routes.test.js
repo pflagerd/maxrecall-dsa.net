@@ -21,7 +21,7 @@
 // work, as in the cloud; it never turns a working one off
 // (judge/sandbox.js), so elsewhere the code below is judged inside it.
 
-const { test, before, after } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const http = require('http');
@@ -31,7 +31,7 @@ const path = require('path');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 
 const { toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS, checkFillInTheBlankAnswer, judgeErrorAnswer, COULDNT_JUDGE } = require('./routes');
-const { QUESTION_FIELDS } = require('./question-files');
+const { QUESTION_FIELDS, checkQuestion } = require('./question-files');
 
 const REPO = __dirname;
 
@@ -147,10 +147,14 @@ async function twoPorts() {
  * @param {string} usersDir - MAXRECALL_USERS_DIR.
  * @param {string} authDir - MAXRECALL_AUTH_DIR.
  * @param {boolean} unsandboxed - Whether to set MAXRECALL_UNSANDBOXED=1.
+ * @param {string} [questionsDir] - MAXRECALL_QUESTIONS_DIR, a folder of
+ *   test questions; the repo's questions/ if left out. usersDir must then
+ *   hold a TEST-USERS file, or the server refuses to start (users.js,
+ *   testBankRefusal).
  * @returns {Promise<RunningServer>} The running server.
  * @throws {Error} If it exits first, or isn't done within 60 s.
  */
-async function startServer(usersDir, authDir, unsandboxed) {
+async function startServer(usersDir, authDir, unsandboxed, questionsDir) {
   const [port, trusted] = await twoPorts();
   /** @type {NodeJS.ProcessEnv} */
   const env = {
@@ -159,6 +163,7 @@ async function startServer(usersDir, authDir, unsandboxed) {
     MAXRECALL_USER: OWNER, MAXRECALL_USERS_DIR: usersDir, MAXRECALL_AUTH_DIR: authDir,
   };
   if (unsandboxed) env.MAXRECALL_UNSANDBOXED = '1';
+  if (questionsDir) env.MAXRECALL_QUESTIONS_DIR = questionsDir;
   const child = spawn(process.execPath, ['server.js'], { cwd: REPO, env, stdio: ['ignore', 'pipe', 'pipe'] });
   /** @type {string[]} */
   const log = [];
@@ -942,3 +947,151 @@ test('without a working sandbox, Run, Submit and Test are 503, not 500', async (
     await stopServer(second);
   }
 });
+
+// ---- Fill-in-the-blank questions, end to end (#160 step 4; owner, 2026-11-09) ----
+//
+// A second server on a folder of test questions (MAXRECALL_QUESTIONS_DIR,
+// PR 198), with a users folder marked TEST-USERS (users.js,
+// testBankRefusal). The rest of this file keeps the repo's questions/.
+
+describe(
+  'fill-in-the-blank questions, through a server on a test question bank',
+  /**
+   * Declares the block's tests, and the hooks that start and stop its server.
+   *
+   * @returns {void}
+   */
+  () => {
+    /** @type {string} */
+    let bankTmp = '';
+    /** @type {RunningServer} */
+    let bankServer;
+    /** A fill-in-the-blank question, as the format allows (checked below). */
+    const QUOTE = {
+      slug: 'zz-quote', created: '2026-11-09T00:00:00Z', title: 'ZZ quote', difficulty: 'Fundamentals', topics: ['strings'], sources: ['test'],
+      kind: 'fill-in-the-blank', description: { python: '<p>Fill in the blank.</p>' }, template: { python: 'print("It___s")' }, blank: '___', maxLength: 3,
+    };
+    // Judges as questions' R1 asks (docs/roles/questions.md): strict, own
+    // names only, synchronous.
+    const QUOTE_JUDGE = "'use strict';\nmodule.exports = {\n  judge(blank) {\n    return blank === \"'\" ? { pass: true, message: 'Yes: a single quote.' } : { pass: false, message: 'Not a single quote.', hints: ['One character.'] };\n  },\n};\n";
+    const BROKEN = { ...QUOTE, slug: 'zz-broken', title: 'ZZ broken' };
+    const BROKEN_JUDGE = "'use strict';\nmodule.exports = {\n  judge() {\n    throw new Error('this judge is broken on purpose');\n  },\n};\n";
+    const QUIZ = { ...QUOTE, slug: 'zz-quiz', title: 'ZZ quiz', kind: 'quiz' };
+
+    /**
+     * Sends a request to the test bank's server as the owner, on its trusted
+     * port (no sign-in).
+     *
+     * @param {string} method - The HTTP method.
+     * @param {string} urlPath - The path.
+     * @param {unknown} [json] - A body sent as JSON, if any.
+     * @returns {Promise<Answer>} The answer.
+     */
+    const toBank = (method, urlPath, json) => send(bankServer.trusted, method, urlPath, { json });
+
+    before(
+      /**
+       * Writes the test bank and a marked users folder, and starts its server.
+       *
+       * @returns {Promise<void>} Once it's listening.
+       */
+      async () => {
+        bankTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'maxrecall-routes-test-bank-'));
+        const questionsDir = path.join(bankTmp, 'questions');
+        const usersDir = path.join(bankTmp, 'users');
+        const authDir = path.join(bankTmp, 'auth');
+        writeFile(path.join(questionsDir, 'zz-quote.json'), QUOTE);
+        writeFile(path.join(questionsDir, 'zz-quote.judge.js'), QUOTE_JUDGE);
+        writeFile(path.join(questionsDir, 'zz-broken.json'), BROKEN);
+        writeFile(path.join(questionsDir, 'zz-broken.judge.js'), BROKEN_JUDGE);
+        writeFile(path.join(questionsDir, 'zz-quiz.json'), QUIZ);
+        writeFile(path.join(usersDir, 'TEST-USERS'), '');
+        fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
+        bankServer = await startServer(usersDir, authDir, false, questionsDir);
+      },
+    );
+    after(
+      /**
+       * Stops the server and removes its folders.
+       *
+       * @returns {Promise<void>} Once done.
+       */
+      async () => {
+        if (bankServer) await stopServer(bankServer);
+        if (bankTmp) fs.rmSync(bankTmp, { recursive: true, force: true });
+      },
+    );
+
+    test('the fixtures are what the format allows (but the unknown kind, on purpose)', () => {
+      assert.deepEqual(checkQuestion(QUOTE, 'zz-quote.json'), []);
+      assert.deepEqual(checkQuestion(BROKEN, 'zz-broken.json'), []);
+    });
+
+    test('the server reads the test bank, not the repo\'s questions/', async () => {
+      assert.equal((await toBank('GET', '/api/questions/two-sum')).status, 404);
+      const listed = (await toBank('GET', '/api/questions')).json.map((/** @type {{ slug: string }} */ q) => q.slug).sort();
+      assert.deepEqual(listed, ['zz-broken', 'zz-quiz', 'zz-quote']);
+    });
+
+    test('the public view: kind, template, blank and maxLength; nothing of the judge', async () => {
+      const one = await toBank('GET', '/api/questions/zz-quote');
+      assert.equal(one.status, 200);
+      assert.equal(one.json.kind, 'fill-in-the-blank');
+      assert.deepEqual(one.json.template, QUOTE.template);
+      assert.equal(one.json.blank, '___');
+      assert.equal(one.json.maxLength, 3);
+      assert.doesNotMatch(one.body.toString(), /judge|single quote/i, 'nothing of the judge file');
+      const quiz = await toBank('GET', '/api/questions/zz-quiz');
+      assert.deepEqual(Object.keys(quiz.json).sort(), ['description', 'difficulty', 'kind', 'slug', 'sources', 'title', 'topics']);
+    });
+
+    test('Run: a right and a wrong answer, judged by the question\'s judge; no counts, nothing recorded', async () => {
+      const right = await toBank('POST', '/api/questions/zz-quote/run', { language: 'python', answer: { blank: "'" } });
+      assert.equal(right.status, 200, right.body.toString());
+      assert.deepEqual(right.json, { status: 'Accepted', message: 'Yes: a single quote.' });
+      const wrong = await toBank('POST', '/api/questions/zz-quote/run', { language: 'python', answer: { blank: '"' } });
+      assert.deepEqual(wrong.json, { status: 'Wrong Answer', message: 'Not a single quote.', hints: ['One character.'] });
+      assert.ok(!fs.existsSync(path.join(bankTmp, 'users', OWNER, 'submissions')), 'a Run isn\'t recorded');
+    });
+
+    test('Run: the answer is checked before judging (contract 2): 400s', async () => {
+      /** @type {[string, unknown, RegExp][]} */
+      const refused = [
+        ['code in place of answer', { language: 'python', code: "'" }, /answer must be an object/],
+        ['blank an array', { language: 'python', answer: { blank: ["'"] } }, /blank must be a string/],
+        ['blank { length: 1 }', { language: 'python', answer: { blank: { length: 1 } } }, /blank must be a string/],
+        ['over maxLength 3', { language: 'python', answer: { blank: 'abcd' } }, /at most 3 characters/],
+        ['another field', { language: 'python', answer: { blank: "'", extra: 1 } }, /one field, blank, and no other/],
+        ['a language the template lacks', { language: 'javascript', answer: { blank: "'" } }, /doesn't support javascript/],
+      ];
+      for (const [name, body, message] of refused) {
+        const answer = await toBank('POST', '/api/questions/zz-quote/run', body);
+        assert.equal(answer.status, 400, name);
+        assert.match(answer.json.error, message, name);
+      }
+    });
+
+    test('Submit and Skip are 501 until records version 4; Test is 400', async () => {
+      const body = { language: 'python', answer: { blank: "'" } };
+      assert.equal((await toBank('POST', '/api/questions/zz-quote/submit', body)).status, 501);
+      assert.equal((await toBank('POST', '/api/questions/zz-quote/skip', body)).status, 501);
+      const tested = await toBank('POST', '/api/questions/zz-quote/test', body);
+      assert.equal(tested.status, 400);
+      assert.match(tested.json.error, /Test is for code questions only/);
+      assert.ok(!fs.existsSync(path.join(bankTmp, 'users', OWNER, 'submissions')), 'nothing recorded');
+    });
+
+    test('a judge that throws: 500 "couldn\'t judge", the details only in the log', async () => {
+      const failed = await toBank('POST', '/api/questions/zz-broken/run', { language: 'python', answer: { blank: "'" } });
+      assert.equal(failed.status, 500);
+      assert.deepEqual(failed.json, { error: COULDNT_JUDGE });
+      assert.ok(bankServer.log.some((l) => /The judge for zz-broken failed: it threw: Error: this judge is broken on purpose/.test(l)), bankServer.log.join('\n'));
+    });
+
+    test('a kind the server doesn\'t know: 501 for Run', async () => {
+      const answer = await toBank('POST', '/api/questions/zz-quiz/run', { language: 'python', answer: { blank: "'" } });
+      assert.equal(answer.status, 501);
+      assert.match(answer.json.error, /can't answer a question of this kind \("quiz"\)/);
+    });
+  },
+);
