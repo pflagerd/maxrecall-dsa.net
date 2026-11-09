@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// make doc-check: checks every documented JavaScript file (those listed in
-// tsconfig.json and tsconfig.browser.json) for the documentation standard
+// make doc-check: checks every documented JavaScript file (those
+// tsconfig.json and tsconfig.browser.json take in, by name or by pattern,
+// as TypeScript reads them) for the documentation standard
 // in CLAUDE.md: every function has a JSDoc block documenting its signature,
 // meaning a @param for each parameter and a @returns (constructors and
 // setters excepted). make typecheck checks that the types written are
@@ -28,15 +29,26 @@ const REPO_DIR = path.join(__dirname, '..');
 const CONFIGS = ['tsconfig.json', 'tsconfig.browser.json'];
 
 /**
- * The JavaScript files the two tsconfig files list.
+ * The JavaScript files the two tsconfig files take in, read by
+ * TypeScript itself, so the list is exactly make typecheck's: their
+ * "files", and anything their "include" patterns match (since #160,
+ * tsconfig.json's questions/*.judge.js).
  *
  * @returns {string[]} Their paths, relative to the repository.
+ * @throws {Error} If a tsconfig file can't be read or parsed: checking
+ *   fewer files than make typecheck does would pass silently.
  */
 function documentedFiles() {
   const files = new Set();
   for (const config of CONFIGS) {
-    const { files: listed = [] } = JSON.parse(fs.readFileSync(path.join(REPO_DIR, config), 'utf8'));
-    for (const file of listed) if (file.endsWith('.js')) files.add(file);
+    const configPath = path.join(REPO_DIR, config);
+    const { config: json, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (error) throw new Error(`${config}: ${ts.flattenDiagnosticMessageText(error.messageText, ' ')}`);
+    const parsed = ts.parseJsonConfigFileContent(json, ts.sys, REPO_DIR, undefined, configPath);
+    if (parsed.errors.length) {
+      throw new Error(`${config}: ${parsed.errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, ' ')).join('; ')}`);
+    }
+    for (const file of parsed.fileNames) if (file.endsWith('.js')) files.add(path.relative(REPO_DIR, file));
   }
   return [...files].sort();
 }

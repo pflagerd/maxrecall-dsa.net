@@ -58,9 +58,18 @@ dev: build
 # node_modules: routes.test.js starts server.js, which needs Express (in a
 # fresh checkout its 23 tests failed with "Cannot find module 'express'").
 # node_modules runs toolchain-deps first.
+#
+# --test-timeout: a test file still running after TEST_TIMEOUT ms fails
+# ("test timed out") instead of hanging make test forever. It's per file:
+# node --test runs each file in a child process and ends it from outside,
+# so it stops even a synchronous infinite loop, which a test's own
+# { timeout } can't (that timer waits on the blocked event loop; checked
+# 2026-11-09, Node 22.23.4). 120 s is about 24 times the slowest file
+# alone (auth.test.js, ~5 s). Override: make test TEST_TIMEOUT=300000.
 TEST_FILES := $(wildcard *.test.js)
+TEST_TIMEOUT ?= 120000
 test: node_modules
-	node --test $(TEST_FILES)
+	node --test --test-timeout=$(TEST_TIMEOUT) $(TEST_FILES)
 
 # Checks the JSDoc types with TypeScript (a development dependency, so it
 # needs npm install, hence node_modules): the Node files tsconfig.json lists,

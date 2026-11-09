@@ -1,5 +1,5 @@
 {
-  "//": "make typecheck: TypeScript checks the JSDoc types in these JavaScript files. Nothing is compiled (noEmit). Every JavaScript file that runs under Node is listed: all are documented (readme.html, docs/plans/documentation-standard.md).",
+  "//": "make typecheck: TypeScript checks the JSDoc types in these JavaScript files. Nothing is compiled (noEmit). Every JavaScript file that runs under Node is listed: all are documented (readme.html, docs/plans/documentation-standard.md). Questions' judge files, questions/<slug>.judge.js, are server code too (#160) and come in by the \"include\" pattern below rather than one by one; make doc-check reads the same list through TypeScript.",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -53,5 +53,8 @@
     "playtest.js",
     "playtest.test.js",
     "timer.test.js"
+  ],
+  "include": [
+    "questions/*.judge.js"
   ]
 }
