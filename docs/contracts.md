@@ -54,7 +54,8 @@ for fill-in-the-blank questions). Used by: users (`routes.js`;
 security (`judge/sandbox-selftest.js`).
 
 - **What crosses**: `runSubmission`; `judgeFillInTheBlank` (from
-  `judge/fill-in-the-blank.js`, since PR 197); for the sandbox test also
+  `judge/fill-in-the-blank.js`, since PR 197) and `judgeSha256Of` (PR
+  208, for records version 4, PR 209); for the sandbox test also
   `TIMEOUT_MS` and `CPP_COMPILE_TIMEOUT_MS`. (`server.js`'s start-up log
   uses `describeSandbox`, `MAX_RUNNING` and `MAX_WAITING`, but since the
   split both sides of that are infrastructure and security's.)
@@ -113,6 +114,17 @@ security (`judge/sandbox-selftest.js`).
       question that isn't fill-in-the-blank, or an answer the route
       should have refused, it throws a `TypeError`, a caller's mistake,
       which users answers as a plain 500.
+    - **`judgeSha256Of(question)`** (users' request, 2026-11-09) returns
+      the hex SHA-256 of the question's judge file **as it was loaded**:
+      the bytes of the code that judges, even if the file changed on disk
+      since (`require` caches it until the server restarts). It loads the
+      judge if need be, and throws `JudgeFailedError`, code
+      `'JUDGE_FAILED'`, if it can't. Users calls it only for a Submit,
+      after `judgeFillInTheBlank`, and answers its throw as a failed
+      judging (500 "couldn't judge", nothing recorded, no queue change).
+      A Skip doesn't call it: its record's `judgeSha256` is `null`
+      (owner, 2026-11-09, option A), so a judge that won't load can't
+      block a Skip.
     - **The result's `status`** is `'Accepted'` or `'Wrong Answer'`,
       mapped from the judge's `pass` in one place in questions' code; no
       judge names a status. It adds `message` and `hints`, the judge's,
