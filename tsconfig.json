@@ -39,6 +39,7 @@
     "judge/cgroups.js",
     "judge/sandbox.js",
     "judge/runner.js",
+    "judge/fill-in-the-blank.js",
     "judge/line-numbers-test.js",
     "judge/sandbox-selftest.js",
     "scripts/doc-check.js",

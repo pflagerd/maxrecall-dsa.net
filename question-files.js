@@ -35,6 +35,8 @@ function isQuestionFile(name) {
  * format"); the rest are left alone.
  *
  * @typedef {object} QuestionFile
+ * @property {string} [kind] - "code" or "fill-in-the-blank" (#160); absent means
+ *   "code". Read it through kindOf(), never directly.
  * @property {string} title
  * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard"
  *   (DIFFICULTIES).
@@ -43,7 +45,14 @@ function isQuestionFile(name) {
  * @property {string[]} [alreadyLearned] - The slugs of the questions it
  *   builds on directly; missing if none (an empty list is refused).
  * @property {string} created - UTC ISO 8601 (step 3).
- * @property {Record<string, string>} starterCode - By language.
+ * @property {Record<string, string>} [starterCode] - By language; a
+ *   "code" question's languages are its keys.
+ * @property {Record<string, string>} [template] - By language: the code
+ *   shown, with the blank; a "fill-in-the-blank" question's languages are its keys.
+ * @property {string} [blank] - A "fill-in-the-blank" question's marker for the
+ *   blank, which appears exactly once in each template, e.g. "___".
+ * @property {number} [maxLength] - The most characters a "fill-in-the-blank"
+ *   question's blank takes; read through fillInTheBlankMaxLength().
  */
 
 /**
@@ -59,7 +68,7 @@ function isQuestionFile(name) {
  * here from server.js in step 10, unchanged).
  *
  * @returns {QuestionListing[]} One per question file: its file name without
- *   .json (D1), created, its starterCode's languages, title, difficulty,
+ *   .json (D1), created, its languages (languagesOf), title, difficulty,
  *   topics, sources and alreadyLearned (undefined where it builds on none).
  * @throws {Error} If questions/ can't be read, or a file isn't valid JSON
  *   (the message then names the file).
@@ -86,9 +95,60 @@ function questionInfos() {
           throw new Error(`questions/${f}: ${/** @type {Error} */ (err).message}`);
         }
         const { title, difficulty, topics, sources, alreadyLearned } = problem;
-        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: Object.keys(problem.starterCode), title, difficulty, topics, sources, alreadyLearned };
+        return { slug: f.slice(0, -'.json'.length), created: problem.created, languages: languagesOf(problem), title, difficulty, topics, sources, alreadyLearned };
       },
     );
+}
+
+/** The kinds of question (#160, Q3): what the rest of a question file holds. @type {readonly string[]} */
+const QUESTION_KINDS = Object.freeze(['code', 'fill-in-the-blank']);
+/** A fill-in-the-blank question's maxLength when its file gives none (#160, Q8). @type {number} */
+const DEFAULT_MAX_LENGTH = 10;
+/** The most any fill-in-the-blank question's maxLength may be (#160, Q15). @type {number} */
+const MAX_LENGTH_CAP = 100;
+
+/**
+ * A question's kind: its `kind` field, or "code" when it has none (#160,
+ * Q3, rule 1). Every reader asks this function rather than reading the
+ * field, so an absent kind means the same thing everywhere, and the 15
+ * questions written before kinds existed need no edit (which would change
+ * every saved record's questionSha256). It doesn't check the kind:
+ * checkQuestion refuses an unknown one.
+ *
+ * @param {{ kind?: string }} question - A question file's contents.
+ * @returns {string} Its kind, e.g. "code" or "fill-in-the-blank".
+ */
+function kindOf(question) {
+  return question.kind === undefined ? 'code' : question.kind;
+}
+
+/**
+ * The languages a question can be answered in (#160, Q3, rule 4): a
+ * "code" question's starterCode keys, a "fill-in-the-blank" question's template
+ * keys. Learners' (question, language) pairs are made from these.
+ *
+ * @param {Pick<QuestionFile, 'kind' | 'starterCode' | 'template'>} question -
+ *   A question file's contents (only these fields are read), as
+ *   checkQuestion accepts it.
+ * @returns {string[]} The languages; empty for an unknown kind.
+ */
+function languagesOf(question) {
+  const kind = kindOf(question);
+  const byLanguage = kind === 'code' ? question.starterCode : kind === 'fill-in-the-blank' ? question.template : undefined;
+  return byLanguage ? Object.keys(byLanguage) : [];
+}
+
+/**
+ * A fill-in-the-blank question's limit on its blank, in UTF-16 code units, which is
+ * what JavaScript's `.length` and HTML's `maxlength` both count (#160, Q8):
+ * its `maxLength`, or DEFAULT_MAX_LENGTH when it gives none.
+ *
+ * @param {{ maxLength?: number }} question - A fill-in-the-blank question file's
+ *   contents, as checkQuestion accepts it.
+ * @returns {number} The most characters the blank takes.
+ */
+function fillInTheBlankMaxLength(question) {
+  return question.maxLength === undefined ? DEFAULT_MAX_LENGTH : question.maxLength;
 }
 
 /**
@@ -107,8 +167,19 @@ function readRenamesText() {
   }
 }
 
-/** A question file's fields (readme.html, "Problem file format"). @type {readonly string[]} */
-const QUESTION_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']);
+/** The fields every kind of question has (readme.html, "Problem file format"). @type {readonly string[]} */
+const COMMON_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'kind', 'learning', 'description']);
+/**
+ * Each kind's own fields (#160, Q3): a question may have the common ones
+ * and its kind's, and checkQuestion refuses another kind's.
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
+const KIND_FIELDS = Object.freeze({
+  code: Object.freeze(['judgeMode', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']),
+  'fill-in-the-blank': Object.freeze(['template', 'blank', 'maxLength']),
+});
+/** Every field any kind of question may have. @type {readonly string[]} */
+const QUESTION_FIELDS = Object.freeze([...COMMON_FIELDS, ...QUESTION_KINDS.flatMap((kind) => KIND_FIELDS[kind])]);
 /**
  * The difficulties the list shows, easiest first. Fundamentals (owner,
  * 2026-11-08, #93) is for questions whose new concept is a feature of the
@@ -160,8 +231,17 @@ function checkQuestion(question, fileName, slugs) {
   /** @type {string[]} */
   const problems = [];
   const q = question;
+  // The kind first (#160, Q3): it decides which other fields are allowed.
+  const kind = kindOf(q);
+  const kindKnown = typeof kind === 'string' && QUESTION_KINDS.includes(kind);
+  if (!kindKnown) problems.push(`kind must be ${QUESTION_KINDS.map((k) => JSON.stringify(k)).join(' or ')} (or left out, meaning "code")`);
+  const allowed = kindKnown ? [...COMMON_FIELDS, ...KIND_FIELDS[kind]] : QUESTION_FIELDS;
+  for (const key of Object.keys(q).filter((k) => !allowed.includes(k) && QUESTION_FIELDS.includes(k))) {
+    const owner = QUESTION_KINDS.find((k) => KIND_FIELDS[k].includes(key));
+    problems.push(`${key} is only for kind ${JSON.stringify(owner)}, not ${JSON.stringify(kind)}`);
+  }
   const unknown = Object.keys(q).filter((key) => !QUESTION_FIELDS.includes(key));
-  if (unknown.length) problems.push(`unknown ${unknown.length === 1 ? 'field' : 'fields'} ${unknown.map((k) => JSON.stringify(k)).join(', ')} (a typo? the fields are ${QUESTION_FIELDS.join(', ')})`);
+  if (unknown.length) problems.push(`unknown ${unknown.length === 1 ? 'field' : 'fields'} ${unknown.map((k) => JSON.stringify(k)).join(', ')} (a typo? the fields are ${allowed.join(', ')})`);
 
   if (q.slug !== fileName.replace(/\.json$/, '')) problems.push(`slug must be the file name without .json, ${JSON.stringify(fileName.replace(/\.json$/, ''))}`);
   if (typeof q.created !== 'string' || !CREATED_PATTERN.test(q.created)) {
@@ -194,24 +274,28 @@ function checkQuestion(question, fileName, slugs) {
       }
     }
   }
+  if (!kindKnown) return problems; // what else to check depends on the kind
   const mode = q.judgeMode === undefined ? 'function' : q.judgeMode;
-  if (mode !== 'function' && mode !== 'program') problems.push('judgeMode must be "function" or "program" (or left out, meaning "function")');
+  if (kind === 'code' && mode !== 'function' && mode !== 'program') problems.push('judgeMode must be "function" or "program" (or left out, meaning "function")');
 
-  // The languages: starterCode's keys. Everything per language follows them.
-  if (!isPlainObject(q.starterCode) || !Object.keys(q.starterCode).length) {
-    problems.push('starterCode must give the starting code for at least one language');
+  // The languages: starterCode's keys, or a fill-in-the-blank question's template's
+  // (languagesOf). Everything per language follows them.
+  const source = kind === 'fill-in-the-blank' ? 'template' : 'starterCode';
+  if (!isPlainObject(q[source]) || !Object.keys(q[source]).length) {
+    problems.push(kind === 'fill-in-the-blank' ? 'template must give the code, with the blank, for at least one language' : 'starterCode must give the starting code for at least one language');
     return problems; // the per-language checks need the languages
   }
-  const languages = Object.keys(q.starterCode);
+  const languages = Object.keys(q[source]);
   const known = ['javascript', 'python', 'cpp', 'java', 'd'];
   for (const language of languages) {
-    if (!known.includes(language)) problems.push(`starterCode.${language}: not a language the judge knows (${known.join(', ')})`);
-    else if (typeof q.starterCode[language] !== 'string') problems.push(`starterCode.${language} must be text`);
+    if (!known.includes(language)) problems.push(`${source}.${language}: not a language the judge knows (${known.join(', ')})`);
+    else if (typeof q[source][language] !== 'string') problems.push(`${source}.${language} must be text`);
   }
 
   /**
-   * Checks a per-language field: an object with exactly starterCode's
-   * languages, each value passing `ok`.
+   * Checks a per-language field: an object with exactly the question's
+   * languages (its starterCode's or template's keys), each value passing
+   * `ok`.
    *
    * @param {string} field - The field's name, e.g. "description".
    * @param {(value: any) => boolean} ok - Whether one language's value is right.
@@ -227,13 +311,13 @@ function checkQuestion(question, fileName, slugs) {
     }
     for (const language of languages) {
       if (q[field][language] === undefined) {
-        if (!optional) problems.push(`${field}.${language} is missing: starterCode has ${language}`);
+        if (!optional) problems.push(`${field}.${language} is missing: ${source} has ${language}`);
       } else if (!ok(q[field][language])) {
         problems.push(`${field}.${language} must be ${what}`);
       }
     }
     for (const language of Object.keys(q[field])) {
-      if (!languages.includes(language)) problems.push(`${field}.${language}: starterCode has no ${language}`);
+      if (!languages.includes(language)) problems.push(`${field}.${language}: ${source} has no ${language}`);
     }
   };
   /**
@@ -244,8 +328,10 @@ function checkQuestion(question, fileName, slugs) {
    */
   const text = (value) => typeof value === 'string' && value.trim() !== '';
   perLanguage('description', text, 'HTML text');
-  perLanguage('examples', (v) => Array.isArray(v) && v.every((ex) => isPlainObject(ex) && typeof ex.input === 'string' && typeof ex.output === 'string' && (ex.explanation === undefined || typeof ex.explanation === 'string')), 'a list of { input, output, explanation? }, each text');
-  perLanguage('constraints', (v) => Array.isArray(v) && v.every((c) => typeof c === 'string'), 'a list of text (it may be empty)');
+  if (kind === 'code') {
+    perLanguage('examples', (v) => Array.isArray(v) && v.every((ex) => isPlainObject(ex) && typeof ex.input === 'string' && typeof ex.output === 'string' && (ex.explanation === undefined || typeof ex.explanation === 'string')), 'a list of { input, output, explanation? }, each text');
+    perLanguage('constraints', (v) => Array.isArray(v) && v.every((c) => typeof c === 'string'), 'a list of text (it may be empty)');
+  }
   perLanguage('learning', text, 'HTML text', true);
   // Each Learning tab's "Learned earlier" links are alreadyLearned, no more
   // and no fewer, so the page and the field can't drift apart.
@@ -262,6 +348,8 @@ function checkQuestion(question, fileName, slugs) {
       }
     }
   }
+
+  if (kind === 'fill-in-the-blank') return [...problems, ...checkFillInTheBlank(q, languages)];
 
   if (mode === 'function') {
     perLanguage('functionName', text, 'the function\'s name, which the judge calls');
@@ -305,6 +393,39 @@ function checkQuestion(question, fileName, slugs) {
     },
   );
   if (!q.testCases.some((tc) => isPlainObject(tc) && !tc.hidden)) problems.push('testCases: at least one must be visible (not hidden), or Run has nothing to run');
+  return problems;
+}
+
+/**
+ * What's wrong with a fill-in-the-blank question's own fields (#160, Q3 and Q8):
+ * `blank`, the marker, one line of text; each language's template holding
+ * it exactly once, so the page knows where the input box goes; and
+ * `maxLength`, if given, a whole number from 1 to MAX_LENGTH_CAP (#160,
+ * Q15), so no one file can lift the limit users' routes check.
+ * checkQuestion has already checked that each template is text.
+ *
+ * @param {Record<string, any>} q - The question file's contents, a plain
+ *   object whose kind is "fill-in-the-blank".
+ * @param {readonly string[]} languages - Its template's keys.
+ * @returns {string[]} The problems, each naming the field; empty if none.
+ */
+function checkFillInTheBlank(q, languages) {
+  /** @type {string[]} */
+  const problems = [];
+  const marker = q.blank;
+  if (typeof marker !== 'string' || !marker.trim() || /[\r\n]/.test(marker)) {
+    problems.push('blank must be the text that marks the blank in each template, on one line, e.g. "___"');
+  } else {
+    for (const language of languages) {
+      const template = q.template[language];
+      if (typeof template !== 'string') continue; // reported already
+      const count = template.split(marker).length - 1;
+      if (count !== 1) problems.push(`template.${language} must contain the blank, ${JSON.stringify(marker)}, exactly once (it has it ${count} times)`);
+    }
+  }
+  if (q.maxLength !== undefined && !(Number.isInteger(q.maxLength) && q.maxLength >= 1 && q.maxLength <= MAX_LENGTH_CAP)) {
+    problems.push(`maxLength must be a whole number from 1 to ${MAX_LENGTH_CAP} (or left out, meaning ${DEFAULT_MAX_LENGTH})`);
+  }
   return problems;
 }
 
@@ -401,4 +522,4 @@ function findRedundantLearned(learnedBySlug) {
   return problems;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS };
+module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS, QUESTION_KINDS, kindOf, languagesOf, fillInTheBlankMaxLength, MAX_LENGTH_CAP };

@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInTheBlankMaxLength } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -123,6 +123,44 @@ function validProgram() {
   };
 }
 
+/**
+ * A small valid fill-in-the-blank question (#160), in Python only, as a new object
+ * each time.
+ *
+ * @returns {Record<string, any>} The question.
+ */
+function validFillInTheBlank() {
+  return {
+    slug: 'sample',
+    created: '2026-11-08T12:00:00Z',
+    title: 'Sample',
+    difficulty: 'Fundamentals',
+    topics: ['String'],
+    sources: [],
+    kind: 'fill-in-the-blank',
+    description: { python: '<p>Fill in the blank.</p>' },
+    template: { python: 'print("A quote (___) here.")\n' },
+    blank: '___',
+  };
+}
+
+test('a valid fill-in-the-blank question passes, with or without maxLength', () => {
+  assert.deepEqual(checkQuestion(validFillInTheBlank(), 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), maxLength: 100 }, 'sample.json'), [], 'maxLength at the cap');
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...valid(), kind: 'code' }, 'sample.json'), [], 'kind "code" may be written out');
+});
+
+test('kindOf: absent means "code"; languagesOf follows the kind; fillInTheBlankMaxLength defaults to 10', () => {
+  assert.equal(kindOf(valid()), 'code');
+  assert.equal(kindOf(validFillInTheBlank()), 'fill-in-the-blank');
+  assert.deepEqual(languagesOf(valid()), ['python', 'cpp']);
+  assert.deepEqual(languagesOf(validFillInTheBlank()), ['python']);
+  assert.deepEqual(languagesOf({ kind: 'quiz' }), [], 'an unknown kind has no languages');
+  assert.equal(fillInTheBlankMaxLength(validFillInTheBlank()), 10);
+  assert.equal(fillInTheBlankMaxLength({ ...validFillInTheBlank(), maxLength: 3 }), 3);
+});
+
 test('the valid samples pass, and so does one with learning text', () => {
   assert.deepEqual(checkQuestion(valid(), 'sample.json'), []);
   assert.deepEqual(checkQuestion(validProgram(), 'sample.json'), []);
@@ -224,11 +262,438 @@ const BROKEN = [
   ['every test case hidden', withChange(valid(), 'testCases.0.hidden', true), /at least one must be visible/],
   ['a program test case without input', withChange(validProgram(), 'testCases.0.input', DELETE), /testCases\[0\]\.input must be the program's standard input/],
   ['a program test case expecting a number', withChange(validProgram(), 'testCases.0.expected', 5), /testCases\[0\]\.expected must be the expected standard output, as text/],
+  // Kinds and fill-in-the-blank questions (#160).
+  ['an unknown kind', withChange(valid(), 'kind', 'quiz'), /kind must be "code" or "fill-in-the-blank"/],
+  ['a fill-in-the-blank question with test cases', withChange(validFillInTheBlank(), 'testCases', []), /testCases is only for kind "code", not "fill-in-the-blank"/],
+  ['a fill-in-the-blank question with examples', withChange(validFillInTheBlank(), 'examples', { python: [] }), /examples is only for kind "code"/],
+  ['a code question with a template', withChange(valid(), 'template', { python: 'x' }), /template is only for kind "fill-in-the-blank", not "code"/],
+  ['a fill-in-the-blank question with no template', withChange(validFillInTheBlank(), 'template', DELETE), /template must give the code, with the blank, for at least one language/],
+  ['a fill-in-the-blank template in an unknown language', withChange(validFillInTheBlank(), 'template.Python', 'x ___'), /template\.Python: not a language the judge knows/],
+  ['a fill-in-the-blank description for a language with no template', withChange(validFillInTheBlank(), 'description.cpp', '<p>x</p>'), /description\.cpp: template has no cpp/],
+  ['a fill-in-the-blank question with no blank', withChange(validFillInTheBlank(), 'blank', DELETE), /blank must be the text that marks the blank/],
+  ['a blank marker on two lines', withChange(validFillInTheBlank(), 'blank', '__\n_'), /blank must be the text that marks the blank in each template, on one line/],
+  ['a template without the blank', withChange(validFillInTheBlank(), 'template.python', 'print("no blank")'), /template\.python must contain the blank, "___", exactly once \(it has it 0 times\)/],
+  ['a template with the blank twice', withChange(validFillInTheBlank(), 'template.python', 'print("___ ___")'), /exactly once \(it has it 2 times\)/],
+  ['maxLength over the cap (#160, Q15)', withChange(validFillInTheBlank(), 'maxLength', 101), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength 0', withChange(validFillInTheBlank(), 'maxLength', 0), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength not a whole number', withChange(validFillInTheBlank(), 'maxLength', 2.5), /maxLength must be a whole number/],
 ];
 
 for (const [what, question, pattern] of BROKEN) {
   test(`refused, naming the field: ${what}`, () => {
     const problems = checkQuestion(question, 'sample.json');
     assert.ok(problems.some((p) => pattern.test(p)), `expected a problem matching ${pattern}, got ${JSON.stringify(problems)}`);
+  });
+}
+
+// --- Fill-in-the-blank judging (#160): judge/fill-in-the-blank.js, and every judge file --------
+//
+// Judges are server code (docs/roles/questions.md, "Judge files"). These
+// tests check judge/fill-in-the-blank.js on judges written to a temporary folder,
+// then check every real questions/<slug>.judge.js: each of its own cases
+// run in a worker thread that's stopped when its time runs out (#172;
+// node:test's own timeout can't stop a synchronous loop), and R1, by
+// reading its source with TypeScript's parser.
+
+const os = require('os');
+const { Worker } = require('node:worker_threads');
+const ts = require('typescript6');
+const { judgeFillInTheBlank, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in-the-blank');
+
+/** How long one judge case may take before it counts as never returning. @type {number} */
+const JUDGE_CASE_TIMEOUT_MS = 1000;
+
+/**
+ * A temporary folder of judge files for these tests, removed when the
+ * test process exits.
+ *
+ * @param {Record<string, string>} judges - Each judge's slug and source.
+ * @returns {string} The folder.
+ */
+function judgeFolder(judges) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'maxrecall-judges-'));
+  for (const [slug, source] of Object.entries(judges)) fs.writeFileSync(path.join(dir, `${slug}.judge.js`), source);
+  process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+const QUOTE_JUDGE = `'use strict';
+module.exports = {
+  judge(blank) {
+    if (blank === "'") return { pass: true };
+    if (blank === "\\\\'") return { pass: false, message: 'Your answer would technically work, but is not what we asked for.', hints: ['No backslash needed.'] };
+    return { pass: false, message: 'Not a single quote.' };
+  },
+  cases: [{ blank: "'", pass: true }, { blank: "\\\\'", pass: false, messageIncludes: 'technically' }],
+};
+`;
+const FIXTURES = judgeFolder({
+  quote: QUOTE_JUDGE,
+  throws: 'module.exports = { judge() { throw new Error("oops"); } };',
+  async: 'module.exports = { judge: async () => ({ pass: true }) };',
+  shape: 'module.exports = { judge: () => ({ pass: "yes" }) };',
+  getter: 'module.exports = { judge: () => ({ get pass() { throw new Error("boom"); } }) };',
+  long: `module.exports = { judge: () => ({ pass: false, message: "x".repeat(${MESSAGE_MAX_LENGTH + 1}) }) };`,
+  nojudge: 'module.exports = {};',
+  loops: 'module.exports = { judge() { for (;;) {} }, cases: [{ blank: "x", pass: true }] };',
+});
+
+/**
+ * A fill-in-the-blank question object, as routes.js would load it, for these tests.
+ *
+ * @param {string} slug - Its slug, the name of a judge in FIXTURES.
+ * @returns {{ slug: string, kind: string }} The question.
+ */
+const fillInTheBlank = (slug) => ({ slug, kind: 'fill-in-the-blank' });
+
+test('judgeFillInTheBlank: a pass is Accepted; a fail is Wrong Answer with the judge\'s message and hints; never passed or total', () => {
+  assert.deepEqual(judgeFillInTheBlank(fillInTheBlank('quote'), { blank: "'" }, 'python', FIXTURES), { status: 'Accepted' });
+  const fail = judgeFillInTheBlank(fillInTheBlank('quote'), { blank: "\\'" }, 'python', FIXTURES);
+  assert.equal(fail.status, 'Wrong Answer');
+  assert.match(fail.message || '', /technically work/);
+  assert.deepEqual(fail.hints, ['No backslash needed.']);
+  assert.ok(!('passed' in fail) && !('total' in fail));
+});
+
+test('judgeFillInTheBlank: a judge that throws, is async, returns the wrong shape, a getter that throws, or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
+  t.mock.method(console, 'error', () => {}); // judgeFillInTheBlank logs each failure; keep the test output clean
+  for (const slug of ['throws', 'async', 'shape', 'getter', 'long', 'nojudge', 'no-such-judge']) {
+    assert.throws(() => judgeFillInTheBlank(fillInTheBlank(slug), { blank: 'x' }, 'python', FIXTURES), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED', slug);
+  }
+  assert.throws(() => judgeFillInTheBlank(fillInTheBlank('../quote'), { blank: 'x' }, 'python', path.join(FIXTURES, 'sub')), /JUDGE_FAILED|outside/, 'a slug can\'t lead outside the folder (R2)');
+});
+
+test('judgeFillInTheBlank: an answer the route should have refused, or a code question, is the caller\'s mistake (TypeError)', () => {
+  for (const answer of [{ blank: 'x', extra: 1 }, { blank: ['x'] }, { blank: 'x'.repeat(11) }, {}, null]) {
+    assert.throws(() => judgeFillInTheBlank(fillInTheBlank('quote'), /** @type {any} */ (answer), 'python', FIXTURES), TypeError, JSON.stringify(answer));
+  }
+  assert.doesNotThrow(() => judgeFillInTheBlank({ ...fillInTheBlank('quote'), maxLength: 11 }, { blank: 'x'.repeat(11) }, 'python', FIXTURES), 'maxLength raises the limit');
+  assert.throws(() => judgeFillInTheBlank({ slug: 'quote' }, { blank: 'x' }, 'python', FIXTURES), TypeError, 'a question with no kind is a code question');
+});
+
+test('checkVerdict: only { pass, message?, hints? }, within the caps (#171)', () => {
+  assert.equal(checkVerdict({ pass: true }), null);
+  assert.equal(checkVerdict({ pass: false, message: 'No.', hints: ['Try again.'] }), null);
+  for (const bad of [null, [], 'yes', { pass: 1 }, { pass: true, extra: 1 }, { pass: false, message: 5 }, { pass: false, hints: 'x' }, { pass: false, hints: Array(HINTS_MAX + 1).fill('x') }, { pass: false, hints: [5] }, Promise.resolve({ pass: true })]) {
+    assert.notEqual(checkVerdict(bad), null, String(JSON.stringify(bad)));
+  }
+});
+
+/**
+ * Runs one of a judge file's own cases in a worker thread, stopped after
+ * `timeoutMs` (#172): node:test's own timeout can't stop a synchronous
+ * loop, since its timer never gets the thread.
+ *
+ * @param {string} file - The judge file's path.
+ * @param {number} index - Which of its cases to run; -1 to count them.
+ * @param {number} timeoutMs - How long it may take.
+ * @returns {Promise<{ timedOut: true } | { error: string } | { count: number } | { problem: string | null }>}
+ *   What happened: it timed out, threw, counted its cases, or ran one
+ *   (problem: null if the verdict matched the case).
+ */
+function runJudgeCase(file, index, timeoutMs) {
+  const code = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { checkVerdict } = require(workerData.fillInTheBlank);
+    const { judge, cases } = require(workerData.file);
+    if (workerData.index < 0) { parentPort.postMessage({ count: Array.isArray(cases) ? cases.length : 0 }); }
+    else {
+      const c = cases[workerData.index];
+      const verdict = judge(c.blank, { language: c.language || 'python' });
+      const wrong = checkVerdict(verdict);
+      let problem = wrong && ('the verdict is ' + wrong);
+      if (!problem && verdict.pass !== c.pass) problem = 'pass is ' + verdict.pass + ', the case expects ' + c.pass;
+      if (!problem && c.messageIncludes && !(verdict.message || '').includes(c.messageIncludes)) problem = 'the message doesn\\'t include ' + JSON.stringify(c.messageIncludes);
+      parentPort.postMessage({ problem });
+    }`;
+  return new Promise(
+    /**
+     * Starts the worker, and settles with the first of its answer, its
+     * error, or the time running out.
+     *
+     * @param {(outcome: { timedOut: true } | { error: string } | { count: number } | { problem: string | null }) => void} resolve -
+     *   Settles the promise.
+     * @returns {void}
+     */
+    (resolve) => {
+    const worker = new Worker(code, { eval: true, workerData: { file, index, fillInTheBlank: path.join(__dirname, 'judge', 'fill-in-the-blank.js') } });
+    const timer = setTimeout(
+      /**
+       * The time ran out: stop the worker, whatever the judge is doing.
+       *
+       * @returns {void}
+       */
+      () => {
+        worker.terminate();
+        resolve({ timedOut: true });
+      },
+      timeoutMs,
+    );
+    worker.on(
+      'message',
+      /**
+       * The case's outcome.
+       *
+       * @param {{ count: number } | { problem: string | null }} msg - What the worker found.
+       * @returns {void}
+       */
+      (msg) => {
+        clearTimeout(timer);
+        worker.terminate();
+        resolve(msg);
+      },
+    );
+    worker.on(
+      'error',
+      /**
+       * The judge, or its file, threw.
+       *
+       * @param {Error} err - What it threw.
+       * @returns {void}
+       */
+      (err) => {
+        clearTimeout(timer);
+        resolve({ error: err.message });
+      },
+    );
+  },
+  );
+}
+
+test('the worker harness: a judge\'s cases pass, and a judge that never returns is stopped, not left to hang make test', async () => {
+  const quote = path.join(FIXTURES, 'quote.judge.js');
+  assert.deepEqual(await runJudgeCase(quote, -1, JUDGE_CASE_TIMEOUT_MS), { count: 2 });
+  assert.deepEqual(await runJudgeCase(quote, 0, JUDGE_CASE_TIMEOUT_MS), { problem: null });
+  assert.deepEqual(await runJudgeCase(quote, 1, JUDGE_CASE_TIMEOUT_MS), { problem: null });
+  const started = Date.now();
+  assert.deepEqual(await runJudgeCase(path.join(FIXTURES, 'loops.judge.js'), 0, 200), { timedOut: true });
+  assert.ok(Date.now() - started < 2000, 'stopped near its time limit');
+});
+
+/** The judge/ helpers a judge file may require (R1), by the path it requires them with; none yet. @type {readonly string[]} */
+const JUDGE_HELPERS = Object.freeze([]);
+/**
+ * What a judge file may not name (R1): the four the rule lists; `global`,
+ * which reaches process as global.process, and the timers, which run code
+ * after judging returns (the architect's R3 review of #181); and
+ * `Reflect`, `Proxy` and `arguments` (owner, 2026-11-09, B: Reflect.get
+ * reads a property whose name was built at run time).
+ * @type {readonly string[]}
+ */
+const JUDGE_FORBIDDEN_NAMES = Object.freeze(['process', 'globalThis', 'eval', 'Function', 'global', 'setTimeout', 'setInterval', 'setImmediate', 'queueMicrotask', 'Reflect', 'Proxy', 'arguments']);
+/**
+ * What a judge file may not use as a property name, wherever one is
+ * written: x.name, x["name"], an object literal's key, or a destructuring
+ * pattern's ({ name: y } or { name }). module.require("fs") loads
+ * anything; ({}).constructor.constructor builds a Function from text;
+ * __proto__, caller and callee reach objects past the judge's own; and the
+ * descriptor and prototype functions (and their legacy __lookupGetter__
+ * family) read or change a property by a name built at run time (the
+ * architect's R3 reviews of #181; owner, 2026-11-09, B).
+ * @type {readonly string[]}
+ */
+const JUDGE_FORBIDDEN_PROPERTIES = Object.freeze([
+  'require', 'constructor', '__proto__', 'caller', 'callee',
+  'getOwnPropertyDescriptor', 'getOwnPropertyDescriptors', 'getPrototypeOf', 'setPrototypeOf', 'defineProperty', 'defineProperties',
+  '__lookupGetter__', '__lookupSetter__', '__defineGetter__', '__defineSetter__',
+]);
+
+/**
+ * What a judge file breaks of R1, read with TypeScript's parser. Closed by
+ * kind (owner, 2026-11-09, B), each rule shutting a way round the others:
+ * - `'use strict'` as the first statement, written exactly so (a string
+ *   with an escape in it is no directive), and no `this`: in strict mode a
+ *   function called on its own has `this` undefined, not the global object;
+ * - a require of anything but JUDGE_HELPERS, and require used other than
+ *   as such a call; no dynamic import();
+ * - `module` only as `module.exports`;
+ * - no name in JUDGE_FORBIDDEN_NAMES, and no property in
+ *   JUDGE_FORBIDDEN_PROPERTIES wherever a property's name is written;
+ * - a computed key (x[k], { [k]: v }, { [k]: y } = x) only as a string or
+ *   number literal, so every property's name can be read here.
+ * Not a sandbox (a determined author can get round it): it makes a judge
+ * that reaches past its blank a failing test, not something a reviewer
+ * must spot. Review (R3) is the guard against a deliberate evasion.
+ *
+ * @param {string} source - The judge file's text.
+ * @returns {string[]} The problems, each with its line; empty if none.
+ */
+function judgeSourceProblems(source) {
+  const file = ts.createSourceFile('judge.js', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  /** @type {string[]} */
+  const problems = [];
+  /**
+   * Where a node is, for a message.
+   *
+   * @param {import('typescript6').Node} node - The node.
+   * @returns {string} "line N".
+   */
+  const at = (node) => `line ${file.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+  /**
+   * A key's text, if it's written as a string or number literal.
+   *
+   * @param {import('typescript6').Node} node - The key: what's inside x[...] or { [...]: v }.
+   * @returns {string | null} Its text; null for anything else.
+   */
+  const literalKey = (node) => (ts.isStringLiteralLike(node) || ts.isNumericLiteral(node) ? node.text : null);
+  /**
+   * Checks a property name as written in a property position: x.name, an
+   * object literal's key, a destructuring pattern's key. A computed key
+   * must be a literal; any key must not be in JUDGE_FORBIDDEN_PROPERTIES.
+   *
+   * @param {import('typescript6').Node} name - The name node.
+   * @returns {void}
+   */
+  const checkPropertyName = (name) => {
+    /** @type {string | null} */
+    let text = null;
+    if (ts.isComputedPropertyName(name)) {
+      text = literalKey(name.expression);
+      if (text === null) problems.push(`${at(name)}: a computed key must be a string or number literal`);
+    } else if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
+      text = name.text;
+    }
+    if (text !== null && JUDGE_FORBIDDEN_PROPERTIES.includes(text)) problems.push(`${at(name)}: the property ${JSON.stringify(text)} is not allowed`);
+  };
+  /**
+   * Whether an identifier is written as a property's name, not as a
+   * reference to a variable: x.name, { name: v }, a method's or accessor's
+   * name, or the key in { name: y } = x.
+   *
+   * @param {import('typescript6').Identifier} node - The identifier.
+   * @returns {boolean} True if it names a property.
+   */
+  const isPropertyName = (node) => {
+    const parent = node.parent;
+    return (ts.isPropertyAccessExpression(parent) && parent.name === node)
+      || ((ts.isPropertyAssignment(parent) || ts.isMethodDeclaration(parent) || ts.isGetAccessorDeclaration(parent) || ts.isSetAccessorDeclaration(parent) || ts.isPropertyDeclaration(parent)) && parent.name === node)
+      || (ts.isBindingElement(parent) && parent.propertyName === node);
+  };
+
+  const first = file.statements[0];
+  const strict = first && ts.isExpressionStatement(first) && ts.isStringLiteral(first.expression) && ["'use strict'", '"use strict"'].includes(first.expression.getText(file));
+  if (!strict) problems.push("line 1: a judge file must begin with 'use strict'");
+
+  /**
+   * Checks a node, then its children.
+   *
+   * @param {import('typescript6').Node} node - The node.
+   * @returns {void}
+   */
+  const visit = (node) => {
+    if (node.kind === ts.SyntaxKind.ThisKeyword) problems.push(`${at(node)}: this is not allowed`);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) problems.push(`${at(node)}: import() is not allowed`);
+    if (ts.isPropertyAccessExpression(node)) checkPropertyName(node.name);
+    if (ts.isElementAccessExpression(node)) {
+      const text = literalKey(node.argumentExpression);
+      if (text === null) problems.push(`${at(node)}: x[k] needs a string or number literal for k`);
+      else if (JUDGE_FORBIDDEN_PROPERTIES.includes(text)) problems.push(`${at(node)}: the property ${JSON.stringify(text)} is not allowed`);
+    }
+    if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node) || ts.isPropertyDeclaration(node)) checkPropertyName(node.name);
+    if (ts.isBindingElement(node) && ts.isObjectBindingPattern(node.parent)) checkPropertyName(node.propertyName || node.name);
+    if (ts.isIdentifier(node) && !isPropertyName(node)) {
+      const parent = node.parent;
+      if (JUDGE_FORBIDDEN_NAMES.includes(node.text)) problems.push(`${at(node)}: ${node.text} is not allowed`);
+      if (node.text === 'module' && !(ts.isPropertyAccessExpression(parent) && parent.expression === node && parent.name.text === 'exports')) problems.push(`${at(node)}: module may be used only as module.exports`);
+      if (node.text === 'require') {
+        const call = ts.isCallExpression(parent) && parent.expression === node ? parent : null;
+        const target = call && call.arguments.length === 1 && ts.isStringLiteral(call.arguments[0]) ? call.arguments[0].text : null;
+        if (target === null) problems.push(`${at(node)}: require may only be called with a helper's path`);
+        else if (!JUDGE_HELPERS.includes(target)) problems.push(`${at(node)}: require(${JSON.stringify(target)}) is not an allowed judge/ helper`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return problems;
+}
+
+test('R1: a judge file may use none of process, globalThis, eval, Function, import(), or require but of a helper, nor any way round them found so far', () => {
+  assert.deepEqual(judgeSourceProblems(QUOTE_JUDGE), []);
+  /**
+   * A judge file that keeps every rule, judging with `body`.
+   *
+   * @param {string} body - The judge function's expression body.
+   * @returns {string} The file's text.
+   */
+  const ok = (body) =>`'use strict';\nmodule.exports = { judge: (b) => ${body} };`;
+  assert.deepEqual(judgeSourceProblems(ok('({ pass: b.process === 1 })')), [], 'a property named process is fine');
+  assert.deepEqual(judgeSourceProblems(ok('({ pass: b[0] === "x" && b["length"] === 1 && b.at(-1) === "x" })')), [], 'literal keys are fine');
+  assert.deepEqual(judgeSourceProblems(`"use strict";\nconst { length } = "x";\nmodule.exports = { judge: () => ({ pass: length === 1 }) };`), [], 'double quotes, and a harmless destructuring');
+  for (const [bad, pattern] of [
+    ['const fs = require("fs");', /require\("fs"\) is not an allowed/],
+    ['const r = require; r("fs");', /require may only be called/],
+    ['import("fs");', /import\(\) is not allowed/],
+    ['process.exit(1);', /process is not allowed/],
+    ['globalThis.x = 1;', /globalThis is not allowed/],
+    ['eval("1");', /eval is not allowed/],
+    ['new Function("return 1")();', /Function is not allowed/],
+    // The architect's first R3 review of #181: ways round the names above.
+    ['global.process.exit(1);', /global is not allowed/],
+    ['module.require("fs");', /"require" is not allowed|module may be used only/],
+    ['({}).constructor.constructor("return 1")();', /"constructor" is not allowed/],
+    ['module.constructor._load("child_process");', /"constructor" is not allowed/],
+    ['setTimeout(() => {}, 1);', /setTimeout is not allowed/],
+    ['({})["constructor"];', /"constructor" is not allowed/],
+    ['({}).__proto__;', /"__proto__" is not allowed/],
+    // The architect's second and third R3 reviews of #181 (2026-11-08 and
+    // 2026-11-09), the six closed by kind (owner, 2026-11-09, B):
+    // 1. sloppy-mode this is the global object;
+    ['(function () { return this; })().process;', /this is not allowed/],
+    // 2. a property name built at run time;
+    ['module["req" + "uire"]("fs");', /x\[k\] needs a string or number literal|module may be used only/],
+    // 3. Reflect reads one by any name;
+    ['Reflect.get(module, "req" + "uire")("child_process");', /Reflect is not allowed/],
+    // 4. destructuring names a property without x.name;
+    ['const { constructor: F } = () => 0; F("return process")();', /"constructor" is not allowed/],
+    // 5. a descriptor of module's prototype;
+    ['const k = "req" + "uire"; Object.getOwnPropertyDescriptor(Object.getPrototypeOf(module), k).value.call(module, "fs");', /"getOwnPropertyDescriptor" is not allowed/],
+    // 6. a constructor's name built at run time.
+    ['(() => 0)["constr" + "uctor"]("return process")();', /x\[k\] needs a string or number literal/],
+    // Each rule on its own, so no one of them stands only behind another.
+    ['module.exports = {};', /must begin with 'use strict'/],
+    ['\'use\\x20strict\';', /must begin with 'use strict'/],
+    ['const m = module;', /module may be used only as module\.exports/],
+    ['const k = "constructor"; const { [k]: F } = () => 0;', /a computed key must be a string or number literal/],
+    ['const o = { ["constructor"]: 1 };', /"constructor" is not allowed/],
+    ['const { constructor } = () => 0;', /"constructor" is not allowed/],
+    ['({ constructor: F } = () => 0);', /"constructor" is not allowed/],
+    ['const g = Object.getPrototypeOf;', /"getPrototypeOf" is not allowed/],
+    ['const { getOwnPropertyDescriptor: d } = Object;', /"getOwnPropertyDescriptor" is not allowed/],
+    ['Object.defineProperty({}, "x", {});', /"defineProperty" is not allowed/],
+    ['({}).__lookupGetter__("__proto__");', /"__lookupGetter__" is not allowed/],
+    ['function f() { return f.caller; }', /"caller" is not allowed/],
+    ['new Proxy({}, {});', /Proxy is not allowed/],
+    ['function f() { return arguments; }', /arguments is not allowed/],
+    ['const s = "abc"; const i = 0; s[i];', /x\[k\] needs a string or number literal/],
+  ]) {
+    const source = String(bad).startsWith("'use") || String(bad).startsWith('module.exports') ? String(bad) : `'use strict';\n${bad}`;
+    assert.ok(judgeSourceProblems(source).some((p) => /** @type {RegExp} */ (pattern).test(p)), `${source}\n  gave ${JSON.stringify(judgeSourceProblems(source))}`);
+  }
+});
+
+/** Every judge file in questions/, by slug. @type {string[]} */
+const judgeSlugs = fs.readdirSync(QUESTIONS_DIR).filter((f) => f.endsWith('.judge.js')).map((f) => f.slice(0, -'.judge.js'.length)).sort();
+
+test('every judge file belongs to a fill-in-the-blank question, and every fill-in-the-blank question has one', () => {
+  for (const slug of judgeSlugs) {
+    assert.ok(files.includes(`${slug}.json`), `questions/${slug}.judge.js has no questions/${slug}.json`);
+    assert.equal(kindOf(JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, `${slug}.json`), 'utf8'))), 'fill-in-the-blank', `${slug}.json isn't a fill-in-the-blank question`);
+  }
+  for (const name of files) {
+    const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    if (kindOf(question) === 'fill-in-the-blank') assert.ok(judgeSlugs.includes(question.slug), `${name} is a fill-in-the-blank question with no questions/${question.slug}.judge.js`);
+  }
+});
+
+for (const slug of judgeSlugs) {
+  const file = path.join(QUESTIONS_DIR, `${slug}.judge.js`);
+  test(`${slug}.judge.js follows R1`, () => {
+    assert.deepEqual(judgeSourceProblems(fs.readFileSync(file, 'utf8')), []);
+  });
+  test(`${slug}.judge.js passes its own cases, each in a worker within ${JUDGE_CASE_TIMEOUT_MS} ms`, async () => {
+    const counted = await runJudgeCase(file, -1, JUDGE_CASE_TIMEOUT_MS);
+    assert.ok('count' in counted && counted.count > 0, `it must export cases: ${JSON.stringify(counted)}`);
+    for (let i = 0; i < counted.count; i += 1) assert.deepEqual(await runJudgeCase(file, i, JUDGE_CASE_TIMEOUT_MS), { problem: null }, `case ${i}`);
   });
 }

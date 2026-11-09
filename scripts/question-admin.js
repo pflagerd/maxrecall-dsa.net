@@ -120,7 +120,9 @@ function writeQueues(email, before, after) {
 
 /**
  * make delete-question: git rm questions/<SLUG>.json, unless it's already
- * gone, then removes the question from every user's files.
+ * gone, and its judge file, questions/<SLUG>.judge.js, if it has one (a
+ * fill-in-the-blank question, #160); then removes the question from every user's
+ * files.
  *
  * @param {boolean} dryRun - Print what would change, and change nothing.
  * @returns {Promise<void>} Resolves when done.
@@ -135,27 +137,34 @@ async function deleteQuestion(dryRun) {
   const queues = readAllQueues();
   const file = `questions/${slug}.json`;
   const exists = fs.existsSync(path.join(REPO, file));
+  // A fill-in-the-blank question's judge goes with it (#160; contract 4).
+  const judgeFile = `questions/${slug}.judge.js`;
+  const judgeExists = fs.existsSync(path.join(REPO, judgeFile));
 
   console.log(`Delete ${slug}${dryRun ? ' (dry run: nothing is written)' : ''}`);
   console.log(`  ${file}: ${exists ? 'git rm' : 'already gone (e.g. by git pull): only the references'}`);
+  if (judgeExists) console.log(`  ${judgeFile}: git rm`);
   const changes = queues.map((q) => ({ q, result: removeReferences(q.order, q.backlog, slug) }));
   for (const { q, result } of changes) console.log(`  ${q.email}: ${result.removed.length ? `removes ${result.removed.join('; ')}` : 'nothing to change'}`);
   if (dryRun) return;
 
   if (exists) git(['rm', '--quiet', '--', file]);
+  if (judgeExists) git(['rm', '--quiet', '--', judgeFile]);
   for (const { q, result } of changes) writeQueues(q.email, q, result);
-  if (exists) console.log(`Done. Staged, not committed: git commit -m "Delete question ${slug}"`);
+  if (exists || judgeExists) console.log(`Done. Staged, not committed: git commit -m "Delete question ${slug}"`);
   else console.log('Done.');
 }
 
 /**
- * make rename-question: git mv questions/<FROM>.json to <TO>.json, sets its
- * slug, and records the rename in renames.json (all staged), unless that
- * already happened; then renames the question in every user's files.
+ * make rename-question: git mv questions/<FROM>.json to <TO>.json, and its
+ * judge file, <FROM>.judge.js, to <TO>.judge.js if it has one (a fill-in-the-blank
+ * question, #160); sets its slug, and records the rename in renames.json
+ * (all staged), unless that already happened; then renames the question
+ * in every user's files.
  *
  * @param {boolean} dryRun - Print what would change, and change nothing.
  * @returns {Promise<void>} Resolves when done.
- * @throws {Refusal} If a name is invalid, TO already exists, FROM neither
+ * @throws {Refusal} If a name is invalid, TO (or its judge file) already exists, FROM neither
  *   exists nor is recorded as renamed to TO, a server is running, a user's
  *   files are invalid, or the file's slug line can't be found.
  */
@@ -173,12 +182,18 @@ async function renameQuestion(dryRun) {
   else if (!fromExists && toExists && renames[from] === to) moveFile = false; // already renamed (git pull)
   else if (toExists) throw new Refusal(`${toFile} already exists`);
   else throw new Refusal(`${fromFile} doesn't exist, and renames.json doesn't say it became ${to}`);
+  // A fill-in-the-blank question's judge moves with it (#160; contract 4).
+  const fromJudge = `questions/${from}.judge.js`;
+  const toJudge = `questions/${to}.judge.js`;
+  const moveJudge = moveFile && fs.existsSync(path.join(REPO, fromJudge));
+  if (moveJudge && fs.existsSync(path.join(REPO, toJudge))) throw new Refusal(`${toJudge} already exists`);
   await refuseIfServerRunning();
   const queues = readAllQueues();
 
   console.log(`Rename ${from} to ${to}${dryRun ? ' (dry run: nothing is written)' : ''}`);
   if (moveFile) {
     console.log(`  ${fromFile}: git mv to ${toFile}, its slug set to "${to}"`);
+    if (moveJudge) console.log(`  ${fromJudge}: git mv to ${toJudge}`);
     console.log(`  questions/${RENAMES_FILE}: ${JSON.stringify(updateRenames(renames, from, to))}`);
   } else {
     console.log(`  ${toFile}: already renamed (e.g. by git pull): only the references`);
@@ -195,6 +210,7 @@ async function renameQuestion(dryRun) {
     const slugLine = `"slug": ${JSON.stringify(from)}`;
     if (text.split(slugLine).length !== 2) throw new Refusal(`${fromFile} doesn't have exactly one ${slugLine} line; nothing changed`);
     git(['mv', '--', fromFile, toFile]);
+    if (moveJudge) git(['mv', '--', fromJudge, toJudge]);
     fs.writeFileSync(path.join(REPO, toFile), text.replace(slugLine, `"slug": ${JSON.stringify(to)}`));
     fs.writeFileSync(path.join(QUESTIONS_DIR, RENAMES_FILE), `${JSON.stringify(updateRenames(renames, from, to), null, 2)}\n`);
     git(['add', '--', toFile, `questions/${RENAMES_FILE}`]);
