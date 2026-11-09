@@ -149,6 +149,12 @@ A code Submit in version 4 differs from version 3 only in
     each can be matched with that file's history, showing which changed.
   - (b) `questionSha256` covering both files together: one field, but
     its meaning differs by kind, and a change doesn't say which file.
+  - **The `judge/` helpers aren't hashed** (owner, with questions 2,
+    2026-11-08, #160's Q13: "I don't think hash covers the helpers").
+    A judge may use shared helpers in `judge/` (#160 Q6.3), so a change
+    to one can change how answers are judged with no trace in the
+    records. Git history and the architect's review of judge code
+    (#160 Q14) are the record of that. D6 is unchanged.
 
 ## What users builds, once decided and once questions' side is in
 
