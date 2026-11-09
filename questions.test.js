@@ -589,8 +589,11 @@ const JUDGE_ALLOWED_VALUES = Object.freeze(['undefined', 'NaN', 'Infinity']);
  *   JUDGE_ALLOWED_BUILTINS, only called or read from (only called, for
  *   JUDGE_CALL_ONLY_BUILTINS), or in JUDGE_ALLOWED_VALUES;
  * - every write (=, +=, ++, --, delete, a destructuring or for-in/of
- *   target) is to a variable the judge file declares, or a property of
- *   one, or of module.exports;
+ *   target) is to a variable the judge file declares, or to
+ *   module.exports itself: no property writes at all (owner, 2026-11-09,
+ *   option (i)), since a built-in function read into the judge's own
+ *   variable (`const h = ({}).hasOwnProperty`) could otherwise have its
+ *   `.call` replaced for the whole server;
  * - no async, await, generators or yield: each runs code after the judge
  *   returns.
  * Not a sandbox (a determined author can get round it): it makes a judge
@@ -708,27 +711,24 @@ function judgeSourceProblems(source) {
     return [target];
   };
   /**
-   * Checks one place a write changes: a variable the judge file declares,
-   * a property of one (o.x, o["x"], o.x.y), or of module.exports.
-   * Anything else (a built-in, a global, a property of a call's result) is
-   * a problem.
+   * Checks one place a write changes: only a variable the judge file
+   * declares, or `module.exports` itself, exactly (owner, 2026-11-09,
+   * option (i)). Any property write is a problem, the judge's own objects'
+   * included: a built-in function read into the judge's own variable
+   * (`const h = ({}).hasOwnProperty; h.call = …`, or through
+   * `module.exports = h; module.exports.call = …`) would otherwise change
+   * for the whole server. Method calls on the judge's own objects
+   * (`list.push(x)`, `map.set(k, v)`) aren't writes and stay allowed.
    *
    * @param {import('typescript6').Expression} target - The place written to.
    * @returns {void}
    */
   const checkWriteTarget = (target) => {
-    /** @type {import('typescript6').Expression} */
-    let root = target;
-    /** @type {import('typescript6').Expression | null} */
-    let below = null;
-    for (;;) {
-      if (ts.isParenthesizedExpression(root)) root = root.expression;
-      else if (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root)) { below = root; root = root.expression; }
-      else break;
-    }
-    const exportsOf = below !== null && ts.isPropertyAccessExpression(below) && below.name.text === 'exports';
-    if (ts.isIdentifier(root) && (isDeclaredHere(root) || (root.text === 'module' && exportsOf))) return;
-    problems.push(`${at(target)}: a write must be to something the judge file declares (or module.exports), not ${target.getText(file)}`);
+    let place = target;
+    while (ts.isParenthesizedExpression(place)) place = place.expression;
+    if (ts.isIdentifier(place) && isDeclaredHere(place)) return;
+    if (ts.isPropertyAccessExpression(place) && ts.isIdentifier(place.expression) && place.expression.text === 'module' && place.name.text === 'exports') return;
+    problems.push(`${at(target)}: a write must be to a variable the judge file declares, or to module.exports itself (no property writes), not ${target.getText(file)}`);
   };
 
   const first = file.statements[0];
@@ -808,15 +808,15 @@ function hintFor(blank, language) {
   return String(fetch.length) + Math.max(1, Number(language === 'python')) + JSON.stringify([undefined, NaN, Infinity]) + Array.isArray(hints) + RegExp('x').test(fetch) + new RegExp('y').test(fetch) + /z/.test(fetch);
 }
 const state = { seen: 0, list: [0] };
-state.seen += 1;
+count += state.seen;
 state.list.push(1);
 [count] = [0];
-({ seen: state.seen } = { seen: 2 });
+({ seen: count } = { seen: 2 });
 try { hints.push(hintFor('x', 'python')); } catch (e) { hints.push(String(e)); }
 module.exports = { judge(blank, { language }) { return { pass: QUOTES.has(blank) && language !== '' }; }, cases: [] };
-module.exports.extra = Boolean(new Map().size);
+const extra = Boolean(new Map().size);
 `;
-  assert.deepEqual(judgeSourceProblems(allowed), [], 'its own names (a local named fetch included), the allowed built-ins called or read from, writes to its own variables and to module.exports, a label');
+  assert.deepEqual(judgeSourceProblems(allowed), [], 'its own names (a local named fetch included), the allowed built-ins called or read from, writes to its own variables and to module.exports, method calls on its own objects, a label');
   for (const [bad, pattern] of [
     ['const fs = require("fs");', /require\("fs"\) is not an allowed/],
     ['const r = require; r("fs");', /require may only be called/],
@@ -867,7 +867,7 @@ module.exports.extra = Boolean(new Map().size);
     // forbidden name, closed by the allow-list (owner, 2026-11-09, (a)).
     // 1. changing a built-in for the whole server;
     ['String.prototype.startsWith = () => true;', /"prototype" is not allowed/],
-    ['Math.max = () => 0;', /a write must be to something the judge file declares/],
+    ['Math.max = () => 0;', /a write must be to a variable the judge file declares/],
     // 2. the network;
     ['fetch("http://127.0.0.1:3001/");', /fetch is neither declared in the judge file nor an allowed built-in/],
     // 3. code run after judging returns, with a name or with none.
@@ -884,15 +884,31 @@ module.exports.extra = Boolean(new Map().size);
     ['const o = { fetch };', /fetch is neither declared/],
     ['[1].map(Number);', /Number may only be called/],
     ['const x = [] instanceof Array;', /Array may only be called/],
-    ['JSON.parse = () => ({});', /a write must be to something/],
-    ['delete Math.PI;', /a write must be to something/],
-    ['Math.random.x = 1;', /a write must be to something/],
-    ['Math.x++;', /a write must be to something/],
-    ['[Math.x] = [1];', /a write must be to something/],
-    ['({ a: JSON.x } = { a: 1 });', /a write must be to something/],
-    ['for (Math.x of [1]) {}', /a write must be to something/],
-    ['[].x = 1;', /a write must be to something/],
-    ['undefinedThing = 1;', /a write must be to something|undefinedThing is neither declared/],
+    ['JSON.parse = () => ({});', /a write must be to a variable/],
+    ['delete Math.PI;', /a write must be to a variable/],
+    ['Math.random.x = 1;', /a write must be to a variable/],
+    ['Math.x++;', /a write must be to a variable/],
+    ['[Math.x] = [1];', /a write must be to a variable/],
+    ['({ a: JSON.x } = { a: 1 });', /a write must be to a variable/],
+    ['for (Math.x of [1]) {}', /a write must be to a variable/],
+    ['[].x = 1;', /a write must be to a variable/],
+    ['undefinedThing = 1;', /a write must be to a variable|undefinedThing is neither declared/],
+    // No property writes at all (owner, 2026-11-09, option (i)): the
+    // residual of #191's R3 re-review. Each was run on Node 22.23.4 and
+    // changed the built-in method for the whole process.
+    ['const h = ({}).hasOwnProperty; h.call = () => true;', /no property writes/],
+    ['module.exports = ({}).hasOwnProperty; module.exports.call = () => true;', /no property writes/],
+    ['const p = [].push; p.apply = () => 0;', /no property writes/],
+    ['const f = Math.max; f.call = () => 99;', /no property writes/],
+    // And so on the judge's own objects too, by any form of write.
+    ['const o = {}; o.x = 1;', /no property writes/],
+    ['const o = {}; o["x"] = 1;', /no property writes/],
+    ['const o = { n: 0 }; o.n += 1;', /no property writes/],
+    ['const o = { n: 0 }; o.n++;', /no property writes/],
+    ['const o = { x: 1 }; delete o.x;', /no property writes/],
+    ['const o = {}; ({ a: o.x } = { a: 1 });', /no property writes/],
+    ['const o = {}; [o.x] = [1];', /no property writes/],
+    ['module.exports = {}; module.exports.judge = () => ({ pass: true });', /no property writes/],
     ['async function f() {}', /async is not allowed/],
     ['const o = { async m() {} };', /async is not allowed/],
     ['function* g() { yield 1; }', /a generator is not allowed/],
