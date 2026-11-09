@@ -195,7 +195,9 @@ that, **one session polls and tells the others**:
 
 Any session may ask another role's session to do something, with
 `send_message`, when its work needs that role to act: a change in the
-other role's files, a review, an answer, an operation on the VPS.
+other role's files, a review, an answer, an operation on the VPS. (Not
+an owner-directed session: only the architect messages one, "Several
+sessions of one role".)
 
 - **Finding it**: by its title, `maxrecallcode.net:<YYMMDD>:<role>`, the
   newest one, as above, or as "Several sessions of one role" says where
@@ -236,7 +238,7 @@ A role may have more than one session on a day.
 - **Each says what work is its**, in its handoff and, when that work is
   split or changes, in a message to the architect's session. Sessions
   of one role agree a split between themselves and may send each other
-  news.
+  news (but not an owner-directed one, below).
 - **News** goes to the session whose work it concerns; where that's
   unclear, to each of the role's sessions (but an owner-directed one,
   below).
@@ -246,8 +248,9 @@ A role may have more than one session on a day.
   it to all of them could get it done twice.
 - **An owner-directed session** is one whose work the owner assigns it
   directly; the owner says so, and its handoff records it. It tells the
-  architect what work the owner gave it. The architect sends it news
-  only when the news affects that work; its own role's other sessions
-  may send it news; and no session sends it a request, which goes to
-  the role's other session instead, or, if the work is the
-  owner-directed session's, to the owner.
+  architect what work the owner gave it. **Only the architect messages
+  it** (owner, 2026-11-08), news and requests alike; no other session
+  does, its own role's included. A session that needs something from
+  it asks the architect, who relays it, or asks the owner. The owner
+  still assigns its work: a request from the architect is acted on as
+  "Requests between sessions" says.
