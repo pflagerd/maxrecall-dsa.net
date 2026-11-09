@@ -137,7 +137,8 @@ Provider: questions (`question-files.js`, `questions/**`). Used by: users
 questions as fixtures, below).
 
 - **What crosses**: `QUESTIONS_DIR`, `isQuestionFile`, `questionInfos`,
-  `RENAMES_FILE`, `readRenamesText`; and the files themselves.
+  `RENAMES_FILE`, `readRenamesText`, `kindOf`,
+  `fillInTheBlankMaxLength`; and the files themselves.
 - **Relied on**:
   - A question's slug is its file name without `.json` (spaced-repetition
     plan, D1). Learners' `order.json` and `backlog.json` store slugs, so
@@ -151,12 +152,19 @@ questions as fixtures, below).
     being built): `"code"` (every question so far) or `"fill-in-the-blank"`.
     - An absent `kind` means `"code"`, filled in by one function in
       `question-files.js` that every reader calls, so no file needs
-      editing and no record's `questionSha256` changes.
+      editing and no record's `questionSha256` changes. That function
+      is **`kindOf(question)`**: it returns the `kind` field, or
+      `"code"` when it's absent, and doesn't check it (an unknown kind
+      passes through; users sends such a question only the fields
+      common to every kind; users' request, 2026-11-09).
     - Each kind has its own fields: `"code"` today's (`starterCode`,
       `judgeMode`, `testCases` and the rest); `"fill-in-the-blank"` has
       `template`, `blank` and `maxLength` (default 10, and at most 100:
       `make test` refuses more, #160's Q15, owner, 2026-11-08, so no one
-      question file can lift the limit users' routes check). `blank` is
+      question file can lift the limit users' routes check).
+      **`fillInTheBlankMaxLength(question)`** returns `maxLength`, or the
+      default, 10, when it's absent: users' routes check a `blank`'s
+      length against it. `blank` is
       the marker text that stands for the blank in each language's
       `template` (e.g. `"___"`); `make test` checks that it occurs exactly
       once in each (owner, 2026-11-08, #160 step 3). `make test` refuses
@@ -202,8 +210,8 @@ questions as fixtures, below).
     `order.test.js`). Not relied on: entries being direct prerequisites
     only, or having no duplicates (the same order either way; a
     duplicated entry repeats a warning line). It also reaches the
-    problem page (`routes.js`'s `toPublicProblem` sends every field but
-    `testCases`), where nothing of users' reads it yet; #88's links
+    problem page (it's in the public view's allow-list in `routes.js`,
+    #178, #180), where nothing of users' reads it yet; #88's links
     would be a further change to this contract.
   - `questions/renames.json`, the rename log, is questions' file but
     users' `consistency.js` parses it (`parseRenames`, `updateRenames`):
