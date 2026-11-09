@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { runSubmission } = require('./judge/runner');
+const { judgeFillInTheBlank } = require('./judge/fill-in-the-blank');
 const { canTestQuestions, revealHidden, markRevealed } = require('./playtest');
 const { resolveInside } = require('./paths');
 const { OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
@@ -66,8 +67,8 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @property {string} [kind] - "code" or "fill-in-the-blank" (#160); read
  *   through question-files.js's kindOf(), never directly. A
  *   "fill-in-the-blank" question has no starterCode or testCases, but
- *   template, blank and maxLength; only the public view
- *   (toPublicProblem) takes one so far.
+ *   template, blank and maxLength; only the public view and Run
+ *   (toPublicProblem, handleExecution) take one so far.
  * @property {Record<string, string>} [template] - Fill-in-the-blank: the
  *   code shown, with the blank, by language.
  * @property {string} [blank] - Fill-in-the-blank: the blank's marker in
@@ -282,9 +283,38 @@ router.get(
  * @property {string} email - The signed-in user.
  * @property {string} language - One of SUPPORTED_LANGUAGES, allowed by the
  *   profile and the question.
- * @property {string} code - The editor's code.
+ * @property {string} kind - The question's kind, from kindOf(): "code" or
+ *   "fill-in-the-blank" (checkExecutionRequest refuses any other).
+ * @property {string} [code] - A code question's: the editor's code.
+ * @property {{ blank: string }} [answer] - A fill-in-the-blank question's:
+ *   the learner's answer, checked by checkFillInTheBlankAnswer().
  * @property {number | undefined} elapsedMs - The page's timer, if sent.
  */
+
+/**
+ * Why a fill-in-the-blank answer can't be judged, or null if it can
+ * (contract 2; #160's Q12): it must be an object with one field, blank, a
+ * string (typeof: express.json() would also pass an array, or
+ * { length: 1 }) no longer than the question's maxLength, counted in
+ * UTF-16 code units (.length), as HTML's maxlength counts. Checked before
+ * questions' judge is called, so nothing is judged or recorded for
+ * anything else.
+ *
+ * @param {unknown} answer - The request's answer, as express.json() parsed
+ *   it: any JSON value, or undefined if it wasn't sent.
+ * @param {Problem} problem - The fill-in-the-blank question.
+ * @returns {string | null} The reason, for a 400, or null if it's valid.
+ */
+function checkFillInTheBlankAnswer(answer, problem) {
+  if (typeof answer !== 'object' || answer === null || Array.isArray(answer)) return 'answer must be an object, { blank }';
+  const fields = Object.keys(answer);
+  if (fields.length !== 1 || fields[0] !== 'blank') return 'answer must have one field, blank, and no other';
+  const { blank } = /** @type {{ blank: unknown }} */ (answer);
+  if (typeof blank !== 'string') return 'blank must be a string';
+  const most = fillInTheBlankMaxLength(problem);
+  if (blank.length > most) return `blank must be at most ${most} characters`;
+  return null;
+}
 
 /**
  * The checks Run, Submit, Skip and Test share, so they refuse the same
@@ -305,26 +335,36 @@ router.get(
  * limits what the list and Next offer; the profile's languages are what's
  * enforced (403 above).
  *
+ * By kind (#160 step 4; owner, 2026-11-09): a "fill-in-the-blank"
+ * question takes { language, answer: { blank }, elapsedMs? } in place of
+ * code, checked by checkFillInTheBlankAnswer() (400). Only Run takes one so
+ * far: Test is for code questions (400), and Submit and Skip wait for
+ * records version 4 (501, docs/plans/submission-records-v4.md). A kind
+ * this server doesn't know gets 501 from all four.
+ *
  * @param {AppRequest} req - The request; its body should be
- *   { language, code, elapsedMs? }.
+ *   { language, code, elapsedMs? }, or for a fill-in-the-blank question
+ *   { language, answer, elapsedMs? }.
  * @param {Response} res - The response, sent if the request is refused.
- * @param {{ codeRequired: boolean, forTest?: boolean }} options -
+ * @param {{ codeRequired: boolean, action: 'run' | 'submit' | 'skip' | 'test' }} options -
  *   codeRequired: false for Skip, whose code may be empty (step 8, detail
- *   5); it must still be a string. forTest: true for Test, which skips the
- *   profile and queue checks.
+ *   5); it must still be a string. action: which button it is; Test skips
+ *   the profile and queue checks.
  * @returns {CheckedRequest | null} What was asked, or null if refused.
  */
-function checkExecutionRequest(req, res, { codeRequired, forTest = false }) {
+function checkExecutionRequest(req, res, { codeRequired, action }) {
+  const forTest = action === 'test';
   const loaded = loadProblem(req.params.slug);
   if (!loaded) {
     res.status(404).json({ error: 'Question not found' });
     return null;
   }
   const { problem } = loaded;
+  const kind = kindOf(problem);
   /** @type {string} */
   const email = /** @type {string} */ (req.userEmail); // signed in: the gate
 
-  const { language, code, elapsedMs } = req.body || {};
+  const { language, code, answer, elapsedMs } = req.body || {};
   /**
    * Sends one refusal.
    *
@@ -336,10 +376,24 @@ function checkExecutionRequest(req, res, { codeRequired, forTest = false }) {
     res.status(status).json({ error });
     return null;
   };
+  // 501 Not Implemented: what the server doesn't support (yet), not a
+  // fault in the request (RFC 9110, section 15.6.2).
+  if (kind !== 'code' && kind !== 'fill-in-the-blank') {
+    return refuse(501, `This server can't answer a question of this kind ("${kind}").`);
+  }
+  if (kind === 'fill-in-the-blank' && action === 'test') {
+    return refuse(400, 'Test is for code questions only: a fill-in-the-blank question has no test cases to show.');
+  }
+  if (kind === 'fill-in-the-blank' && action !== 'run') {
+    return refuse(501, `${action === 'submit' ? 'Submit' : 'Skip'} doesn't take fill-in-the-blank questions yet; Run does.`);
+  }
   if (!SUPPORTED_LANGUAGES.includes(language)) {
     return refuse(400, `language must be one of: ${SUPPORTED_LANGUAGES.join(', ')}`);
   }
-  if (typeof code !== 'string' || (codeRequired && !code.trim())) {
+  if (kind === 'fill-in-the-blank') {
+    const wrong = checkFillInTheBlankAnswer(answer, problem);
+    if (wrong) return refuse(400, wrong);
+  } else if (typeof code !== 'string' || (codeRequired && !code.trim())) {
     return refuse(400, codeRequired ? 'code is required' : 'code must be a string (it may be empty)');
   }
   // How long the learner took, from the problem page's timer (issue #20).
@@ -350,10 +404,17 @@ function checkExecutionRequest(req, res, { codeRequired, forTest = false }) {
     return refuse(400, 'elapsedMs must be a whole number of milliseconds, 0 or more');
   }
 
-  if (!problem.starterCode[language]) {
+  // A question's languages: a code question's starterCode keys, a
+  // fill-in-the-blank question's template keys (#160, Q3, rule 4).
+  const byLanguage = kind === 'code' ? problem.starterCode : problem.template;
+  if (!(byLanguage && byLanguage[language])) {
     return refuse(400, `This problem doesn't support ${language}.`);
   }
-  if (forTest) return { problem, sha256: loaded.sha256, email, language, code, elapsedMs };
+  /** @type {CheckedRequest} */
+  const checked = kind === 'code'
+    ? { problem, sha256: loaded.sha256, email, language, kind, code, elapsedMs }
+    : { problem, sha256: loaded.sha256, email, language, kind, answer: /** @type {{ blank: string }} */ (answer), elapsedMs };
+  if (forTest) return checked;
   // The learner's profile decides which languages they may use (403
   // otherwise). An invalid profile refuses everything rather than guess
   // (fail closed): 500, naming the problem.
@@ -375,7 +436,7 @@ function checkExecutionRequest(req, res, { codeRequired, forTest = false }) {
     sendQueueError(res, /** @type {Error & { code?: string }} */ (err));
     return null;
   }
-  return { problem, sha256: loaded.sha256, email, language, code, elapsedMs };
+  return checked;
 }
 
 /**
@@ -399,7 +460,9 @@ function submissionRecord({ problem, sha256, language, code, elapsedMs }, submit
     questionSha256: sha256,
     language,
     judgeMode: problem.judgeMode || 'function',
-    code,
+    // Only a code question's Submit or Skip gets here until records
+    // version 4 (checkExecutionRequest refuses the rest), so code is set.
+    code: /** @type {string} */ (code),
     ...(result === null && { skipped: /** @type {'yes'} */ ('yes') }),
     status: result ? result.status : null,
     passed: result ? result.passed : null,
@@ -419,19 +482,37 @@ function submissionRecord({ problem, sha256, language, code, elapsedMs }, submit
  * checkExecutionRequest() refuses; 503 when the judge is unavailable or
  * busy; otherwise the judge's result, with pass ("yes" or "no", passFor's
  * verdict), saved/submissionId (or saveError) and queueUpdated (or
- * queueError) for a Submit, and tested: true for a Test.
+ * queueError) for a Submit, and tested: true for a Test. A
+ * fill-in-the-blank question's Run (the only one it takes so far) is
+ * judged by judgeFillInTheBlank: { status, message?, hints? }, nothing
+ * recorded. A failed judging is answered by sendJudgeError().
  *
  * @param {AppRequest} req - The request; its body should be
- *   { language, code, elapsedMs? }.
+ *   { language, code, elapsedMs? }, or { language, answer } for a
+ *   fill-in-the-blank question.
  * @param {Response} res - The response.
  * @param {{ mode: 'run' | 'submit' | 'test' }} options - Which it is.
  * @returns {Promise<Response | void>} Nothing that's used: the
  *   `return res...` lines only stop early.
  */
 async function handleExecution(req, res, { mode }) {
-  const request = checkExecutionRequest(req, res, { codeRequired: true, forTest: mode === 'test' });
+  const request = checkExecutionRequest(req, res, { codeRequired: true, action: mode });
   if (!request) return;
-  const { problem, email, language, code } = request;
+  const { problem, email, language } = request;
+
+  // A fill-in-the-blank question: only Run gets here (checkExecutionRequest),
+  // and it's judged by its own judge, in this process, synchronously (no
+  // sandbox or queue: nothing the learner typed is run). Its result is
+  // status, message and hints (contract 2); nothing is recorded.
+  if (request.kind === 'fill-in-the-blank') {
+    try {
+      return res.json(judgeFillInTheBlank(problem, /** @type {{ blank: string }} */ (request.answer), language));
+    } catch (err) {
+      return sendJudgeError(res, /** @type {JudgeError} */ (err), problem.slug, language);
+    }
+  }
+  // A code question's, checked by checkExecutionRequest.
+  const code = /** @type {string} */ (request.code);
 
   const judgeMode = problem.judgeMode || 'function';
   // A function-mode question always has functionName (the problem file
@@ -490,17 +571,54 @@ async function handleExecution(req, res, { mode }) {
     }
     res.json(result);
   } catch (err) {
-    // 503 Service Unavailable: the server is fine, but judging is turned
-    // off until its sandbox works (judge/sandbox.js), or the judge's queue
-    // is full for now (judge/queue.js), in which case Retry-After says
-    // when to try again (RFC 9110, section 10.2.3).
-    const judgeError = /** @type {JudgeError} */ (err);
-    const httpStatus = judgeError.code === 'SANDBOX_UNAVAILABLE' || judgeError.code === 'JUDGE_BUSY' ? 503 : 500;
-    if (judgeError.code === 'JUDGE_BUSY') res.set('Retry-After', String(judgeError.retryAfterSeconds));
-    if (httpStatus === 503) return res.status(503).json({ error: judgeError.message });
-    console.error(`Judging failed for ${problem.slug} in ${language}: ${judgeError.message}`);
-    res.status(500).json({ error: `Execution failed: ${SERVER_PROBLEM}` });
+    sendJudgeError(res, /** @type {JudgeError} */ (err), problem.slug, language);
   }
+}
+
+/** What the page shows for a judge that failed (contract 2; #160's Q9a). @type {string} */
+const COULDNT_JUDGE = "We couldn't judge this answer; it wasn't recorded.";
+
+/**
+ * The answer to a judging that threw, by the error's code (contract 2:
+ * matched as strings, not classes):
+ * - 'SANDBOX_UNAVAILABLE' and 'JUDGE_BUSY': 503 Service Unavailable, the
+ *   server is fine but judging is off until its sandbox works
+ *   (judge/sandbox.js), or the judge's queue is full for now
+ *   (judge/queue.js), with retryAfterSeconds for Retry-After (RFC 9110,
+ *   section 10.2.3);
+ * - 'JUDGE_FAILED', a fill-in-the-blank judge that failed: 500 with
+ *   COULDNT_JUDGE (owner, 2026-11-09: a fault on the server, RFC 9110,
+ *   section 15.6.1). Its details are in the server's log, never sent;
+ * - anything else: 500, "Execution failed", as before.
+ *
+ * @param {JudgeError} err - What judging threw.
+ * @returns {{ status: number, error: string, retryAfterSeconds?: number }}
+ *   The HTTP status, the message for the page, and for 'JUDGE_BUSY' how
+ *   many seconds to wait.
+ */
+function judgeErrorAnswer(err) {
+  if (err.code === 'SANDBOX_UNAVAILABLE') return { status: 503, error: err.message };
+  if (err.code === 'JUDGE_BUSY') return { status: 503, error: err.message, retryAfterSeconds: err.retryAfterSeconds };
+  if (err.code === 'JUDGE_FAILED') return { status: 500, error: COULDNT_JUDGE };
+  return { status: 500, error: `Execution failed: ${SERVER_PROBLEM}` };
+}
+
+/**
+ * Sends judgeErrorAnswer()'s answer, with Retry-After when it has one, and
+ * logs a 500 that isn't 'JUDGE_FAILED' (judgeFillInTheBlank logs those
+ * itself, with the details).
+ *
+ * @param {Response} res - The response.
+ * @param {JudgeError} err - What judging threw.
+ * @param {string} slug - The question, for the log.
+ * @param {string} language - The language, for the log.
+ * @returns {Response} The response, sent.
+ */
+function sendJudgeError(res, err, slug, language) {
+  const { status, error, retryAfterSeconds } = judgeErrorAnswer(err);
+  if (retryAfterSeconds !== undefined) res.set('Retry-After', String(retryAfterSeconds));
+  if (status === 500 && err.code !== 'JUDGE_FAILED') console.error(`Judging failed for ${slug} in ${language}: ${err.message}`);
+  return res.status(status).json({ error });
 }
 
 router.post(
@@ -566,7 +684,7 @@ async function handleSkip(req, res) {
   if (confirmed !== undefined && typeof confirmed !== 'boolean') {
     return res.status(400).json({ error: 'confirmed must be true or false' });
   }
-  const request = checkExecutionRequest(req, res, { codeRequired: false });
+  const request = checkExecutionRequest(req, res, { codeRequired: false, action: 'skip' });
   if (!request) return;
   const { problem, email, language } = request;
   const pair = { question: problem.slug, language };
@@ -1236,5 +1354,6 @@ function start() {
 }
 
 // router and start are server.js's (contract 9); the public view and its
-// lists are exported for routes.test.js only.
-module.exports = { router, start, toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS };
+// lists, checkFillInTheBlankAnswer, judgeErrorAnswer and COULDNT_JUDGE are
+// exported for routes.test.js only.
+module.exports = { router, start, toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS, checkFillInTheBlankAnswer, judgeErrorAnswer, COULDNT_JUDGE };
