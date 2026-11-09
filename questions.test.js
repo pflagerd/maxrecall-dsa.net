@@ -12,7 +12,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInTheBlankMaxLength } = require('./question-files');
+const { execFileSync } = require('child_process');
+// These tests check the repository's own question bank, whatever
+// MAXRECALL_QUESTIONS_DIR says in the shell that ran make test (#160): drop
+// it before question-files.js reads it. It's this test process's copy of
+// the environment only.
+delete process.env.MAXRECALL_QUESTIONS_DIR;
+const { REPO_QUESTIONS_DIR, isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInTheBlankMaxLength } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -56,6 +62,43 @@ test('no question builds on itself through alreadyLearned (no loop)', () => {
 const TEMPLATE_FILE = path.join(__dirname, 'docs', 'question-template.json');
 /** The template, parsed. @type {Record<string, any>} */
 const template = JSON.parse(fs.readFileSync(TEMPLATE_FILE, 'utf8'));
+
+/**
+ * Runs a script in a new node process with MAXRECALL_QUESTIONS_DIR set, as
+ * users' routes.test.js starts its server.
+ *
+ * @param {string} dir - The folder to name in MAXRECALL_QUESTIONS_DIR.
+ * @param {string[]} args - node's arguments: a script, or -e and code.
+ * @returns {string} What it printed.
+ */
+function runWithQuestionsDir(dir, args) {
+  return execFileSync(process.execPath, args, { cwd: __dirname, env: { ...process.env, MAXRECALL_QUESTIONS_DIR: dir }, encoding: 'utf8' });
+}
+
+test('MAXRECALL_QUESTIONS_DIR moves the questions folder the server reads (#160); unset, it is questions/', () => {
+  assert.equal(REPO_QUESTIONS_DIR, path.join(__dirname, 'questions'));
+  assert.equal(require('./question-files').QUESTIONS_DIR, REPO_QUESTIONS_DIR, 'make test reads the repository\'s bank, whatever the shell set');
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'maxrecall-questions-'));
+  try {
+    fs.copyFileSync(path.join(REPO_QUESTIONS_DIR, 'hello-world.json'), path.join(dir, 'hello-world.json'));
+    const out = JSON.parse(runWithQuestionsDir(path.relative(__dirname, dir), ['-e', `
+      const q = require('./question-files');
+      const j = require('./judge/fill-in-the-blank');
+      console.log(JSON.stringify({ dir: q.QUESTIONS_DIR, repo: q.REPO_QUESTIONS_DIR, slugs: q.questionInfos().map((i) => i.slug), judge: j.judgeFilePath('x') }));`]));
+    assert.equal(out.dir, dir, 'a relative path is resolved');
+    assert.equal(out.repo, REPO_QUESTIONS_DIR);
+    assert.deepEqual(out.slugs, ['hello-world'], 'questionInfos() reads only that folder');
+    assert.equal(out.judge, path.join(dir, 'x.judge.js'), 'judge files are loaded from it too (R2, relative to it)');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('make rename-question and make delete-question refuse while MAXRECALL_QUESTIONS_DIR is set: they change only the repository\'s bank', () => {
+  for (const command of ['delete', 'rename']) {
+    assert.throws(() => runWithQuestionsDir(require('os').tmpdir(), ['scripts/question-admin.js', command]), (err) => /MAXRECALL_QUESTIONS_DIR/.test(String(/** @type {{ stderr?: string }} */ (err).stderr)), command);
+  }
+});
 
 test('questionInfos() passes alreadyLearned on, for order.js (#146), and leaves it out where there is none', () => {
   const bySlug = new Map(questionInfos().map((q) => [q.slug, q]));

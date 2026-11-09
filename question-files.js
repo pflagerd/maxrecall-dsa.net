@@ -8,8 +8,22 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Where the question files are. @type {string} */
-const QUESTIONS_DIR = path.join(__dirname, 'questions');
+/** The repository's own question bank, questions/. @type {string} */
+const REPO_QUESTIONS_DIR = path.join(__dirname, 'questions');
+/**
+ * Where the question files are read from: the repository's questions/,
+ * unless MAXRECALL_QUESTIONS_DIR names another folder (#160, for users'
+ * routes.test.js, which starts a server on a folder of test questions; as
+ * users.js reads MAXRECALL_USERS_DIR). Read once, when this file is first
+ * required. The live service doesn't set it: a judge file in that folder
+ * is code the server runs (docs/roles/questions.md, "Judge files").
+ * make test's checks of the bank, and make rename-question and
+ * delete-question, use REPO_QUESTIONS_DIR whatever it says.
+ * @type {string}
+ */
+const QUESTIONS_DIR = process.env.MAXRECALL_QUESTIONS_DIR
+  ? path.resolve(process.env.MAXRECALL_QUESTIONS_DIR)
+  : REPO_QUESTIONS_DIR;
 
 /**
  * The rename log's file name, in questions/ (D5): { "old-name": "new-name" }.
@@ -522,4 +536,4 @@ function findRedundantLearned(learnedBySlug) {
   return problems;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS, QUESTION_KINDS, kindOf, languagesOf, fillInTheBlankMaxLength, MAX_LENGTH_CAP };
+module.exports = { QUESTIONS_DIR, REPO_QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS, QUESTION_KINDS, kindOf, languagesOf, fillInTheBlankMaxLength, MAX_LENGTH_CAP };
