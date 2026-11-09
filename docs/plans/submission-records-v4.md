@@ -7,9 +7,10 @@ of #160 (B7). Where this disagrees with `readme.html`,
 
 **Renamed** (owner, 2026-11-09, #160): the kind is `"fill-in-the-blank"`,
 not `"fill-in"`, in code and in stored records alike, so a version 4
-record's `kind` is `"fill-in-the-blank"`. Nothing else here changed. The
-merged decision files this plan names keep the old word, as merged
-decision files aren't edited.
+record's `kind` is `"fill-in-the-blank"`. Nothing else here changed.
+Recorded in `docs/decisions/20261108T193643-0800-fill-in-the-blank-format-and-judging.md`,
+"Named". The merged decision files this plan names keep the old word, as
+merged decision files aren't edited.
 
 #160 (questions 2's fill-in-the-blank proposal) leaves Q11 to users: what
 a saved Submit (or Skip) keeps for a question whose `kind` isn't
