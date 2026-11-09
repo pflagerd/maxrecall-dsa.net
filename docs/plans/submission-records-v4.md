@@ -62,8 +62,8 @@ records stay as they are: nothing is rewritten.
 
 1. **`kind`**, always written: `"code"` or `"fill-in"` (D2).
 2. **The answer**: for `"code"`, `code` as today (Q5). For any other
-   kind, **`answer`**: the kind's answer object exactly as the request
-   sent it, e.g. `{ "blank": "\\'" }`, and **no `code`** (D1).
+   kind, **`answer`**: the kind's answer object as the server validated
+   it, only the kind's own fields (D1, as changed by #160's Q12), e.g. `{ "blank": "\\'" }`, and **no `code`** (D1).
 3. **`judgeMode`** only for `"code"`, where it means something.
 4. **What a fill-in judge doesn't produce is `null`**: `passed`,
    `total`, `runtimeMs`, `stdout` and `stderr`; `results` is `[]`. A
@@ -107,11 +107,18 @@ A code Submit in version 4 differs from version 3 only in
   - (b) `answer` for every kind, `{ "code": "…" }` for code. One shape,
     but it changes code records and every reader of `code`, which Q5
     ruled out.
-  - Considered after questions 2's review: keeping the answer **as the
-    server validated it** (only the kind's own fields), since a request
-    needn't come from our page. **The owner kept it as sent** (2026-11-08).
-    Q8's limit still applies: a `blank` over `maxLength` is refused before
-    the judge is called, so nothing is recorded for it.
+  - **Changed** (owner, 2026-11-08, #160's Q12, after questions 2's and
+    infrastructure and security's reviews): the answer is kept **as the
+    server validated it**. An answer with any field but its kind's own
+    (for fill-in, anything but `blank`) is refused before the judge is
+    called, as is a `blank` that isn't a string (`typeof`) or is longer
+    than `maxLength` (Q8, capped at 100 by Q15). Nothing is recorded for
+    a refused answer. A valid answer is the same object the request sent.
+    Why: a request needn't come from our page, and without the refusal a
+    hand-made one could put any fields, of any size, into a learner's
+    records. (Earlier the same day the owner had kept "as sent";
+    `docs/decisions/20261108T182945-0800-submission-records-v4.md` says
+    so, and the decision file that changes it is the newer one.)
 - **D2. `kind` in the record.** Decided: (a).
   - (a) **Always written in version 4** (recommended). A record says
     what it is without its question file, which may change kind later
