@@ -189,9 +189,73 @@ git diff --stat <deployed> <commit>
     files under `users/` or `auth/`);
   - **a renamed or deleted question** (`questions/<name>.json` with
     `=>`, or with only `-` signs): learners' files then need §8's step,
-    with the server stopped, and `make deploy-server` doesn't do it.
+    with the server stopped, and `make deploy-server` doesn't do it. A
+    fill-in-the-blank question's judge, `questions/<name>.judge.js`,
+    moves or goes with it (`make rename-question`, `make
+    delete-question`); a judge renamed or deleted on its own fails
+    `make test` (below).
 - `package.json` or `deploy/maxrecallcode.service` changed: nothing to
   do, since the script runs `npm install` and copies a changed unit file.
+
+**Three more checks, for code that runs as the server** (owner,
+2026-11-09, option A). A fill-in-the-blank question's judge,
+`questions/*.judge.js`, runs **inside the server process**, with the
+server's access, not in the sandbox (`docs/roles/questions.md`, "Judge
+files"). The server loads it at its first Check and keeps it
+(`require`), so a deploy, which restarts the service, puts a changed
+judge live at once. And nothing on GitHub runs the tests on a pull
+request, nor does `make deploy-server` (#213 proposes GitHub Actions for
+it). So, in the same checkout:
+
+```bash
+git log --first-parent --no-merges --format='%h %s' <deployed>..<commit> -- . ':(exclude)docs/session-handoff'
+```
+- **Anything that reached `master` without a pull request**, other than
+  a handoff. Pull requests here merge as merge commits; only handoffs
+  may be pushed straight to `master` (`CLAUDE.md`, "Roles"), so on
+  `master`'s own line of history every other commit is a merge.
+  `--first-parent` follows that line only, not into the merged
+  branches; `--no-merges` leaves out the merges
+  ([git-log(1)](https://git-scm.com/docs/git-log#Documentation/git-log.txt---first-parent)).
+  `-- . ':(exclude)docs/session-handoff'` is every path but the
+  handoffs ([gitglossary(7), pathspec](https://git-scm.com/docs/gitglossary#Documentation/gitglossary.txt-aiddefpathspecapathspec)).
+- **Expect nothing.** Anything printed came in without review (for a
+  judge, without R3, the architect's): **stop**. A pull request merged
+  with GitHub's "Squash and merge" would show here too; stop and ask
+  anyway.
+- Checked 2026-11-09 on `b9a5bef..7b928c8`: nothing printed, against 85
+  handoff commits in the range; and a throwaway direct commit to
+  `judge/fill-in-the-blank.js` (never pushed) was printed.
+
+```bash
+git log --first-parent --merges --format='%h %s' <deployed>..<commit> -- 'questions/*.judge.js' judge/
+```
+- **The pull requests that change judge code**: judge files and the
+  `judge/` folder. List them for the owner with the yes in step 2, so
+  that yes covers them knowingly. Each should have had the architect's
+  R3 review (`docs/roles/questions.md`); if one plainly didn't, say so.
+- On `b9a5bef..7b928c8` it listed #181 and #208.
+
+```bash
+git diff --name-only <deployed> <commit> | grep -v -E '^(docs/|readme\.html$|CLAUDE\.md$)'
+```
+- The files the deploy changes **beyond docs**. If it prints anything,
+  **`make test` must pass at `<commit>`** before asking for the yes:
+
+```bash
+git switch --detach <commit> && make test; git switch -
+```
+- `git switch --detach <commit>`: check out that exact commit, on no
+  branch; `git switch -` goes back to where you were
+  ([git-switch(1)](https://git-scm.com/docs/git-switch)). `make test`
+  runs every test, `questions.test.js`'s judge checks among them (each
+  judge paired with its question, R1, and each judge's own cases, each
+  stopped if it runs too long).
+- **Not on the VPS**: `routes.test.js` starts real servers, and the VPS
+  is slow to hand out memory (#23). Run it in the surveying checkout (a
+  cloud session or Kubuntu). Record the pass count for step 2.
+- **Any failure: stop.** Tell the owner which test, and don't ask for
+  the yes.
 
 **2. The owner's yes**, for `<commit>`, named by its id (e.g. "Deploy
 `17d3f80`"). A yes to a pull request's number isn't enough: the
