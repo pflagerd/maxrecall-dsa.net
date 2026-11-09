@@ -1,9 +1,13 @@
 # Submission records, version 4: a fill-in-the-blank answer (#160, Q11)
 
 Status: **decided** (users, 2026-11-08; the owner chose D1 to D5 as
-recommended, and D6 after questions 2's review, 2026-11-08). Nothing built: it waits for questions' side
-of #160 (B7). Where this disagrees with `readme.html`,
-`readme.html` wins: it describes what's built.
+recommended, and D6 after questions 2's review, 2026-11-08). **Built**
+(users, 2026-11-09, #160 step 4 item 4): `routes.js`'s
+`submissionRecord` and `fillInTheBlankRecord`. D6's hash is taken when
+the judge is loaded, by questions' judge code (owner, 2026-11-09, option
+b: Node keeps a loaded judge until a restart, so a hash per request could
+name a file other than the code that judged). Where this disagrees with
+`readme.html`, `readme.html` wins: it describes what's built.
 
 **Renamed** (owner, 2026-11-09, #160): the kind is `"fill-in-the-blank"`,
 not `"fill-in"`, in code and in stored records alike, so a version 4
@@ -81,6 +85,8 @@ records stay as they are: nothing is rewritten.
    `answer`, as a Skip of a code question keeps the editor's text.
 7. **`judgeSha256`** for a fill-in-the-blank record: the SHA-256 of its judge file,
    beside `questionSha256`, which stays the `.json` file's alone (D6).
+   Taken when the judge is loaded (owner, 2026-11-09, option b); `null`
+   for a Skip, which judges nothing (owner, 2026-11-09, option A).
 
 An example, a failed fill-in-the-blank Submit:
 

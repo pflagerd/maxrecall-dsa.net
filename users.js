@@ -9,29 +9,50 @@ const { resolveInside } = require('./paths');
  * (readme.html, "Where data lives").
  *
  * @typedef {object} SubmissionRecord
- * @property {number} schemaVersion - 3 since skipped was added (spaced-
- *   repetition plan, step 8); 2 since elapsedMs was (2026-11-03); 1 before.
+ * @property {number} schemaVersion - 4 since kind was added, for
+ *   fill-in-the-blank answers (docs/plans/submission-records-v4.md); 3
+ *   since skipped was (spaced-repetition plan, step 8); 2 since elapsedMs
+ *   was (2026-11-03); 1 before.
  * @property {string} submittedAt - When the Submit arrived, as UTC ISO 8601.
  * @property {string} question - The question's slug (its file name without .json).
  * @property {string} questionSha256 - SHA-256 of the question's file at the time, in hex.
+ * @property {string | null} [judgeSha256] - Fill-in-the-blank (version 4):
+ *   SHA-256 of its judge file as the server loaded it, in hex (D6); null
+ *   for a Skip, which judges nothing (owner, 2026-11-09, option A).
  * @property {string} language - One of javascript, python, cpp, java, d.
- * @property {string} judgeMode - "function" or "program".
- * @property {string} code - What was submitted, or what the editor held
- *   when skipped (may be empty then).
+ * @property {'code' | 'fill-in-the-blank'} [kind] - The question's kind
+ *   when it was answered; always written from version 4 (D2), absent
+ *   before, which means "code".
+ * @property {string} [judgeMode] - A code question's: "function" or
+ *   "program". Not written for fill-in-the-blank.
+ * @property {string} [code] - A code question's: what was submitted, or
+ *   what the editor held when skipped (may be empty then). Every record
+ *   before version 4 has it.
+ * @property {{ blank: string }} [answer] - A fill-in-the-blank question's
+ *   (version 4): the answer as the server checked it, or what the box held
+ *   when skipped (D1, as changed by #160's Q12).
+ * @property {string} [message] - Fill-in-the-blank: the judge's message,
+ *   when it gave one (D3).
+ * @property {string[]} [hints] - Fill-in-the-blank: the judge's hints,
+ *   when it gave some (D3).
  * @property {'yes'} [skipped] - "yes" for a Skip (D8), which isn't judged;
  *   absent for a Submit, and from every record before version 3.
  * @property {string | null} status - The judge's verdict, e.g. "Accepted"
  *   or "Wrong Answer"; null for a Skip.
- * @property {number | null} passed - How many test cases passed; null for a Skip.
- * @property {number | null} total - How many test cases there were; null for a Skip.
+ * @property {number | null} passed - How many test cases passed; null for a
+ *   Skip, and for a fill-in-the-blank answer (D4).
+ * @property {number | null} total - How many test cases there were; null as
+ *   passed is.
  * @property {number | null} runtimeMs - How long judging took, in
- *   milliseconds; null for a Skip.
+ *   milliseconds; null as passed is.
  * @property {number | null} [elapsedMs] - The page's timer at Submit, or null
  *   if the page didn't send it. Missing from schemaVersion 1 records.
  * @property {boolean[]} results - Pass or fail for each test case, in file
- *   order; empty for a Skip.
- * @property {string | null} stdout - The program's standard output; null for a Skip.
- * @property {string | null} stderr - The program's standard error; null for a Skip.
+ *   order; empty for a Skip and a fill-in-the-blank answer.
+ * @property {string | null} stdout - The program's standard output; null
+ *   for a Skip and a fill-in-the-blank answer.
+ * @property {string | null} stderr - The program's standard error; null as
+ *   stdout is.
  */
 
 /**
