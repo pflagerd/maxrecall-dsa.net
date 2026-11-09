@@ -285,3 +285,279 @@ for (const [what, question, pattern] of BROKEN) {
     assert.ok(problems.some((p) => pattern.test(p)), `expected a problem matching ${pattern}, got ${JSON.stringify(problems)}`);
   });
 }
+
+// --- Fill-in judging (#160): judge/fill-in.js, and every judge file --------
+//
+// Judges are server code (docs/roles/questions.md, "Judge files"). These
+// tests check judge/fill-in.js on judges written to a temporary folder,
+// then check every real questions/<slug>.judge.js: each of its own cases
+// run in a worker thread that's stopped when its time runs out (#172;
+// node:test's own timeout can't stop a synchronous loop), and R1, by
+// reading its source with TypeScript's parser.
+
+const os = require('os');
+const { Worker } = require('node:worker_threads');
+const ts = require('typescript6');
+const { judgeFillIn, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in');
+
+/** How long one judge case may take before it counts as never returning. @type {number} */
+const JUDGE_CASE_TIMEOUT_MS = 1000;
+
+/**
+ * A temporary folder of judge files for these tests, removed when the
+ * test process exits.
+ *
+ * @param {Record<string, string>} judges - Each judge's slug and source.
+ * @returns {string} The folder.
+ */
+function judgeFolder(judges) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'maxrecall-judges-'));
+  for (const [slug, source] of Object.entries(judges)) fs.writeFileSync(path.join(dir, `${slug}.judge.js`), source);
+  process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+const QUOTE_JUDGE = `module.exports = {
+  judge(blank) {
+    if (blank === "'") return { pass: true };
+    if (blank === "\\\\'") return { pass: false, message: 'Your answer would technically work, but is not what we asked for.', hints: ['No backslash needed.'] };
+    return { pass: false, message: 'Not a single quote.' };
+  },
+  cases: [{ blank: "'", pass: true }, { blank: "\\\\'", pass: false, messageIncludes: 'technically' }],
+};
+`;
+const FIXTURES = judgeFolder({
+  quote: QUOTE_JUDGE,
+  throws: 'module.exports = { judge() { throw new Error("oops"); } };',
+  async: 'module.exports = { judge: async () => ({ pass: true }) };',
+  shape: 'module.exports = { judge: () => ({ pass: "yes" }) };',
+  long: `module.exports = { judge: () => ({ pass: false, message: "x".repeat(${MESSAGE_MAX_LENGTH + 1}) }) };`,
+  nojudge: 'module.exports = {};',
+  loops: 'module.exports = { judge() { for (;;) {} }, cases: [{ blank: "x", pass: true }] };',
+});
+
+/**
+ * A fill-in question object, as routes.js would load it, for these tests.
+ *
+ * @param {string} slug - Its slug, the name of a judge in FIXTURES.
+ * @returns {{ slug: string, kind: string }} The question.
+ */
+const fillIn = (slug) => ({ slug, kind: 'fill-in' });
+
+test('judgeFillIn: a pass is Accepted; a fail is Wrong Answer with the judge\'s message and hints; never passed or total', () => {
+  assert.deepEqual(judgeFillIn(fillIn('quote'), { blank: "'" }, 'python', FIXTURES), { status: 'Accepted' });
+  const fail = judgeFillIn(fillIn('quote'), { blank: "\\'" }, 'python', FIXTURES);
+  assert.equal(fail.status, 'Wrong Answer');
+  assert.match(fail.message || '', /technically work/);
+  assert.deepEqual(fail.hints, ['No backslash needed.']);
+  assert.ok(!('passed' in fail) && !('total' in fail));
+});
+
+test('judgeFillIn: a judge that throws, is async, returns the wrong shape or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
+  t.mock.method(console, 'error', () => {}); // judgeFillIn logs each failure; keep the test output clean
+  for (const slug of ['throws', 'async', 'shape', 'long', 'nojudge', 'no-such-judge']) {
+    assert.throws(() => judgeFillIn(fillIn(slug), { blank: 'x' }, 'python', FIXTURES), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED', slug);
+  }
+  assert.throws(() => judgeFillIn(fillIn('../quote'), { blank: 'x' }, 'python', path.join(FIXTURES, 'sub')), /JUDGE_FAILED|outside/, 'a slug can\'t lead outside the folder (R2)');
+});
+
+test('judgeFillIn: an answer the route should have refused, or a code question, is the caller\'s mistake (TypeError)', () => {
+  for (const answer of [{ blank: 'x', extra: 1 }, { blank: ['x'] }, { blank: 'x'.repeat(11) }, {}, null]) {
+    assert.throws(() => judgeFillIn(fillIn('quote'), /** @type {any} */ (answer), 'python', FIXTURES), TypeError, JSON.stringify(answer));
+  }
+  assert.doesNotThrow(() => judgeFillIn({ ...fillIn('quote'), maxLength: 11 }, { blank: 'x'.repeat(11) }, 'python', FIXTURES), 'maxLength raises the limit');
+  assert.throws(() => judgeFillIn({ slug: 'quote' }, { blank: 'x' }, 'python', FIXTURES), TypeError, 'a question with no kind is a code question');
+});
+
+test('checkVerdict: only { pass, message?, hints? }, within the caps (#171)', () => {
+  assert.equal(checkVerdict({ pass: true }), null);
+  assert.equal(checkVerdict({ pass: false, message: 'No.', hints: ['Try again.'] }), null);
+  for (const bad of [null, [], 'yes', { pass: 1 }, { pass: true, extra: 1 }, { pass: false, message: 5 }, { pass: false, hints: 'x' }, { pass: false, hints: Array(HINTS_MAX + 1).fill('x') }, { pass: false, hints: [5] }, Promise.resolve({ pass: true })]) {
+    assert.notEqual(checkVerdict(bad), null, String(JSON.stringify(bad)));
+  }
+});
+
+/**
+ * Runs one of a judge file's own cases in a worker thread, stopped after
+ * `timeoutMs` (#172): node:test's own timeout can't stop a synchronous
+ * loop, since its timer never gets the thread.
+ *
+ * @param {string} file - The judge file's path.
+ * @param {number} index - Which of its cases to run; -1 to count them.
+ * @param {number} timeoutMs - How long it may take.
+ * @returns {Promise<{ timedOut: true } | { error: string } | { count: number } | { problem: string | null }>}
+ *   What happened: it timed out, threw, counted its cases, or ran one
+ *   (problem: null if the verdict matched the case).
+ */
+function runJudgeCase(file, index, timeoutMs) {
+  const code = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { checkVerdict } = require(workerData.fillIn);
+    const { judge, cases } = require(workerData.file);
+    if (workerData.index < 0) { parentPort.postMessage({ count: Array.isArray(cases) ? cases.length : 0 }); }
+    else {
+      const c = cases[workerData.index];
+      const verdict = judge(c.blank, { language: c.language || 'python' });
+      const wrong = checkVerdict(verdict);
+      let problem = wrong && ('the verdict is ' + wrong);
+      if (!problem && verdict.pass !== c.pass) problem = 'pass is ' + verdict.pass + ', the case expects ' + c.pass;
+      if (!problem && c.messageIncludes && !(verdict.message || '').includes(c.messageIncludes)) problem = 'the message doesn\\'t include ' + JSON.stringify(c.messageIncludes);
+      parentPort.postMessage({ problem });
+    }`;
+  return new Promise(
+    /**
+     * Starts the worker, and settles with the first of its answer, its
+     * error, or the time running out.
+     *
+     * @param {(outcome: { timedOut: true } | { error: string } | { count: number } | { problem: string | null }) => void} resolve -
+     *   Settles the promise.
+     * @returns {void}
+     */
+    (resolve) => {
+    const worker = new Worker(code, { eval: true, workerData: { file, index, fillIn: path.join(__dirname, 'judge', 'fill-in.js') } });
+    const timer = setTimeout(
+      /**
+       * The time ran out: stop the worker, whatever the judge is doing.
+       *
+       * @returns {void}
+       */
+      () => {
+        worker.terminate();
+        resolve({ timedOut: true });
+      },
+      timeoutMs,
+    );
+    worker.on(
+      'message',
+      /**
+       * The case's outcome.
+       *
+       * @param {{ count: number } | { problem: string | null }} msg - What the worker found.
+       * @returns {void}
+       */
+      (msg) => {
+        clearTimeout(timer);
+        worker.terminate();
+        resolve(msg);
+      },
+    );
+    worker.on(
+      'error',
+      /**
+       * The judge, or its file, threw.
+       *
+       * @param {Error} err - What it threw.
+       * @returns {void}
+       */
+      (err) => {
+        clearTimeout(timer);
+        resolve({ error: err.message });
+      },
+    );
+  },
+  );
+}
+
+test('the worker harness: a judge\'s cases pass, and a judge that never returns is stopped, not left to hang make test', async () => {
+  const quote = path.join(FIXTURES, 'quote.judge.js');
+  assert.deepEqual(await runJudgeCase(quote, -1, JUDGE_CASE_TIMEOUT_MS), { count: 2 });
+  assert.deepEqual(await runJudgeCase(quote, 0, JUDGE_CASE_TIMEOUT_MS), { problem: null });
+  assert.deepEqual(await runJudgeCase(quote, 1, JUDGE_CASE_TIMEOUT_MS), { problem: null });
+  const started = Date.now();
+  assert.deepEqual(await runJudgeCase(path.join(FIXTURES, 'loops.judge.js'), 0, 200), { timedOut: true });
+  assert.ok(Date.now() - started < 2000, 'stopped near its time limit');
+});
+
+/** The judge/ helpers a judge file may require (R1), by the path it requires them with; none yet. @type {readonly string[]} */
+const JUDGE_HELPERS = Object.freeze([]);
+/** What a judge file may not name (R1). @type {readonly string[]} */
+const JUDGE_FORBIDDEN_NAMES = Object.freeze(['process', 'globalThis', 'eval', 'Function']);
+
+/**
+ * What a judge file breaks of R1, read with TypeScript's parser: a
+ * require of anything but JUDGE_HELPERS, require used other than as such a
+ * call, a dynamic import(), or a name in JUDGE_FORBIDDEN_NAMES. Not a
+ * sandbox (a determined author can get round it): it makes a judge that
+ * reaches past its blank a failing test, not something a reviewer must
+ * spot.
+ *
+ * @param {string} source - The judge file's text.
+ * @returns {string[]} The problems, each with its line; empty if none.
+ */
+function judgeSourceProblems(source) {
+  const file = ts.createSourceFile('judge.js', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  /** @type {string[]} */
+  const problems = [];
+  /**
+   * Where a node is, for a message.
+   *
+   * @param {import('typescript6').Node} node - The node.
+   * @returns {string} "line N".
+   */
+  const at = (node) => `line ${file.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+  /**
+   * Checks a node, then its children.
+   *
+   * @param {import('typescript6').Node} node - The node.
+   * @returns {void}
+   */
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) problems.push(`${at(node)}: import() is not allowed`);
+    if (ts.isIdentifier(node)) {
+      const parent = node.parent;
+      const isPropertyName = (ts.isPropertyAccessExpression(parent) && parent.name === node) || (ts.isPropertyAssignment(parent) && parent.name === node) || (ts.isMethodDeclaration(parent) && parent.name === node);
+      if (!isPropertyName && JUDGE_FORBIDDEN_NAMES.includes(node.text)) problems.push(`${at(node)}: ${node.text} is not allowed`);
+      if (!isPropertyName && node.text === 'require') {
+        const call = ts.isCallExpression(parent) && parent.expression === node ? parent : null;
+        const target = call && call.arguments.length === 1 && ts.isStringLiteral(call.arguments[0]) ? call.arguments[0].text : null;
+        if (target === null) problems.push(`${at(node)}: require may only be called with a helper's path`);
+        else if (!JUDGE_HELPERS.includes(target)) problems.push(`${at(node)}: require(${JSON.stringify(target)}) is not an allowed judge/ helper`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return problems;
+}
+
+test('R1: a judge file may use none of process, globalThis, eval, Function, import(), or require but of a helper', () => {
+  assert.deepEqual(judgeSourceProblems(QUOTE_JUDGE), []);
+  assert.deepEqual(judgeSourceProblems('module.exports = { judge: (b) => ({ pass: b.process === 1 }) };'), [], 'a property named process is fine');
+  for (const [bad, pattern] of [
+    ['const fs = require("fs");', /require\("fs"\) is not an allowed/],
+    ['const r = require; r("fs");', /require may only be called/],
+    ['import("fs");', /import\(\) is not allowed/],
+    ['process.exit(1);', /process is not allowed/],
+    ['globalThis.x = 1;', /globalThis is not allowed/],
+    ['eval("1");', /eval is not allowed/],
+    ['new Function("return 1")();', /Function is not allowed/],
+  ]) {
+    assert.ok(judgeSourceProblems(String(bad)).some((p) => /** @type {RegExp} */ (pattern).test(p)), String(bad));
+  }
+});
+
+/** Every judge file in questions/, by slug. @type {string[]} */
+const judgeSlugs = fs.readdirSync(QUESTIONS_DIR).filter((f) => f.endsWith('.judge.js')).map((f) => f.slice(0, -'.judge.js'.length)).sort();
+
+test('every judge file belongs to a fill-in question, and every fill-in question has one', () => {
+  for (const slug of judgeSlugs) {
+    assert.ok(files.includes(`${slug}.json`), `questions/${slug}.judge.js has no questions/${slug}.json`);
+    assert.equal(kindOf(JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, `${slug}.json`), 'utf8'))), 'fill-in', `${slug}.json isn't a fill-in question`);
+  }
+  for (const name of files) {
+    const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
+    if (kindOf(question) === 'fill-in') assert.ok(judgeSlugs.includes(question.slug), `${name} is a fill-in question with no questions/${question.slug}.judge.js`);
+  }
+});
+
+for (const slug of judgeSlugs) {
+  const file = path.join(QUESTIONS_DIR, `${slug}.judge.js`);
+  test(`${slug}.judge.js follows R1`, () => {
+    assert.deepEqual(judgeSourceProblems(fs.readFileSync(file, 'utf8')), []);
+  });
+  test(`${slug}.judge.js passes its own cases, each in a worker within ${JUDGE_CASE_TIMEOUT_MS} ms`, async () => {
+    const counted = await runJudgeCase(file, -1, JUDGE_CASE_TIMEOUT_MS);
+    assert.ok('count' in counted && counted.count > 0, `it must export cases: ${JSON.stringify(counted)}`);
+    for (let i = 0; i < counted.count; i += 1) assert.deepEqual(await runJudgeCase(file, i, JUDGE_CASE_TIMEOUT_MS), { problem: null }, `case ${i}`);
+  });
+}
