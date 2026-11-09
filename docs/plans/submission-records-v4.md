@@ -1,7 +1,7 @@
 # Submission records, version 4: a fill-in answer (#160, Q11)
 
 Status: **decided** (users, 2026-11-08; the owner chose D1 to D5 as
-recommended, 2026-11-08). Nothing built: it waits for questions' side
+recommended, and D6 after questions 2's review, 2026-11-08). Nothing built: it waits for questions' side
 of #160 (B7). Where this disagrees with `readme.html`,
 `readme.html` wins: it describes what's built.
 
@@ -25,6 +25,10 @@ a saved Submit (or Skip) keeps for a question whose `kind` isn't
   server turns `pass` into `Accepted` or `Wrong Answer`.
 - **Q9a**: a judge that throws records nothing. So there's no record for
   that case.
+- **Q6.4**: a fill-in record's hash covers its judge file too
+  (`questions/<slug>.judge.js`, Q6). Today `questionSha256` hashes only
+  the `.json` file's bytes (`routes.js:124`), and nothing compares it:
+  it's a trace for whoever looks into a Submit later.
 
 ## Records today (version 3)
 
@@ -68,6 +72,8 @@ records stay as they are: nothing is rewritten.
    Submissions tab can show, later, why a fill-in answer failed.
 6. **A Skip of a fill-in question** keeps what the box held as
    `answer`, as a Skip of a code question keeps the editor's text.
+7. **`judgeSha256`** for a fill-in record: the SHA-256 of its judge file,
+   beside `questionSha256`, which stays the `.json` file's alone (D6).
 
 An example, a failed fill-in Submit:
 
@@ -77,6 +83,7 @@ An example, a failed fill-in Submit:
   "submittedAt": "2026-11-10T18:04:11.512Z",
   "question": "single-quote-in-double-quotes",
   "questionSha256": "…",
+  "judgeSha256": "…",
   "language": "python",
   "kind": "fill-in",
   "answer": { "blank": "\\'" },
@@ -100,6 +107,11 @@ A code Submit in version 4 differs from version 3 only in
   - (b) `answer` for every kind, `{ "code": "…" }` for code. One shape,
     but it changes code records and every reader of `code`, which Q5
     ruled out.
+  - Considered after questions 2's review: keeping the answer **as the
+    server validated it** (only the kind's own fields), since a request
+    needn't come from our page. **The owner kept it as sent** (2026-11-08).
+    Q8's limit still applies: a `blank` over `maxLength` is refused before
+    the judge is called, so nothing is recorded for it.
 - **D2. `kind` in the record.** Decided: (a).
   - (a) **Always written in version 4** (recommended). A record says
     what it is without its question file, which may change kind later
@@ -123,10 +135,19 @@ A code Submit in version 4 differs from version 3 only in
     4**; otherwise it's version 5 (recommended): one format change per
     deploy where possible, but neither waits for the other.
   - (b) Hold this until #88 is decided.
+- **D6. Recording which judge judged it** (#160 Q6.4; found missing by
+  questions 2's review). Decided: (a).
+  - (a) **A separate `judgeSha256`**, of `questions/<slug>.judge.js`,
+    beside `questionSha256` (recommended): each hash is of one file, so
+    each can be matched with that file's history, showing which changed.
+  - (b) `questionSha256` covering both files together: one field, but
+    its meaning differs by kind, and a change doesn't say which file.
 
 ## What users builds, once decided and once questions' side is in
 
-- `routes.js`: `submissionRecord` writes version 4 by kind;
+- `routes.js`: `submissionRecord` writes version 4 by kind, with
+  `judgeSha256` for fill-in (the judge file read and hashed with the
+  question, as `loadProblem` does for the `.json`);
   `toSubmissionSummary` passes `kind` (and `message`, under D3(a)).
 - `users.js`: the `SubmissionRecord` type, with `code` optional and
   `kind`, `answer`, `message`, `hints` added.
