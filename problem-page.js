@@ -402,6 +402,9 @@ descriptionPaneEl.addEventListener(
  * fields this page uses are listed.
  *
  * @typedef {object} PublicProblem
+ * @property {string} kind - "code", or another kind, which this page
+ *   doesn't show yet (showUnsupportedKind); the fields below are a code
+ *   question's (#160).
  * @property {string} slug
  * @property {string} title
  * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard".
@@ -2044,6 +2047,29 @@ async function openSubmissionFromAddress() {
 }
 
 /**
+ * Says that this page can't show the question, in place of its tabs and
+ * the editor, and turns off the language list and the buttons: for a kind
+ * of question it has no page for (#160, Q4: "a page that meets a kind it
+ * doesn't know says so, rather than showing a broken editor"). That's
+ * every kind but "code" until the fill-in-the-blank page is built. The
+ * header (title, difficulty, bubbles) is still shown. No timer starts and
+ * nothing is recorded, since no language is ever shown.
+ *
+ * @param {string} kind - The question's kind, as the server sent it; shown
+ *   as text.
+ * @returns {void}
+ */
+function showUnsupportedKind(kind) {
+  const message = `This page can't show this kind of question yet (“${kind}”).`;
+  for (const panel of [descriptionTabPanels.learning, descriptionTabPanels.applying, descriptionTabPanels.submissions]) {
+    panel.replaceChildren(makeEl('p', message, 'coming-soon'));
+  }
+  editorHostEl.replaceChildren(makeEl('p', message, 'coming-soon'));
+  consoleStatusEl.textContent = '';
+  for (const control of [languageSelect, runBtn, submitBtn, skipBtn, testBtn]) control.disabled = true;
+}
+
+/**
  * Loads the question named by ?slug= and opens it, then wires up Run,
  * Submit, Skip and language-select. Runs once, as the page loads.
  *
@@ -2073,6 +2099,12 @@ async function init() {
   await profilePromise;
 
   renderHeader(await labelsPromise);
+  // Only a code question has an editor so far (#160, Q4).
+  const { kind } = /** @type {PublicProblem} */ (problem);
+  if (kind !== 'code') {
+    showUnsupportedKind(kind);
+    return;
+  }
   // Opening the question in its initial language applies the same
   // per-language rules as switching to one (showLanguage).
   // ?language= first, if it can be used (step 7, detail 7).

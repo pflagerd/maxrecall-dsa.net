@@ -17,7 +17,7 @@ const { canTestQuestions, revealHidden, markRevealed } = require('./playtest');
 const { resolveInside } = require('./paths');
 const { OWNER_EMAIL, saveSubmission, listSubmissions, loadSubmission, readProfileFile, writeProfileFile, readUserFile, writeUserFile, listUsers } = require('./users');
 const { LANGUAGES, parseProfile, applyPreferredChange } = require('./profile');
-const { QUESTIONS_DIR, isQuestionFile, questionInfos } = require('./question-files');
+const { QUESTIONS_DIR, isQuestionFile, questionInfos, kindOf, fillInTheBlankMaxLength } = require('./question-files');
 const { checkConsistency, countLevels, formatFinding, describeCounts } = require('./consistency');
 const { readSources } = require('./scripts/consistency-check');
 const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextPair, listPairs, canOpenPair } = require('./order');
@@ -63,6 +63,17 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @property {Record<string, import('./judge/runner').FunctionSignature>} [signature] -
  *   Function mode, cpp/java/d only: the types the harness needs.
  * @property {TestCase[]} testCases
+ * @property {string} [kind] - "code" or "fill-in-the-blank" (#160); read
+ *   through question-files.js's kindOf(), never directly. A
+ *   "fill-in-the-blank" question has no starterCode or testCases, but
+ *   template, blank and maxLength; only the public view
+ *   (toPublicProblem) takes one so far.
+ * @property {Record<string, string>} [template] - Fill-in-the-blank: the
+ *   code shown, with the blank, by language.
+ * @property {string} [blank] - Fill-in-the-blank: the blank's marker in
+ *   each template, e.g. "___".
+ * @property {number} [maxLength] - Fill-in-the-blank: read through
+ *   fillInTheBlankMaxLength().
  */
 
 /**
@@ -153,42 +164,81 @@ function listProblems() {
 }
 
 /**
- * The public view of a "code" question (#160, Q4; contract 4): the fields of
- * its file the browser is sent, an allow-list. A field not named here stays
+ * The fields of a question file that every kind's public view sends (#160,
+ * Q4; contract 4), an allow-list: a field not named in a kind's list stays
  * on the server, so a new field in the problem format is private until it's
- * added on purpose. testCases is never named (contract 4: the hidden test
- * cases are never sent); toPublicProblem() sends visibleTestCases and
- * hiddenCount in its place. Not sent either, since the page doesn't use
- * them (owner, 2026-11-08): created (the question bank has its own route,
- * GET /api/question-bank), and the judge's judgeMode, functionName and
- * signature.
+ * added on purpose. Not sent, since the page doesn't use it (owner,
+ * 2026-11-08): created (the question bank has its own route,
+ * GET /api/question-bank). A question of a kind this server doesn't know
+ * gets only these, so the page can name it and say it can't show it.
  */
-const PUBLIC_CODE_FIELDS = Object.freeze(['slug', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'learning', 'description', 'examples', 'constraints', 'starterCode']);
+const PUBLIC_COMMON_FIELDS = Object.freeze(['slug', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'learning', 'description']);
 
 /**
- * What GET /api/questions/:slug sends for a question: the fields
- * PUBLIC_CODE_FIELDS allows, in the order its file has them, then the
- * visible test cases and how many are hidden. Test case shape depends on
- * judgeMode (args/expected for "function", input/expected for "program"),
- * so a visible one is sent whole, without just its `hidden` field.
+ * The public view of a "code" question: the common fields and its own.
+ * testCases is never named (contract 4: the hidden test cases are never
+ * sent); toPublicProblem() sends visibleTestCases and hiddenCount in its
+ * place. Not sent either, since the page doesn't use them (owner,
+ * 2026-11-08): the judge's judgeMode, functionName and signature.
+ */
+const PUBLIC_CODE_FIELDS = Object.freeze([...PUBLIC_COMMON_FIELDS, 'examples', 'constraints', 'starterCode']);
+
+/**
+ * The public view of a "fill-in-the-blank" question (#160): the common
+ * fields, its template (the code shown, by language) and blank (the marker
+ * the page puts the input box in place of). Nothing of its judge, which is
+ * a file of its own, questions/<slug>.judge.js (contract 4: never sent).
+ * toPublicProblem() adds maxLength, with its default filled in.
+ */
+const PUBLIC_FILL_IN_THE_BLANK_FIELDS = Object.freeze([...PUBLIC_COMMON_FIELDS, 'template', 'blank']);
+
+/**
+ * The fields of a question that a list allows, in the order its file has
+ * them (Object.entries keeps it, so the JSON sent follows the file).
  *
  * @param {Problem} problem - The question as read from its file.
- * @returns {Partial<Omit<Problem, 'testCases'>> & { visibleTestCases: Omit<TestCase, 'hidden'>[], hiddenCount: number }}
- *   The allowed fields, the visible test cases without their `hidden`
- *   field, and how many are hidden.
+ * @param {readonly string[]} fields - The allow-list.
+ * @returns {Partial<Problem>} Only those of its fields that are named.
+ */
+function allowedFields(problem, fields) {
+  return Object.fromEntries(Object.entries(problem).filter(([field]) => fields.includes(field)));
+}
+
+/**
+ * What GET /api/questions/:slug sends for a question: its kind's public
+ * view, and `kind` itself (from kindOf(), so a file without one says
+ * "code"), for the page to choose how to show it.
+ * - "code": PUBLIC_CODE_FIELDS, then the visible test cases and how many
+ *   are hidden. Test case shape depends on judgeMode (args/expected for
+ *   "function", input/expected for "program"), so a visible one is sent
+ *   whole, without just its `hidden` field.
+ * - "fill-in-the-blank": PUBLIC_FILL_IN_THE_BLANK_FIELDS, and maxLength
+ *   from fillInTheBlankMaxLength(), so the page needn't know its default.
+ * - Any other kind: PUBLIC_COMMON_FIELDS only.
+ *
+ * @param {Problem} problem - The question as read from its file.
+ * @returns {Partial<Omit<Problem, 'testCases'>> & { kind: string, visibleTestCases?: Omit<TestCase, 'hidden'>[], hiddenCount?: number, maxLength?: number }}
+ *   The allowed fields and `kind`; for "code", the visible test cases
+ *   without their `hidden` field and how many are hidden; for
+ *   "fill-in-the-blank", maxLength.
  */
 function toPublicProblem(problem) {
-  const { testCases } = problem;
-  // Object.entries keeps the file's order, so the JSON sent is the same,
-  // key for key, as before the allow-list.
-  const allowed = Object.fromEntries(Object.entries(problem).filter(([field]) => PUBLIC_CODE_FIELDS.includes(field)));
-  return {
-    ...allowed,
-    visibleTestCases: testCases
-      .filter((tc) => !tc.hidden)
-      .map(({ hidden, ...tc }) => tc),
-    hiddenCount: testCases.filter((tc) => tc.hidden).length,
-  };
+  const kind = kindOf(problem);
+  if (kind === 'code') {
+    const { testCases } = problem;
+    return {
+      ...allowedFields(problem, PUBLIC_CODE_FIELDS),
+      kind,
+      visibleTestCases: testCases
+        .filter((tc) => !tc.hidden)
+        .map(({ hidden, ...tc }) => tc),
+      hiddenCount: testCases.filter((tc) => tc.hidden).length,
+    };
+  }
+  if (kind === 'fill-in-the-blank') {
+    return { ...allowedFields(problem, PUBLIC_FILL_IN_THE_BLANK_FIELDS), kind, maxLength: fillInTheBlankMaxLength(problem) };
+  }
+  return { ...allowedFields(problem, PUBLIC_COMMON_FIELDS), kind };
 }
 
 // --- API ----------------------------------------------------------------
@@ -1185,4 +1235,6 @@ function start() {
   logConsistency();
 }
 
-module.exports = { router, start, toPublicProblem, PUBLIC_CODE_FIELDS };
+// router and start are server.js's (contract 9); the public view and its
+// lists are exported for routes.test.js only.
+module.exports = { router, start, toPublicProblem, PUBLIC_COMMON_FIELDS, PUBLIC_CODE_FIELDS, PUBLIC_FILL_IN_THE_BLANK_FIELDS };
