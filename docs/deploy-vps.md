@@ -2521,3 +2521,150 @@ gaps, #22) and `docs/plans/limited-live.md` (D4, the kernel).
   is a change for infrastructure and security to write.
 - **A package**: as step 2's undo, one at a time, only if a specific
   package is found to be the problem.
+
+## 18. libvirt disabled, its packages kept [VPS, then Kubuntu]
+
+Written 2026-11-09 (infrastructure and security), for the owner's
+choice that day: **disable libvirt but keep its packages** (option B of
+three: leave, disable, remove). It isn't used now, but may be later.
+**Not yet run.** No reboot needed.
+
+**What's there** (the VPS operator's eight read-only checks, 11-09
+~22:35 UTC, sent to this role; recorded in
+`docs/session-handoff/infrastructure-and-security/`, the handoff after
+`20261109T141856-0800.md`, and to go in the operator's next one): libvirt
+`10.0.0-2ubuntu8.19` and `qemu-system-x86` `8.2.2`, **no virtual
+machine defined**. libvirt's `default` network **autostarts**: it makes
+the bridge `virbr0` (no carrier) and runs `dnsmasq` (a small DNS and
+DHCP server) on `192.168.122.1:53` and DHCP on `virbr0`, not on `eth0`.
+It also adds firewall rules at runtime (chains `LIBVIRT_FWI`, `_FWO`,
+`_FWX`, `_INP`, `_OUT`, `_PRT`) beside `ufw`'s. `libvirtd` itself
+starts on demand through its sockets (`libvirtd.socket`, `-ro`,
+`-admin`); `virtlogd` and `virtlockd` run all the time.
+
+**Why disable it**: a root daemon, `dnsmasq` and firewall rules, all
+unused. Nothing reaches them from outside now (a guess from where
+`dnsmasq` listens), but software that isn't needed is still software
+whose bugs could matter. Disabling keeps "maybe later" two commands
+away; removing would mean reinstalling.
+
+**The order matters**: the `virsh` commands talk to `libvirtd` through
+its socket, so the network is stopped **before** the sockets are
+disabled.
+
+Who does what: as §17. **[VPS]** steps are for the owner or the VPS
+operator, **one yes from the owner per change**; stop at anything
+unexpected and report it.
+
+### 1. Look first [VPS, read-only]
+
+```bash
+hostname; id -un
+```
+- Expect `srv702017` and `root`.
+
+```bash
+ls /etc/libvirt/qemu/
+```
+- Expect only `networks`. **Any `*.xml` file there is a virtual
+  machine: stop.**
+
+```bash
+ufw status verbose
+```
+- Record it whole, to compare in step 4: this section must leave
+  `ufw`'s rules as they are.
+
+```bash
+systemctl show maxrecallcode.service -p ActiveState -p NRestarts -p MainPID
+```
+- Expect `active`; record it, to compare in step 4.
+
+### 2. Stop the network [VPS, change]
+
+```bash
+virsh net-autostart default --disable
+```
+- Stops the `default` network starting at boot: "The *--disable* option
+  disable autostarting" (libvirt v10.0.0,
+  [`virsh.rst`](https://github.com/libvirt/libvirt/blob/v10.0.0/docs/manpages/virsh.rst),
+  `net-autostart`). It removes
+  `/etc/libvirt/qemu/networks/autostart/default.xml`, the link.
+- `virsh` connects to `libvirtd`, which starts on demand: expected.
+- **Undo**: `virsh net-autostart default`.
+
+```bash
+virsh net-destroy default
+```
+- Stops it now: "Destroy (stop) a given transient or persistent virtual
+  network … This takes effect immediately" (same page, `net-destroy`).
+  The network is persistent (`networks/default.xml`), so its definition
+  stays; only the running network goes: `dnsmasq`, `virbr0`, and the
+  rules libvirt added for it.
+- **Undo**: `virsh net-start default`.
+
+```bash
+virsh net-list --all
+```
+- **Read-only.** Expect `default` with State `inactive` and Autostart
+  `no`.
+
+### 3. Disable the daemons [VPS, change]
+
+```bash
+systemctl disable --now libvirtd.service libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket libvirt-guests.service virtlogd.service virtlogd.socket virtlogd-admin.socket virtlockd.service virtlockd.socket virtlockd-admin.socket
+```
+- `disable` removes the links that start each at boot; `--now` also
+  stops it ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html),
+  `disable`). Stopping the sockets means nothing can start `libvirtd`
+  on demand any more. `libvirt-guests` stops guests at shutdown; there
+  are none.
+- `libvirtd-tcp.socket` and `libvirtd-tls.socket` are already disabled
+  (operator, 11-09): not listed.
+- **Undo**: `systemctl enable --now libvirtd.socket libvirtd-ro.socket libvirtd-admin.socket virtlogd.socket virtlogd-admin.socket virtlockd.socket virtlockd-admin.socket libvirt-guests.service`,
+  then `systemctl enable libvirtd.service virtlogd.service virtlockd.service`,
+  then step 2's two undos.
+
+### 4. Check [VPS, read-only]
+
+```bash
+systemctl list-units 'libvirt*' 'virt*' --all --no-pager; systemctl list-unit-files 'libvirt*' 'virt*' --no-pager
+```
+- Expect every unit `inactive` (units shown as `not-found`, such as
+  `virtqemud.socket`, are referenced but not installed: expected), and
+  every unit file `disabled` (or `static`, `virt-guest-shutdown.target`).
+
+```bash
+ps -o pid,user,args -C libvirtd,dnsmasq,virtlogd,virtlockd; ip -br link show type bridge
+```
+- Expect no processes (only the header line) and no bridge.
+
+```bash
+nft list ruleset | grep -c -E 'virbr|192\.168\.122'
+```
+- Counts firewall rule lines that still mention the bridge or its
+  addresses. Expect `0`. libvirt's own `LIBVIRT_*` chains may stay,
+  empty, until the next boot (a guess; record what's there:
+  `nft list ruleset | grep -c LIBVIRT`).
+
+```bash
+ufw status verbose; systemctl show maxrecallcode.service -p ActiveState -p NRestarts -p MainPID
+```
+- Expect both exactly as in step 1.
+
+Then on Kubuntu:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
+```
+- Expect `200` (§17 step 6 explains the arguments).
+
+### 5. Record it
+
+In the handoff of whoever ran it: steps 1–4's results. **After the next
+package upgrade** (§17 step 2, or `unattended-upgrades`), check that
+step 4's first command still shows the units `disabled`: Debian's
+packaging is meant to keep an admin's `disable` across upgrades (an
+expectation, not checked on this VPS). Then infrastructure and security
+updates this section's "Not yet run" and `readme.html` (Environments,
+the VPS).
