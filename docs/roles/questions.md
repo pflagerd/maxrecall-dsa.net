@@ -41,9 +41,35 @@ records, auth/), not in the sandbox; Node's `vm` module is no boundary
 ("not a security mechanism", https://nodejs.org/api/vm.html). So a pull
 request that adds or changes a judge file, or this role's fill-in-the-blank code in
 judge/, is server code, under these rules:
-- **R1**: a judge file `require`s only an allow-list of judge/ helpers,
-  and uses no `process`, `globalThis`, `eval`, `Function` or `import(`.
-  `make test` checks it, with TypeScript's parser.
+- **R1** (#160, B7.1): **a judge file stays within its job**, reading the
+  learner's blank and returning a verdict, and reaches nothing else of
+  the server. So a judge file:
+  - `require`s only an allow-list of judge/ helpers (none yet), and uses
+    no `import(`;
+  - begins with `'use strict'`, and uses no `this`;
+  - uses `module` only as `module.exports`;
+  - uses none of the names `process`, `globalThis`, `global`, `eval`,
+    `Function`, `Reflect`, `Proxy`, `arguments`, or the timers
+    (`setTimeout`, `setInterval`, `setImmediate`, `queueMicrotask`);
+  - names none of the properties `require`, `constructor`, `__proto__`,
+    `caller`, `callee`, or the descriptor and prototype functions
+    (`getOwnPropertyDescriptor(s)`, `getPrototypeOf`, `setPrototypeOf`,
+    `defineProperty`/`defineProperties`, the `__lookupGetter__` family),
+    wherever a property's name is written (`x.name`, `x["name"]`, an
+    object literal's key, a destructuring pattern);
+  - writes a computed key (`x[k]`) only as a string or number literal.
+
+  These close by kind the six ways round found in the architect's R3
+  review of #181 (owner, 2026-11-09, option B). `make test` checks them
+  with TypeScript's parser (`questions.test.js`, `judgeSourceProblems`).
+  **What the check can't do** (owner, 2026-11-09, option A): it reads a
+  judge's text and refuses what's listed, so it catches accidents, not
+  every deliberate evasion. Review (R3) and the owner's approval are the
+  guard against those; the real boundary would be a judge outside the
+  server process (#185, an idea). **Still to come** (owner, 2026-11-09,
+  option (a)): names limited to an allow-list, no writes to built-ins, no
+  `prototype`, no `async`/`await` or generators, in questions' follow-up
+  before #160's step 5 (#160's comment of 2026-11-09 on it).
 - **R2**: a judge is loaded only by the slug of a known fill-in-the-blank question,
   through paths.js's `resolveInside` (docs/contracts.md, contract 7).
 - **Q7**: the length is checked before a judge is called (contract 2); a
@@ -51,8 +77,10 @@ judge/, is server code, under these rules:
   errors are caught, and its result's shape is checked
   (`{ pass: boolean, message?: string, hints?: string[] }`; anything else
   is contract 2's "couldn't judge"); its message and each hint are capped
-  in length (the limit is set when built, and named here); they're text,
-  never HTML.
+  in length (the message at most 500 characters, at most 5 hints of at
+  most 300 each: `judge/fill-in-the-blank.js`'s `MESSAGE_MAX_LENGTH`,
+  `HINTS_MAX`, `HINT_MAX_LENGTH`, chosen by questions 2 when built, #181);
+  they're text, never HTML.
 - **Tests**: each judge exports its own cases, which questions.test.js
   runs, **each in a worker thread (or child process) stopped when its
   time runs out** (`worker.terminate()`,
