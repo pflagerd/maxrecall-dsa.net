@@ -153,20 +153,36 @@ function listProblems() {
 }
 
 /**
- * Strips expected answers/inputs for hidden test cases before sending to the
- * client. Test case shape depends on judgeMode (args/expected for
- * "function", input/expected for "program"), so this strips just `hidden`
- * rather than picking specific fields.
+ * The public view of a "code" question (#160, Q4; contract 4): the fields of
+ * its file the browser is sent, an allow-list. A field not named here stays
+ * on the server, so a new field in the problem format is private until it's
+ * added on purpose. testCases is never named (contract 4: the hidden test
+ * cases are never sent); toPublicProblem() sends visibleTestCases and
+ * hiddenCount in its place. Today's list is everything else the format has
+ * (question-files.js, QUESTION_FIELDS), so what's sent didn't change when
+ * the deny-list became this list.
+ */
+const PUBLIC_CODE_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', 'topics', 'sources', 'alreadyLearned', 'judgeMode', 'learning', 'description', 'examples', 'constraints', 'starterCode', 'functionName', 'signature']);
+
+/**
+ * What GET /api/questions/:slug sends for a question: the fields
+ * PUBLIC_CODE_FIELDS allows, in the order its file has them, then the
+ * visible test cases and how many are hidden. Test case shape depends on
+ * judgeMode (args/expected for "function", input/expected for "program"),
+ * so a visible one is sent whole, without just its `hidden` field.
  *
  * @param {Problem} problem - The question as read from its file.
- * @returns {Omit<Problem, 'testCases'> & { visibleTestCases: Omit<TestCase, 'hidden'>[], hiddenCount: number }}
- *   Everything else unchanged, the visible test cases without their
- *   `hidden` field, and how many are hidden.
+ * @returns {Partial<Omit<Problem, 'testCases'>> & { visibleTestCases: Omit<TestCase, 'hidden'>[], hiddenCount: number }}
+ *   The allowed fields, the visible test cases without their `hidden`
+ *   field, and how many are hidden.
  */
 function toPublicProblem(problem) {
-  const { testCases, ...rest } = problem;
+  const { testCases } = problem;
+  // Object.entries keeps the file's order, so the JSON sent is the same,
+  // key for key, as before the allow-list.
+  const allowed = Object.fromEntries(Object.entries(problem).filter(([field]) => PUBLIC_CODE_FIELDS.includes(field)));
   return {
-    ...rest,
+    ...allowed,
     visibleTestCases: testCases
       .filter((tc) => !tc.hidden)
       .map(({ hidden, ...tc }) => tc),
@@ -1168,4 +1184,4 @@ function start() {
   logConsistency();
 }
 
-module.exports = { router, start };
+module.exports = { router, start, toPublicProblem, PUBLIC_CODE_FIELDS };

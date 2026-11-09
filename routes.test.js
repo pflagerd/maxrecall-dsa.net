@@ -30,6 +30,9 @@ const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 
+const { toPublicProblem, PUBLIC_CODE_FIELDS } = require('./routes');
+const { QUESTION_FIELDS } = require('./question-files');
+
 const REPO = __dirname;
 
 const OWNER = 'owner@example.com'; // python on, javascript allowed but off, a chosen backlog (#133)
@@ -551,6 +554,23 @@ test('questions: the list, and one question without its hidden test cases', asyn
   assert.equal(one.json.testCases, undefined, 'no testCases');
   assert.equal(one.json.hiddenCount, hidden.length);
   assert.equal(one.json.visibleTestCases.length, file.testCases.length - hidden.length);
+});
+
+test('questions: the public view sends only allowed fields, in the file\'s order (#160, Q4)', () => {
+  const question = /** @type {import('./routes').Problem & { secret: string }} */ ({
+    title: 'T', secret: 'not for the browser', slug: 's', difficulty: 'Easy', topics: [], sources: [], created: '2026-11-08T00:00:00Z',
+    starterCode: { python: '' },
+    testCases: [{ args: [1], expected: 1 }, { args: [2], expected: 2, hidden: true }],
+  });
+  const sent = toPublicProblem(question);
+  assert.deepEqual(Object.keys(sent), ['title', 'slug', 'difficulty', 'topics', 'sources', 'created', 'starterCode', 'visibleTestCases', 'hiddenCount']);
+  assert.deepEqual(sent.visibleTestCases, [{ args: [1], expected: 1 }]);
+  assert.equal(sent.hiddenCount, 1);
+});
+
+test('questions: every allowed field is one of the format\'s, and testCases isn\'t allowed', () => {
+  for (const field of PUBLIC_CODE_FIELDS) assert.ok(QUESTION_FIELDS.includes(field), `${field} isn't in QUESTION_FIELDS`);
+  assert.ok(!PUBLIC_CODE_FIELDS.includes('testCases'));
 });
 
 test('questions: an unknown slug, or one that tries to leave questions/, is 404', async () => {
