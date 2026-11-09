@@ -2148,3 +2148,331 @@ again. Each command is one change.
 
 Undoing the undo is step 2 of this section again, once the problem is
 fixed in a new pull request.
+
+## 17. Updates, the new kernel and a reboot; `networking.service` disabled [VPS, then Kubuntu]
+
+Written 2026-11-09 (infrastructure and security), for the owner's
+choice that day: **disable `networking.service`, together with the
+kernel reboot** (option B of four: leave, disable, remove ifupdown, edit
+its hook). **Not yet run.** Three changes, then one reboot that tests
+them all:
+
+1. **The waiting updates** (178 on 11-09, the VPS operator's handoff
+   `docs/session-handoff/vps-operator/20261108T192142-0800.md`), among
+   them the kernel `6.8.0-149`. The machine runs `-147`. `-149` isn't
+   installed yet, so it needs `apt`, then a reboot. Security updates
+   already install themselves daily (`unattended-upgrades`,
+   `docs/plans/limited-live.md`, 2026-11-05); these are mostly
+   ordinary `noble-updates` fixes. Keeping the kernel patched is the
+   condition of letting testers in (limited live plan, D4; #22).
+2. **`networking.service` disabled.** It's ifupdown's unit, and
+   ifupdown configures nothing here: `/etc/network/interfaces` only
+   sources `interfaces.d/`, which is empty. The network is netplan with
+   systemd-networkd (`eth0` is `configured` by networkd). The unit
+   failed at boot on 11-05 (the boot checked; earlier ones weren't)
+   because of a bug in ifupdown's own hook,
+   `/etc/network/if-up.d/resolved`: it calls `return` outside a
+   function, and `run-parts` runs it as a script, so `dash` exits 2
+   (`ifup: failed to bring up lo`). The VPS operator's checks:
+   `docs/session-handoff/vps-operator/20261109T140011-0800.md`. Ubuntu
+   bug reports with the same message:
+   [LP #2004003](https://lists.snapcraft.io/archives/foundations-bugs/2023-January/488881.html),
+   [LP #1907878](https://bugs.launchpad.net/ubuntu/+source/ifupdown/+bug/1907878).
+   `0.8.41ubuntu1` is the current version for noble, so no update
+   fixes it.
+3. **One reboot**, for the new kernel. It is also the only real test of
+   step 2, since disabling a unit changes only what starts at the next
+   boot.
+
+**Why disabling is safe for the network.** Nothing ifupdown did is
+needed:
+- **`lo` is brought up by systemd itself**, before any unit:
+  PID 1 calls `loopback_setup()`
+  ([`src/core/main.c`, v255](https://github.com/systemd/systemd/blob/v255/src/core/main.c#L2239)),
+  which sets `lo` up and gives it `127.0.0.1/8` and `::1`
+  ([`src/shared/loopback-setup.c`](https://github.com/systemd/systemd/blob/v255/src/shared/loopback-setup.c#L51-L109)).
+  The app listens only there, and nginx proxies to it.
+- **`eth0`, the interface SSH and the site arrive on, is networkd's.**
+
+The risk that remains is that something not seen yet needs the unit.
+Step 1's dependency check looks for that, and the reboot shows it.
+
+**Why not leave it.** While any unit is failed, `systemctl
+is-system-running` says `degraded`
+([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html#is-system-running)),
+and the unit would fail again at each boot. A permanent false alarm
+hides a real one.
+
+Who does what: **[VPS]** steps are for the owner or the VPS operator
+(`docs/roles/vps-operator.md`), **one yes from the owner per change**.
+Each step says whether it is read-only or a change, and how to undo it.
+Stop at anything unexpected and report it; don't improvise.
+
+Before starting:
+
+- **The owner picks the time.** The site is down during the reboot
+  (about a minute; a guess, the last reboot's length wasn't recorded).
+  Testers in the middle of a question lose nothing saved, but a Submit
+  in flight fails.
+- **A VPS operator session on the VPS ends at the reboot**: it runs on
+  the machine being restarted. Steps 6 and 7 are for the owner, or a new
+  operator session started after the reboot.
+- **Know the way in that doesn't use the network**, before step 5. If
+  SSH doesn't come back, only a console in Hostinger's control panel can
+  help. Whether it has one that works without the VPS's network (a VNC
+  or serial console, not an SSH terminal in the browser) **isn't
+  checked**. The owner checks it in hPanel first and records what's
+  there. With no such console, a failed boot needs Hostinger's support.
+- **Root's commands only.** Nothing here touches `/srv/maxrecall/data`,
+  `auth/`, or the service's checkout.
+
+### 1. Look first [VPS, read-only]
+
+```bash
+hostname; id -un
+```
+- Expect `srv702017` and `root`. Anything else: stop.
+
+```bash
+systemctl list-dependencies --reverse networking.service --no-pager
+```
+- `--reverse` lists the units that pull `networking.service` in;
+  `--no-pager` prints straight to the terminal
+  ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html#list-dependencies)).
+- Expect only targets, such as `multi-user.target` and
+  `network-online.target`, which it's installed under. **Any service
+  listed: stop and report it.**
+
+```bash
+dpkg --verify ifupdown
+```
+- Checks the package's files against what it installed, and prints
+  nothing if none has changed
+  ([dpkg(1)](https://man7.org/linux/man-pages/man1/dpkg.1.html)). A line
+  naming `/etc/network/if-up.d/resolved`: someone edited the hook.
+  Report it, then go on.
+
+```bash
+systemctl is-system-running; systemctl --failed --no-pager
+```
+- Expect `degraded`, and `networking.service` as the only failed unit.
+  Note any other: step 3's expected result changes.
+
+```bash
+networkctl status eth0 --no-pager
+```
+- Expect `State: routable (configured)`. Anything else: stop.
+
+```bash
+uname -r; ls /boot/vmlinuz-*; df -h /boot
+```
+- Expect `6.8.0-147-generic`. The list shows the kernels that can boot.
+  `/boot` needs room for one more kernel and its initrd: at least
+  200 MB free (a guess with margin). Less: stop.
+
+```bash
+grep -E '^GRUB_(DEFAULT|TIMEOUT|TIMEOUT_STYLE)=' /etc/default/grub /etc/default/grub.d/*.cfg
+```
+- Records how GRUB, the boot menu, starts. This matters only for the
+  kernel's undo (below). With `GRUB_TIMEOUT=0` the menu is hidden.
+
+```bash
+apt-mark showhold; dpkg -l needrestart | tail -1
+```
+- The first lists packages held back on purpose (record them; they stay
+  held). The second shows whether `needrestart` is installed (step 2
+  tells it not to restart anything).
+
+```bash
+systemctl show maxrecallcode.service -p ActiveState -p NRestarts -p MainPID
+```
+- The service's state before, to compare with step 6.
+
+### 2. The updates [VPS, change]
+
+```bash
+apt-get update
+```
+- **Changes only apt's package lists** (what's available), not what's
+  installed. Undo: none needed.
+
+```bash
+apt-get -s --with-new-pkgs upgrade | grep -v -E '^(Inst|Conf) '
+```
+- **Read-only.** `-s` simulates: "No action; perform a simulation"
+  ([apt-get(8)](https://manpages.ubuntu.com/manpages/noble/man8/apt-get.8.html)).
+  The `grep` drops the per-package lines and leaves the summary: the
+  packages to upgrade, the NEW ones, any kept back or "deferred due to
+  phasing", and the count line.
+- `--with-new-pkgs`: a new kernel is a **new package**
+  (`linux-image-6.8.0-149-generic`), and plain `upgrade` never installs
+  "packages not already installed" (apt-get(8)), so without it the
+  kernel would be held back.
+- **Stop if**: no `linux-image-6.8.0-149` among the NEW packages (it may
+  be "deferred due to phasing", Ubuntu releasing it to machines in
+  stages), or anything listed under "will be REMOVED", or the count
+  line differs a lot from about 178 upgraded.
+- `apt-get`, not `apt`: apt(8) says its own command line has no stable
+  interface for scripts.
+
+```bash
+DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --with-new-pkgs upgrade
+```
+- **The change.** Each part:
+  - `DEBIAN_FRONTEND=noninteractive`: debconf asks no questions and
+    takes each default
+    ([debconf(7)](https://manpages.ubuntu.com/manpages/noble/man7/debconf.7.html)).
+    The operator's commands have no terminal to answer in.
+  - `NEEDRESTART_MODE=l`: `needrestart` only **lists** the services
+    using old libraries; it doesn't restart them
+    ([needrestart v3.6, line 230](https://github.com/liske/needrestart/blob/v3.6/needrestart#L230)).
+    Step 5's reboot restarts everything.
+  - `-y`: yes to apt's own "Do you want to continue?".
+  - `--force-confdef --force-confold`: where a package's config file
+    (in `/etc`) has changed both here and in the new version, keep
+    **ours** without asking. The new one is saved beside it as
+    `<file>.dpkg-dist`
+    ([dpkg(1)](https://man7.org/linux/man-pages/man1/dpkg.1.html),
+    `--force-confdef`, `--force-confold`).
+- Some packages restart their own service from their install scripts,
+  whatever `needrestart` says. If `nginx` is among them, the site blips;
+  if `openssh-server` is, open SSH sessions stay connected (a guess from
+  sshd's design, which gives each session its own process).
+- **Undo**: there's no single undo for an upgrade. A package can be
+  taken back one at a time (`apt-get install <package>=<old version>`)
+  while the old version is still in Ubuntu's archive. The old kernel
+  stays installed (see the kernel's undo).
+
+```bash
+dpkg --audit; find /etc -name '*.dpkg-dist' -mmin -120; ls /var/run/reboot-required*
+```
+- **Read-only.** `dpkg --audit` prints nothing if every package is
+  fully installed. The `find` lists new config files left beside ours in
+  the last two hours: **record them**, for infrastructure and security to
+  compare (step 2's flags kept ours). The `ls` should show
+  `/var/run/reboot-required`.
+- Anything from `dpkg --audit`: stop and report it before rebooting.
+
+```bash
+ls /boot/vmlinuz-*; systemctl is-active maxrecallcode.service nginx.service
+```
+- **Read-only.** `vmlinuz-6.8.0-149-generic` is now listed, beside
+  `-147`. Both services `active`. Not active: stop.
+
+### 3. Disable `networking.service` [VPS, change]
+
+```bash
+systemctl disable networking.service
+```
+- Removes the links that start it at boot. It's not running now (it
+  failed on 11-05), so nothing stops.
+- **Undo**: `systemctl enable networking.service`.
+
+```bash
+systemctl reset-failed networking.service
+```
+- Clears its "failed" mark, so `degraded` goes away now rather than at
+  the next boot
+  ([systemctl(1)](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html), `reset-failed`).
+- **Undo**: none needed. It changes no configuration.
+
+```bash
+systemctl is-enabled networking.service; systemctl is-system-running
+```
+- **Read-only.** Expect `disabled`, then `running`, unless step 1 found
+  other failed units (then `degraded` still, for those).
+
+### 4. Record before the reboot
+
+Write down, for step 7: step 2's summary and `.dpkg-dist` files, and
+step 3's results. A VPS operator session writes its handoff **now** and
+pushes it with the owner's yes, since the reboot ends it.
+
+### 5. Reboot [VPS, change]
+
+At the owner's chosen time, with the console from "Before starting" at
+hand:
+
+```bash
+systemctl reboot
+```
+- SSH drops. Wait about two minutes before step 6.
+- **Undo**: none. If SSH doesn't come back within about five minutes,
+  use the console: `systemctl status networking.service systemd-networkd.service --no-pager`
+  and `networkctl list`, then the undo below that fits.
+
+### 6. Check it came back [VPS, read-only]
+
+From Kubuntu, `ssh root@srv702017.hstgr.cloud` (a fresh login is
+itself the first check), then:
+
+```bash
+uname -r
+```
+- Expect `6.8.0-149-generic`.
+
+```bash
+systemctl is-system-running; systemctl --failed --no-pager
+```
+- Expect `running` and no failed units. Any failed: record it and its
+  `journalctl -b -u <unit> --no-pager`.
+
+```bash
+systemctl is-enabled networking.service; systemctl is-active networking.service
+```
+- Expect `disabled`, then `inactive`.
+
+```bash
+networkctl list; ip -br addr show lo
+```
+- Expect `eth0` `routable` `configured`. `lo` shows `UNKNOWN` (loopback
+  reports no carrier state) with `127.0.0.1/8` and `::1/128`.
+  `-br` is `ip`'s brief, one-line-per-interface output
+  ([ip(8)](https://man7.org/linux/man-pages/man8/ip.8.html)).
+
+```bash
+systemctl show maxrecallcode.service -p ActiveState -p NRestarts -p MainPID; journalctl -b -u maxrecallcode.service --no-pager | grep -i sandbox
+```
+- Expect `active`, `NRestarts=0`, a new PID, and `Sandbox: bubblewrap …
+  works (self-test passed)` (the AppArmor profile reloads at boot,
+  limited live plan, 2026-11-05). No self-test line, or a failed one:
+  the service refuses to judge. Stop and report it.
+
+```bash
+ufw status; systemctl is-active nginx.service
+```
+- Expect `Status: active` with 22, 80 and 443, and `active`.
+
+Then on Kubuntu:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
+```
+- `-sS` hides the progress bar but shows errors; `-o /dev/null`
+  discards the page; `-w '%{http_code}\n'` prints only the status
+  ([curl(1)](https://curl.se/docs/manpage.html)). Expect `200`.
+
+### 7. Record it
+
+In the handoff of whoever ran it: steps 1–6's results, what step 2
+installed (`/var/log/apt/history.log`, the last entry), and the
+`.dpkg-dist` files. Then infrastructure and security updates this
+section's "Not yet run", `readme.html` (Environments, the VPS; Known
+gaps, #22) and `docs/plans/limited-live.md` (D4, the kernel).
+
+### Undo
+
+- **`networking.service`**, if something turns out to need it:
+  `systemctl enable --now networking.service`. `--now` also starts it,
+  which fails as before; the failure itself is harmless (§17's
+  introduction).
+- **The new kernel**, if the VPS boots but misbehaves on it: `-147` is
+  still installed: under "Advanced options for Ubuntu" in GRUB's menu
+  at boot, the entry ending `6.8.0-147-generic` (not the one ending
+  `(recovery mode)`). Reaching that menu needs the console,
+  and a hidden menu (`GRUB_TIMEOUT=0`, step 1) may need a key held
+  during boot (a guess: Esc or Shift; not checked on this VPS). Boot
+  `-147` once from there, then stop and report: making it the default
+  is a change for infrastructure and security to write.
+- **A package**: as step 2's undo, one at a time, only if a specific
+  package is found to be the problem.
