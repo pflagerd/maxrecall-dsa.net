@@ -2157,7 +2157,8 @@ kernel reboot** (option B of four: leave, disable, remove ifupdown, edit
 its hook). **Not yet run.** Three changes, then one reboot that tests
 them all:
 
-1. **The waiting updates** (178 on 11-09, the VPS operator's handoff
+1. **All the waiting updates**, not only the kernel (owner,
+   2026-11-09) (178 on 11-09, the VPS operator's handoff
    `docs/session-handoff/vps-operator/20261108T192142-0800.md`), among
    them the kernel `6.8.0-149`. The machine runs `-147`. `-149` isn't
    installed yet, so it needs `apt`, then a reboot. Security updates
@@ -2219,10 +2220,11 @@ Before starting:
   operator session started after the reboot.
 - **Know the way in that doesn't use the network**, before step 5. If
   SSH doesn't come back, only a console in Hostinger's control panel can
-  help. Whether it has one that works without the VPS's network (a VNC
-  or serial console, not an SSH terminal in the browser) **isn't
-  checked**. The owner checks it in hPanel first and records what's
-  there. With no such console, a failed boot needs Hostinger's support.
+  help, and only one that doesn't use the VPS's network (a VNC or
+  serial console, not an SSH terminal in the browser). **The owner says
+  hPanel has one** (2026-11-09, answering that question). Before step 5,
+  open it and see a login prompt, to know it works today. If it
+  doesn't, stop: a failed boot would then need Hostinger's support.
 - **Root's commands only.** Nothing here touches `/srv/maxrecall/data`,
   `auth/`, or the service's checkout.
 
