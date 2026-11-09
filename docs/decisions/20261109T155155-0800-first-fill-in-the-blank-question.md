@@ -50,8 +50,11 @@ template:
 - `print("Don't stop.")` and `print("Don\'t stop.")` both print
   `Don't stop.`.
 
-**Not to merge before users' step 4 has merged**: once in `questions/`,
-learners meet it, and records version 4 (saving a Submit for it) is
-users' step 4.
+**Not to merge before users' fill-in-the-blank page has merged.** Once
+it's in `questions/`, learners meet it: `prepareQueues` adds every
+question to "all" backlogs at start-up. Until that page exists, the
+problem page shows its "can't show" message for every kind but `code`,
+so a learner could neither answer nor skip it. That's the architect's R3
+review of #212. Records version 4 was already merged (#209).
 
 Source: the two files above; #160 (Part A, B1, B3); `readme.html` §5.
