@@ -33,7 +33,9 @@ template for writing one.
   docs/question-template.json, .claude/skills/author-question/
 - Plans: docs/plans/playtest.md, docs/plans/topics-and-sources.md,
   docs/plans/error-line-numbers.md,
-  docs/plans/fundamentals-learned-links-concept-checks.md (#145)
+  docs/plans/fundamentals-learned-links-concept-checks.md (#145),
+  docs/plans/unit-test-questions.md and its prototype,
+  docs/plans/prototypes/unit-test-questions-python/** (#174, PR 210)
 
 ## Judge files: server code (owner, 2026-11-08, #160)
 A judge runs in the server process, with the server's access (learners'
