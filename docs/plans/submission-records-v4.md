@@ -13,8 +13,10 @@ a saved Submit (or Skip) keeps for a question whose `kind` isn't
 ## What's decided already (#160, owner, 2026-11-08)
 
 - **Q3**: a question's `kind` field; absent means `"code"`. A fill-in
-  question has `template`, `blank` and `judge`, and its languages are its
-  template's keys, so the (question, language) pair model stays.
+  question has `template` and `blank` (and `maxLength`, Q8), and its
+  languages are its template's keys, so the (question, language) pair
+  model stays. Its judge is a file beside it,
+  `questions/<slug>.judge.js` (Q6), not a field.
 - **Q5**: each kind defines its own answer, e.g. `{ "blank": "'" }`. A
   `"code"` question's answer **stays `code`**, in requests and records.
 - **Q9**: a wrong form is `Wrong Answer` plus the judge's message; a
