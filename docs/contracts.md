@@ -150,7 +150,9 @@ questions as fixtures, below).
       editing and no record's `questionSha256` changes.
     - Each kind has its own fields: `"code"` today's (`starterCode`,
       `judgeMode`, `testCases` and the rest); `"fill-in"` has
-      `template`, `blank` and `maxLength` (default 10). `make test`
+      `template`, `blank` and `maxLength` (default 10, and at most 100:
+      `make test` refuses more, #160's Q15, owner, 2026-11-08, so no one
+      question file can lift the limit users' routes check). `make test`
       refuses an unknown kind, and another kind's fields.
     - Every kind declares its languages (a fill-in question's are its
       `template`'s keys), so users' `{ question, language }` pairs hold.
