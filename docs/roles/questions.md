@@ -66,10 +66,34 @@ judge/, is server code, under these rules:
   judge's text and refuses what's listed, so it catches accidents, not
   every deliberate evasion. Review (R3) and the owner's approval are the
   guard against those; the real boundary would be a judge outside the
-  server process (#185, an idea). **Still to come** (owner, 2026-11-09,
-  option (a)): names limited to an allow-list, no writes to built-ins, no
-  `prototype`, no `async`/`await` or generators, in questions' follow-up
-  before #160's step 5 (#160's comment of 2026-11-09 on it).
+  server process (#185, an idea).
+
+  **And an allow-list of names** (owner, 2026-11-09, option (a); built
+  in #191), for the ways round that need no forbidden name (changing a
+  built-in, `fetch`, code run after judging). A judge file also:
+  - refers only to names it declares itself (a variable, parameter,
+    function, class, destructuring name or catch binding, by scope, as
+    TypeScript's checker resolves them) or to the allowed built-ins
+    `String`, `Number`, `Boolean`, `Math`, `JSON`, `Array`, `Set`,
+    `Map`, `RegExp` and values `undefined`, `NaN`, `Infinity`
+    (`questions.test.js`'s `JUDGE_ALLOWED_BUILTINS`,
+    `JUDGE_ALLOWED_VALUES`);
+  - uses an allowed built-in only by calling it or reading a property
+    (`Math.max(a, b)`, `new Set()`), never as a value (`const M = Math`,
+    `arr.map(Number)`); `RegExp` only by calling or constructing it,
+    since its legacy properties (`RegExp.input`, `$1`, …) hold the last
+    match made anywhere in the server (the architect's R3 review of
+    #191);
+  - writes only to its own variables, their properties, or
+    `module.exports`;
+  - names no `prototype` property, and uses no `async`, `await`,
+    generators or `yield`.
+
+  **Open** (the owner's, not yet decided): a write to a property of a
+  shared built-in function the judge has read into its own variable
+  (`const h = ({}).hasOwnProperty; h.call = () => true;`) still passes,
+  and changes that function for the whole server. Closing it would mean
+  no property writes at all (#191's R3 re-review).
 - **R2**: a judge is loaded only by the slug of a known fill-in-the-blank question,
   through paths.js's `resolveInside` (docs/contracts.md, contract 7).
 - **Q7**: the length is checked before a judge is called (contract 2); a
