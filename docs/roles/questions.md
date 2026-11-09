@@ -19,9 +19,9 @@ template for writing one.
   check)
 - How answers are judged: judge/runner.js, judge/cpp/**, judge/java/**,
   judge/line-numbers-test.js
-- Fill-in judging (#160; decided 2026-11-08, being built): each fill-in
+- Fill-in-the-blank judging (#160; decided 2026-11-08, being built): each fill-in-the-blank
   question's judge, questions/<slug>.judge.js (under questions/**), and
-  the code this role adds to judge/ for it: judge/fill-in.js (the
+  the code this role adds to judge/ for it: judge/fill-in-the-blank.js (the
   dispatch by kind, loading a judge, `JudgeFailedError`, the shared
   helpers; #160 step 3). Name any further files here when they're added.
   Both are server code: see "Judge files", below.
@@ -39,12 +39,12 @@ template for writing one.
 A judge runs in the server process, with the server's access (learners'
 records, auth/), not in the sandbox; Node's `vm` module is no boundary
 ("not a security mechanism", https://nodejs.org/api/vm.html). So a pull
-request that adds or changes a judge file, or this role's fill-in code in
+request that adds or changes a judge file, or this role's fill-in-the-blank code in
 judge/, is server code, under these rules:
 - **R1**: a judge file `require`s only an allow-list of judge/ helpers,
   and uses no `process`, `globalThis`, `eval`, `Function` or `import(`.
   `make test` checks it, with TypeScript's parser.
-- **R2**: a judge is loaded only by the slug of a known fill-in question,
+- **R2**: a judge is loaded only by the slug of a known fill-in-the-blank question,
   through paths.js's `resolveInside` (docs/contracts.md, contract 7).
 - **Q7**: the length is checked before a judge is called (contract 2); a
   judge is synchronous and fast, since the server runs on one thread; its

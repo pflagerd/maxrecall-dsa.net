@@ -42,8 +42,8 @@ the overall picture. Act as the human's lieutenant; the human decides.
 
 ## Reviews (owner, 2026-11-08, #160)
 - **Judge files**: the architect reviews every pull request that adds or
-  changes a fill-in question's judge (`questions/<slug>.judge.js`) or
-  questions' fill-in code in `judge/`, against `docs/roles/questions.md`,
+  changes a fill-in-the-blank question's judge (`questions/<slug>.judge.js`) or
+  questions' fill-in-the-blank code in `judge/`, against `docs/roles/questions.md`,
   "Judge files" (R1, R2, Q7) and `docs/contracts.md` contract 2, and
   says so in the pull request. The owner approves in the pull request.
   Reviewing moves no ownership: the files stay questions', and the
