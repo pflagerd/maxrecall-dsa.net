@@ -13,7 +13,7 @@ over the list being questions' (B), with users' code applying it.
 **Why**: an allow-list fails safe. A field users' list doesn't name is
 missing from the page, a visible bug, not a leak, so the route's owner
 can hold the list, and the decision lives in one file. #160's table had
-the public view as "questions/users"; its build list (B7 step 4) already
+the public view as "questions/users"; its build list (B8, step 4) already
 gave it to users.
 
 Source: `docs/contracts.md`, contract 4 ("`kind`"); `docs/roles/users.md`,
