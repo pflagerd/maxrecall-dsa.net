@@ -1,22 +1,22 @@
 'use strict';
 
-// Judging a fill-in question (#160): the learner types a few characters
+// Judging a fill-in-the-blank question (#160): the learner types a few characters
 // into a blank, and the question's own judge, questions/<slug>.judge.js,
 // reads them and says whether they're the form asked for. Nothing the
 // learner typed is run, so this happens in the server, not the sandbox.
 //
 // A judge file is server code (docs/roles/questions.md, "Judge files"):
 // it runs with the server's access. So this file loads a judge only by the
-// slug of a fill-in question, through resolveInside (R2), and treats what
+// slug of a fill-in-the-blank question, through resolveInside (R2), and treats what
 // a judge returns as untrusted until checked (Q7, #171): its verdict must
 // be { pass, message?, hints? }, with the text capped, or the answer
 // counts as "couldn't judge" (Q9a), not as the learner's fail.
 //
-// Users' routes check the answer before calling judgeFillIn (contract 2):
+// Users' routes check the answer before calling judgeFillInTheBlank (contract 2):
 // `blank` a string no longer than the question's maxLength, and no other
-// field. judgeFillIn checks again, cheaply, in case a route ever doesn't.
+// field. judgeFillInTheBlank checks again, cheaply, in case a route ever doesn't.
 
-const { QUESTIONS_DIR, kindOf, fillInMaxLength } = require('../question-files');
+const { QUESTIONS_DIR, kindOf, fillInTheBlankMaxLength } = require('../question-files');
 const { resolveInside } = require('../paths');
 
 /** The longest message a judge may give, in UTF-16 code units (#171). @type {number} */
@@ -37,11 +37,11 @@ const HINT_MAX_LENGTH = 300;
  */
 
 /**
- * What judgeFillIn gives back (contract 2): the status, mapped from the
+ * What judgeFillInTheBlank gives back (contract 2): the status, mapped from the
  * verdict's pass here and nowhere else, and the judge's message and hints.
  * No passed or total: the page would print them as "0/1 test cases passed".
  *
- * @typedef {object} FillInResult
+ * @typedef {object} FillInTheBlankResult
  * @property {'Accepted' | 'Wrong Answer'} status - The verdict, as a status.
  * @property {string} [message] - The judge's message, if it gave one.
  * @property {string[]} [hints] - The judge's hints, if it gave any.
@@ -58,7 +58,7 @@ const HINT_MAX_LENGTH = 300;
  */
 
 /**
- * Thrown when a fill-in question's judge fails: it can't be loaded, it
+ * Thrown when a fill-in-the-blank question's judge fails: it can't be loaded, it
  * throws, or it returns anything but a Verdict (#160, Q9a). Users' routes
  * match its code, 'JUDGE_FAILED', as a string, as they match 'JUDGE_BUSY':
  * they record nothing, change no queue, and show only a generic message.
@@ -106,7 +106,7 @@ function checkVerdict(result) {
  * A judge's result, read once into plain data before it's checked (the
  * architect's R3 review of #181): its own fields' values, and a copy of
  * hints if that's a list. A getter is called once here, inside
- * judgeFillIn's try, so it can neither throw past the check nor give one
+ * judgeFillInTheBlank's try, so it can neither throw past the check nor give one
  * value to checkVerdict and another to the result (a time-of-check to
  * time-of-use gap). Anything that isn't a plain, non-promise object is
  * returned as it is, for checkVerdict to refuse.
@@ -127,7 +127,7 @@ function plainCopy(result) {
 }
 
 /**
- * The path of a fill-in question's judge file, questions/<slug>.judge.js,
+ * The path of a fill-in-the-blank question's judge file, questions/<slug>.judge.js,
  * found through resolveInside so that no slug can reach outside the
  * folder (R2).
  *
@@ -142,8 +142,8 @@ function judgeFilePath(slug, dir = QUESTIONS_DIR) {
 }
 
 /**
- * Loads a fill-in question's judge (R2): only for a question whose kind is
- * "fill-in", by its own slug, through resolveInside. Node caches it
+ * Loads a fill-in-the-blank question's judge (R2): only for a question whose kind is
+ * "fill-in-the-blank", by its own slug, through resolveInside. Node caches it
  * (require), so a changed judge takes effect when the server restarts.
  *
  * @param {{ slug: string, kind?: string }} question - The question, as
@@ -151,13 +151,13 @@ function judgeFilePath(slug, dir = QUESTIONS_DIR) {
  * @param {string} [dir] - The folder of questions; QUESTIONS_DIR unless a
  *   test gives its own.
  * @returns {JudgeModule} The judge's module.
- * @throws {TypeError} If the question isn't a fill-in question: a caller's
+ * @throws {TypeError} If the question isn't a fill-in-the-blank question: a caller's
  *   mistake, not a failed judge.
  * @throws {JudgeFailedError} If its judge file can't be loaded, or doesn't
  *   export a judge function.
  */
 function loadJudge(question, dir = QUESTIONS_DIR) {
-  if (kindOf(question) !== 'fill-in') throw new TypeError(`loadJudge: ${question.slug} isn't a fill-in question`);
+  if (kindOf(question) !== 'fill-in-the-blank') throw new TypeError(`loadJudge: ${question.slug} isn't a fill-in-the-blank question`);
   const file = judgeFilePath(question.slug, dir);
   if (file === null) throw new JudgeFailedError(question.slug, 'its slug leads outside the questions folder');
   /** @type {unknown} */
@@ -174,12 +174,12 @@ function loadJudge(question, dir = QUESTIONS_DIR) {
 }
 
 /**
- * Judges a learner's answer to a fill-in question (#160): calls the
+ * Judges a learner's answer to a fill-in-the-blank question (#160): calls the
  * question's judge on the blank's text, checks what it returns, and maps
  * its pass to a status, here and nowhere else (Q6b.1).
  *
  * @param {{ slug: string, kind?: string, maxLength?: number }} question -
- *   The fill-in question, as loaded from its file.
+ *   The fill-in-the-blank question, as loaded from its file.
  * @param {{ blank: string }} answer - The learner's answer, already
  *   checked by the route (contract 2); checked again here, and refused
  *   with a TypeError if it isn't { blank } with blank a string within the
@@ -188,16 +188,16 @@ function loadJudge(question, dir = QUESTIONS_DIR) {
  *   judge is told.
  * @param {string} [dir] - The folder of questions; QUESTIONS_DIR unless a
  *   test gives its own.
- * @returns {FillInResult} The status, and the judge's message and hints.
- * @throws {TypeError} If the question isn't fill-in, or the answer isn't
+ * @returns {FillInTheBlankResult} The status, and the judge's message and hints.
+ * @throws {TypeError} If the question isn't fill-in-the-blank, or the answer isn't
  *   what the route should have let through: a caller's mistake.
  * @throws {JudgeFailedError} If the judge can't be loaded, throws, or
  *   returns anything but a Verdict (Q9a). It's logged here.
  */
-function judgeFillIn(question, answer, language, dir = QUESTIONS_DIR) {
+function judgeFillInTheBlank(question, answer, language, dir = QUESTIONS_DIR) {
   const keys = typeof answer === 'object' && answer !== null ? Object.keys(answer) : [];
-  if (keys.length !== 1 || keys[0] !== 'blank' || typeof answer.blank !== 'string' || answer.blank.length > fillInMaxLength(question)) {
-    throw new TypeError('judgeFillIn: the answer must be { blank }, a string within maxLength, checked by the route first (contract 2)');
+  if (keys.length !== 1 || keys[0] !== 'blank' || typeof answer.blank !== 'string' || answer.blank.length > fillInTheBlankMaxLength(question)) {
+    throw new TypeError('judgeFillInTheBlank: the answer must be { blank }, a string within maxLength, checked by the route first (contract 2)');
   }
   try {
     const { judge } = loadJudge(question, dir);
@@ -230,4 +230,4 @@ function judgeFillIn(question, answer, language, dir = QUESTIONS_DIR) {
   }
 }
 
-module.exports = { judgeFillIn, loadJudge, judgeFilePath, checkVerdict, plainCopy, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };
+module.exports = { judgeFillInTheBlank, loadJudge, judgeFilePath, checkVerdict, plainCopy, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX, HINT_MAX_LENGTH };

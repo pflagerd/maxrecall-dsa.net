@@ -35,7 +35,7 @@ function isQuestionFile(name) {
  * format"); the rest are left alone.
  *
  * @typedef {object} QuestionFile
- * @property {string} [kind] - "code" or "fill-in" (#160); absent means
+ * @property {string} [kind] - "code" or "fill-in-the-blank" (#160); absent means
  *   "code". Read it through kindOf(), never directly.
  * @property {string} title
  * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard"
@@ -48,11 +48,11 @@ function isQuestionFile(name) {
  * @property {Record<string, string>} [starterCode] - By language; a
  *   "code" question's languages are its keys.
  * @property {Record<string, string>} [template] - By language: the code
- *   shown, with the blank; a "fill-in" question's languages are its keys.
- * @property {string} [blank] - A "fill-in" question's marker for the
+ *   shown, with the blank; a "fill-in-the-blank" question's languages are its keys.
+ * @property {string} [blank] - A "fill-in-the-blank" question's marker for the
  *   blank, which appears exactly once in each template, e.g. "___".
- * @property {number} [maxLength] - The most characters a "fill-in"
- *   question's blank takes; read through fillInMaxLength().
+ * @property {number} [maxLength] - The most characters a "fill-in-the-blank"
+ *   question's blank takes; read through fillInTheBlankMaxLength().
  */
 
 /**
@@ -101,10 +101,10 @@ function questionInfos() {
 }
 
 /** The kinds of question (#160, Q3): what the rest of a question file holds. @type {readonly string[]} */
-const QUESTION_KINDS = Object.freeze(['code', 'fill-in']);
-/** A fill-in question's maxLength when its file gives none (#160, Q8). @type {number} */
+const QUESTION_KINDS = Object.freeze(['code', 'fill-in-the-blank']);
+/** A fill-in-the-blank question's maxLength when its file gives none (#160, Q8). @type {number} */
 const DEFAULT_MAX_LENGTH = 10;
-/** The most any fill-in question's maxLength may be (#160, Q15). @type {number} */
+/** The most any fill-in-the-blank question's maxLength may be (#160, Q15). @type {number} */
 const MAX_LENGTH_CAP = 100;
 
 /**
@@ -116,7 +116,7 @@ const MAX_LENGTH_CAP = 100;
  * checkQuestion refuses an unknown one.
  *
  * @param {{ kind?: string }} question - A question file's contents.
- * @returns {string} Its kind, e.g. "code" or "fill-in".
+ * @returns {string} Its kind, e.g. "code" or "fill-in-the-blank".
  */
 function kindOf(question) {
   return question.kind === undefined ? 'code' : question.kind;
@@ -124,7 +124,7 @@ function kindOf(question) {
 
 /**
  * The languages a question can be answered in (#160, Q3, rule 4): a
- * "code" question's starterCode keys, a "fill-in" question's template
+ * "code" question's starterCode keys, a "fill-in-the-blank" question's template
  * keys. Learners' (question, language) pairs are made from these.
  *
  * @param {Pick<QuestionFile, 'kind' | 'starterCode' | 'template'>} question -
@@ -134,20 +134,20 @@ function kindOf(question) {
  */
 function languagesOf(question) {
   const kind = kindOf(question);
-  const byLanguage = kind === 'code' ? question.starterCode : kind === 'fill-in' ? question.template : undefined;
+  const byLanguage = kind === 'code' ? question.starterCode : kind === 'fill-in-the-blank' ? question.template : undefined;
   return byLanguage ? Object.keys(byLanguage) : [];
 }
 
 /**
- * A fill-in question's limit on its blank, in UTF-16 code units, which is
+ * A fill-in-the-blank question's limit on its blank, in UTF-16 code units, which is
  * what JavaScript's `.length` and HTML's `maxlength` both count (#160, Q8):
  * its `maxLength`, or DEFAULT_MAX_LENGTH when it gives none.
  *
- * @param {{ maxLength?: number }} question - A fill-in question file's
+ * @param {{ maxLength?: number }} question - A fill-in-the-blank question file's
  *   contents, as checkQuestion accepts it.
  * @returns {number} The most characters the blank takes.
  */
-function fillInMaxLength(question) {
+function fillInTheBlankMaxLength(question) {
   return question.maxLength === undefined ? DEFAULT_MAX_LENGTH : question.maxLength;
 }
 
@@ -176,7 +176,7 @@ const COMMON_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', '
  */
 const KIND_FIELDS = Object.freeze({
   code: Object.freeze(['judgeMode', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']),
-  'fill-in': Object.freeze(['template', 'blank', 'maxLength']),
+  'fill-in-the-blank': Object.freeze(['template', 'blank', 'maxLength']),
 });
 /** Every field any kind of question may have. @type {readonly string[]} */
 const QUESTION_FIELDS = Object.freeze([...COMMON_FIELDS, ...QUESTION_KINDS.flatMap((kind) => KIND_FIELDS[kind])]);
@@ -278,11 +278,11 @@ function checkQuestion(question, fileName, slugs) {
   const mode = q.judgeMode === undefined ? 'function' : q.judgeMode;
   if (kind === 'code' && mode !== 'function' && mode !== 'program') problems.push('judgeMode must be "function" or "program" (or left out, meaning "function")');
 
-  // The languages: starterCode's keys, or a fill-in question's template's
+  // The languages: starterCode's keys, or a fill-in-the-blank question's template's
   // (languagesOf). Everything per language follows them.
-  const source = kind === 'fill-in' ? 'template' : 'starterCode';
+  const source = kind === 'fill-in-the-blank' ? 'template' : 'starterCode';
   if (!isPlainObject(q[source]) || !Object.keys(q[source]).length) {
-    problems.push(kind === 'fill-in' ? 'template must give the code, with the blank, for at least one language' : 'starterCode must give the starting code for at least one language');
+    problems.push(kind === 'fill-in-the-blank' ? 'template must give the code, with the blank, for at least one language' : 'starterCode must give the starting code for at least one language');
     return problems; // the per-language checks need the languages
   }
   const languages = Object.keys(q[source]);
@@ -349,7 +349,7 @@ function checkQuestion(question, fileName, slugs) {
     }
   }
 
-  if (kind === 'fill-in') return [...problems, ...checkFillIn(q, languages)];
+  if (kind === 'fill-in-the-blank') return [...problems, ...checkFillInTheBlank(q, languages)];
 
   if (mode === 'function') {
     perLanguage('functionName', text, 'the function\'s name, which the judge calls');
@@ -397,7 +397,7 @@ function checkQuestion(question, fileName, slugs) {
 }
 
 /**
- * What's wrong with a fill-in question's own fields (#160, Q3 and Q8):
+ * What's wrong with a fill-in-the-blank question's own fields (#160, Q3 and Q8):
  * `blank`, the marker, one line of text; each language's template holding
  * it exactly once, so the page knows where the input box goes; and
  * `maxLength`, if given, a whole number from 1 to MAX_LENGTH_CAP (#160,
@@ -405,11 +405,11 @@ function checkQuestion(question, fileName, slugs) {
  * checkQuestion has already checked that each template is text.
  *
  * @param {Record<string, any>} q - The question file's contents, a plain
- *   object whose kind is "fill-in".
+ *   object whose kind is "fill-in-the-blank".
  * @param {readonly string[]} languages - Its template's keys.
  * @returns {string[]} The problems, each naming the field; empty if none.
  */
-function checkFillIn(q, languages) {
+function checkFillInTheBlank(q, languages) {
   /** @type {string[]} */
   const problems = [];
   const marker = q.blank;
@@ -522,4 +522,4 @@ function findRedundantLearned(learnedBySlug) {
   return problems;
 }
 
-module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS, QUESTION_KINDS, kindOf, languagesOf, fillInMaxLength, MAX_LENGTH_CAP };
+module.exports = { QUESTIONS_DIR, RENAMES_FILE, isQuestionFile, questionInfos, readRenamesText, checkQuestion, findLearnedLoop, findRedundantLearned, QUESTION_FIELDS, QUESTION_KINDS, kindOf, languagesOf, fillInTheBlankMaxLength, MAX_LENGTH_CAP };

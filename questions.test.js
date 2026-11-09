@@ -12,7 +12,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInMaxLength } = require('./question-files');
+const { isQuestionFile, questionInfos, checkQuestion, findLearnedLoop, findRedundantLearned, kindOf, languagesOf, fillInTheBlankMaxLength } = require('./question-files');
 
 const QUESTIONS_DIR = path.join(__dirname, 'questions');
 
@@ -124,12 +124,12 @@ function validProgram() {
 }
 
 /**
- * A small valid fill-in question (#160), in Python only, as a new object
+ * A small valid fill-in-the-blank question (#160), in Python only, as a new object
  * each time.
  *
  * @returns {Record<string, any>} The question.
  */
-function validFillIn() {
+function validFillInTheBlank() {
   return {
     slug: 'sample',
     created: '2026-11-08T12:00:00Z',
@@ -137,28 +137,28 @@ function validFillIn() {
     difficulty: 'Fundamentals',
     topics: ['String'],
     sources: [],
-    kind: 'fill-in',
+    kind: 'fill-in-the-blank',
     description: { python: '<p>Fill in the blank.</p>' },
     template: { python: 'print("A quote (___) here.")\n' },
     blank: '___',
   };
 }
 
-test('a valid fill-in question passes, with or without maxLength', () => {
-  assert.deepEqual(checkQuestion(validFillIn(), 'sample.json'), []);
-  assert.deepEqual(checkQuestion({ ...validFillIn(), maxLength: 100 }, 'sample.json'), [], 'maxLength at the cap');
-  assert.deepEqual(checkQuestion({ ...validFillIn(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), []);
+test('a valid fill-in-the-blank question passes, with or without maxLength', () => {
+  assert.deepEqual(checkQuestion(validFillInTheBlank(), 'sample.json'), []);
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), maxLength: 100 }, 'sample.json'), [], 'maxLength at the cap');
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), []);
   assert.deepEqual(checkQuestion({ ...valid(), kind: 'code' }, 'sample.json'), [], 'kind "code" may be written out');
 });
 
-test('kindOf: absent means "code"; languagesOf follows the kind; fillInMaxLength defaults to 10', () => {
+test('kindOf: absent means "code"; languagesOf follows the kind; fillInTheBlankMaxLength defaults to 10', () => {
   assert.equal(kindOf(valid()), 'code');
-  assert.equal(kindOf(validFillIn()), 'fill-in');
+  assert.equal(kindOf(validFillInTheBlank()), 'fill-in-the-blank');
   assert.deepEqual(languagesOf(valid()), ['python', 'cpp']);
-  assert.deepEqual(languagesOf(validFillIn()), ['python']);
+  assert.deepEqual(languagesOf(validFillInTheBlank()), ['python']);
   assert.deepEqual(languagesOf({ kind: 'quiz' }), [], 'an unknown kind has no languages');
-  assert.equal(fillInMaxLength(validFillIn()), 10);
-  assert.equal(fillInMaxLength({ ...validFillIn(), maxLength: 3 }), 3);
+  assert.equal(fillInTheBlankMaxLength(validFillInTheBlank()), 10);
+  assert.equal(fillInTheBlankMaxLength({ ...validFillInTheBlank(), maxLength: 3 }), 3);
 });
 
 test('the valid samples pass, and so does one with learning text', () => {
@@ -262,21 +262,21 @@ const BROKEN = [
   ['every test case hidden', withChange(valid(), 'testCases.0.hidden', true), /at least one must be visible/],
   ['a program test case without input', withChange(validProgram(), 'testCases.0.input', DELETE), /testCases\[0\]\.input must be the program's standard input/],
   ['a program test case expecting a number', withChange(validProgram(), 'testCases.0.expected', 5), /testCases\[0\]\.expected must be the expected standard output, as text/],
-  // Kinds and fill-in questions (#160).
-  ['an unknown kind', withChange(valid(), 'kind', 'quiz'), /kind must be "code" or "fill-in"/],
-  ['a fill-in question with test cases', withChange(validFillIn(), 'testCases', []), /testCases is only for kind "code", not "fill-in"/],
-  ['a fill-in question with examples', withChange(validFillIn(), 'examples', { python: [] }), /examples is only for kind "code"/],
-  ['a code question with a template', withChange(valid(), 'template', { python: 'x' }), /template is only for kind "fill-in", not "code"/],
-  ['a fill-in question with no template', withChange(validFillIn(), 'template', DELETE), /template must give the code, with the blank, for at least one language/],
-  ['a fill-in template in an unknown language', withChange(validFillIn(), 'template.Python', 'x ___'), /template\.Python: not a language the judge knows/],
-  ['a fill-in description for a language with no template', withChange(validFillIn(), 'description.cpp', '<p>x</p>'), /description\.cpp: template has no cpp/],
-  ['a fill-in question with no blank', withChange(validFillIn(), 'blank', DELETE), /blank must be the text that marks the blank/],
-  ['a blank marker on two lines', withChange(validFillIn(), 'blank', '__\n_'), /blank must be the text that marks the blank in each template, on one line/],
-  ['a template without the blank', withChange(validFillIn(), 'template.python', 'print("no blank")'), /template\.python must contain the blank, "___", exactly once \(it has it 0 times\)/],
-  ['a template with the blank twice', withChange(validFillIn(), 'template.python', 'print("___ ___")'), /exactly once \(it has it 2 times\)/],
-  ['maxLength over the cap (#160, Q15)', withChange(validFillIn(), 'maxLength', 101), /maxLength must be a whole number from 1 to 100/],
-  ['maxLength 0', withChange(validFillIn(), 'maxLength', 0), /maxLength must be a whole number from 1 to 100/],
-  ['maxLength not a whole number', withChange(validFillIn(), 'maxLength', 2.5), /maxLength must be a whole number/],
+  // Kinds and fill-in-the-blank questions (#160).
+  ['an unknown kind', withChange(valid(), 'kind', 'quiz'), /kind must be "code" or "fill-in-the-blank"/],
+  ['a fill-in-the-blank question with test cases', withChange(validFillInTheBlank(), 'testCases', []), /testCases is only for kind "code", not "fill-in-the-blank"/],
+  ['a fill-in-the-blank question with examples', withChange(validFillInTheBlank(), 'examples', { python: [] }), /examples is only for kind "code"/],
+  ['a code question with a template', withChange(valid(), 'template', { python: 'x' }), /template is only for kind "fill-in-the-blank", not "code"/],
+  ['a fill-in-the-blank question with no template', withChange(validFillInTheBlank(), 'template', DELETE), /template must give the code, with the blank, for at least one language/],
+  ['a fill-in-the-blank template in an unknown language', withChange(validFillInTheBlank(), 'template.Python', 'x ___'), /template\.Python: not a language the judge knows/],
+  ['a fill-in-the-blank description for a language with no template', withChange(validFillInTheBlank(), 'description.cpp', '<p>x</p>'), /description\.cpp: template has no cpp/],
+  ['a fill-in-the-blank question with no blank', withChange(validFillInTheBlank(), 'blank', DELETE), /blank must be the text that marks the blank/],
+  ['a blank marker on two lines', withChange(validFillInTheBlank(), 'blank', '__\n_'), /blank must be the text that marks the blank in each template, on one line/],
+  ['a template without the blank', withChange(validFillInTheBlank(), 'template.python', 'print("no blank")'), /template\.python must contain the blank, "___", exactly once \(it has it 0 times\)/],
+  ['a template with the blank twice', withChange(validFillInTheBlank(), 'template.python', 'print("___ ___")'), /exactly once \(it has it 2 times\)/],
+  ['maxLength over the cap (#160, Q15)', withChange(validFillInTheBlank(), 'maxLength', 101), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength 0', withChange(validFillInTheBlank(), 'maxLength', 0), /maxLength must be a whole number from 1 to 100/],
+  ['maxLength not a whole number', withChange(validFillInTheBlank(), 'maxLength', 2.5), /maxLength must be a whole number/],
 ];
 
 for (const [what, question, pattern] of BROKEN) {
@@ -286,10 +286,10 @@ for (const [what, question, pattern] of BROKEN) {
   });
 }
 
-// --- Fill-in judging (#160): judge/fill-in.js, and every judge file --------
+// --- Fill-in-the-blank judging (#160): judge/fill-in-the-blank.js, and every judge file --------
 //
 // Judges are server code (docs/roles/questions.md, "Judge files"). These
-// tests check judge/fill-in.js on judges written to a temporary folder,
+// tests check judge/fill-in-the-blank.js on judges written to a temporary folder,
 // then check every real questions/<slug>.judge.js: each of its own cases
 // run in a worker thread that's stopped when its time runs out (#172;
 // node:test's own timeout can't stop a synchronous loop), and R1, by
@@ -298,7 +298,7 @@ for (const [what, question, pattern] of BROKEN) {
 const os = require('os');
 const { Worker } = require('node:worker_threads');
 const ts = require('typescript6');
-const { judgeFillIn, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in');
+const { judgeFillInTheBlank, checkVerdict, JudgeFailedError, MESSAGE_MAX_LENGTH, HINTS_MAX } = require('./judge/fill-in-the-blank');
 
 /** How long one judge case may take before it counts as never returning. @type {number} */
 const JUDGE_CASE_TIMEOUT_MS = 1000;
@@ -339,36 +339,36 @@ const FIXTURES = judgeFolder({
 });
 
 /**
- * A fill-in question object, as routes.js would load it, for these tests.
+ * A fill-in-the-blank question object, as routes.js would load it, for these tests.
  *
  * @param {string} slug - Its slug, the name of a judge in FIXTURES.
  * @returns {{ slug: string, kind: string }} The question.
  */
-const fillIn = (slug) => ({ slug, kind: 'fill-in' });
+const fillInTheBlank = (slug) => ({ slug, kind: 'fill-in-the-blank' });
 
-test('judgeFillIn: a pass is Accepted; a fail is Wrong Answer with the judge\'s message and hints; never passed or total', () => {
-  assert.deepEqual(judgeFillIn(fillIn('quote'), { blank: "'" }, 'python', FIXTURES), { status: 'Accepted' });
-  const fail = judgeFillIn(fillIn('quote'), { blank: "\\'" }, 'python', FIXTURES);
+test('judgeFillInTheBlank: a pass is Accepted; a fail is Wrong Answer with the judge\'s message and hints; never passed or total', () => {
+  assert.deepEqual(judgeFillInTheBlank(fillInTheBlank('quote'), { blank: "'" }, 'python', FIXTURES), { status: 'Accepted' });
+  const fail = judgeFillInTheBlank(fillInTheBlank('quote'), { blank: "\\'" }, 'python', FIXTURES);
   assert.equal(fail.status, 'Wrong Answer');
   assert.match(fail.message || '', /technically work/);
   assert.deepEqual(fail.hints, ['No backslash needed.']);
   assert.ok(!('passed' in fail) && !('total' in fail));
 });
 
-test('judgeFillIn: a judge that throws, is async, returns the wrong shape, a getter that throws, or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
-  t.mock.method(console, 'error', () => {}); // judgeFillIn logs each failure; keep the test output clean
+test('judgeFillInTheBlank: a judge that throws, is async, returns the wrong shape, a getter that throws, or too long a message, or is missing, is JUDGE_FAILED (Q9a)', (t) => {
+  t.mock.method(console, 'error', () => {}); // judgeFillInTheBlank logs each failure; keep the test output clean
   for (const slug of ['throws', 'async', 'shape', 'getter', 'long', 'nojudge', 'no-such-judge']) {
-    assert.throws(() => judgeFillIn(fillIn(slug), { blank: 'x' }, 'python', FIXTURES), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED', slug);
+    assert.throws(() => judgeFillInTheBlank(fillInTheBlank(slug), { blank: 'x' }, 'python', FIXTURES), (err) => err instanceof JudgeFailedError && err.code === 'JUDGE_FAILED', slug);
   }
-  assert.throws(() => judgeFillIn(fillIn('../quote'), { blank: 'x' }, 'python', path.join(FIXTURES, 'sub')), /JUDGE_FAILED|outside/, 'a slug can\'t lead outside the folder (R2)');
+  assert.throws(() => judgeFillInTheBlank(fillInTheBlank('../quote'), { blank: 'x' }, 'python', path.join(FIXTURES, 'sub')), /JUDGE_FAILED|outside/, 'a slug can\'t lead outside the folder (R2)');
 });
 
-test('judgeFillIn: an answer the route should have refused, or a code question, is the caller\'s mistake (TypeError)', () => {
+test('judgeFillInTheBlank: an answer the route should have refused, or a code question, is the caller\'s mistake (TypeError)', () => {
   for (const answer of [{ blank: 'x', extra: 1 }, { blank: ['x'] }, { blank: 'x'.repeat(11) }, {}, null]) {
-    assert.throws(() => judgeFillIn(fillIn('quote'), /** @type {any} */ (answer), 'python', FIXTURES), TypeError, JSON.stringify(answer));
+    assert.throws(() => judgeFillInTheBlank(fillInTheBlank('quote'), /** @type {any} */ (answer), 'python', FIXTURES), TypeError, JSON.stringify(answer));
   }
-  assert.doesNotThrow(() => judgeFillIn({ ...fillIn('quote'), maxLength: 11 }, { blank: 'x'.repeat(11) }, 'python', FIXTURES), 'maxLength raises the limit');
-  assert.throws(() => judgeFillIn({ slug: 'quote' }, { blank: 'x' }, 'python', FIXTURES), TypeError, 'a question with no kind is a code question');
+  assert.doesNotThrow(() => judgeFillInTheBlank({ ...fillInTheBlank('quote'), maxLength: 11 }, { blank: 'x'.repeat(11) }, 'python', FIXTURES), 'maxLength raises the limit');
+  assert.throws(() => judgeFillInTheBlank({ slug: 'quote' }, { blank: 'x' }, 'python', FIXTURES), TypeError, 'a question with no kind is a code question');
 });
 
 test('checkVerdict: only { pass, message?, hints? }, within the caps (#171)', () => {
@@ -394,7 +394,7 @@ test('checkVerdict: only { pass, message?, hints? }, within the caps (#171)', ()
 function runJudgeCase(file, index, timeoutMs) {
   const code = `
     const { parentPort, workerData } = require('node:worker_threads');
-    const { checkVerdict } = require(workerData.fillIn);
+    const { checkVerdict } = require(workerData.fillInTheBlank);
     const { judge, cases } = require(workerData.file);
     if (workerData.index < 0) { parentPort.postMessage({ count: Array.isArray(cases) ? cases.length : 0 }); }
     else {
@@ -416,7 +416,7 @@ function runJudgeCase(file, index, timeoutMs) {
      * @returns {void}
      */
     (resolve) => {
-    const worker = new Worker(code, { eval: true, workerData: { file, index, fillIn: path.join(__dirname, 'judge', 'fill-in.js') } });
+    const worker = new Worker(code, { eval: true, workerData: { file, index, fillInTheBlank: path.join(__dirname, 'judge', 'fill-in-the-blank.js') } });
     const timer = setTimeout(
       /**
        * The time ran out: stop the worker, whatever the judge is doing.
@@ -675,14 +675,14 @@ test('R1: a judge file may use none of process, globalThis, eval, Function, impo
 /** Every judge file in questions/, by slug. @type {string[]} */
 const judgeSlugs = fs.readdirSync(QUESTIONS_DIR).filter((f) => f.endsWith('.judge.js')).map((f) => f.slice(0, -'.judge.js'.length)).sort();
 
-test('every judge file belongs to a fill-in question, and every fill-in question has one', () => {
+test('every judge file belongs to a fill-in-the-blank question, and every fill-in-the-blank question has one', () => {
   for (const slug of judgeSlugs) {
     assert.ok(files.includes(`${slug}.json`), `questions/${slug}.judge.js has no questions/${slug}.json`);
-    assert.equal(kindOf(JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, `${slug}.json`), 'utf8'))), 'fill-in', `${slug}.json isn't a fill-in question`);
+    assert.equal(kindOf(JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, `${slug}.json`), 'utf8'))), 'fill-in-the-blank', `${slug}.json isn't a fill-in-the-blank question`);
   }
   for (const name of files) {
     const question = JSON.parse(fs.readFileSync(path.join(QUESTIONS_DIR, name), 'utf8'));
-    if (kindOf(question) === 'fill-in') assert.ok(judgeSlugs.includes(question.slug), `${name} is a fill-in question with no questions/${question.slug}.judge.js`);
+    if (kindOf(question) === 'fill-in-the-blank') assert.ok(judgeSlugs.includes(question.slug), `${name} is a fill-in-the-blank question with no questions/${question.slug}.judge.js`);
   }
 });
 

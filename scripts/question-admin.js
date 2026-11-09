@@ -121,7 +121,7 @@ function writeQueues(email, before, after) {
 /**
  * make delete-question: git rm questions/<SLUG>.json, unless it's already
  * gone, and its judge file, questions/<SLUG>.judge.js, if it has one (a
- * fill-in question, #160); then removes the question from every user's
+ * fill-in-the-blank question, #160); then removes the question from every user's
  * files.
  *
  * @param {boolean} dryRun - Print what would change, and change nothing.
@@ -137,7 +137,7 @@ async function deleteQuestion(dryRun) {
   const queues = readAllQueues();
   const file = `questions/${slug}.json`;
   const exists = fs.existsSync(path.join(REPO, file));
-  // A fill-in question's judge goes with it (#160; contract 4).
+  // A fill-in-the-blank question's judge goes with it (#160; contract 4).
   const judgeFile = `questions/${slug}.judge.js`;
   const judgeExists = fs.existsSync(path.join(REPO, judgeFile));
 
@@ -157,7 +157,7 @@ async function deleteQuestion(dryRun) {
 
 /**
  * make rename-question: git mv questions/<FROM>.json to <TO>.json, and its
- * judge file, <FROM>.judge.js, to <TO>.judge.js if it has one (a fill-in
+ * judge file, <FROM>.judge.js, to <TO>.judge.js if it has one (a fill-in-the-blank
  * question, #160); sets its slug, and records the rename in renames.json
  * (all staged), unless that already happened; then renames the question
  * in every user's files.
@@ -182,7 +182,7 @@ async function renameQuestion(dryRun) {
   else if (!fromExists && toExists && renames[from] === to) moveFile = false; // already renamed (git pull)
   else if (toExists) throw new Refusal(`${toFile} already exists`);
   else throw new Refusal(`${fromFile} doesn't exist, and renames.json doesn't say it became ${to}`);
-  // A fill-in question's judge moves with it (#160; contract 4).
+  // A fill-in-the-blank question's judge moves with it (#160; contract 4).
   const fromJudge = `questions/${from}.judge.js`;
   const toJudge = `questions/${to}.judge.js`;
   const moveJudge = moveFile && fs.existsSync(path.join(REPO, fromJudge));
