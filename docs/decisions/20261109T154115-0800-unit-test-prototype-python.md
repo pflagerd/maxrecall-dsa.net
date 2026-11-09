@@ -19,9 +19,10 @@ committing it.
   `docs/plans/prototypes/unit-test-questions-python/`, so it can be run
   again (rather than kept in a session's scratchpad, with only its
   findings in the plan). Its JavaScript driver, `run.js`, is documented
-  as every JavaScript file is, and needs a line in `tsconfig.json`
-  (infrastructure and security's) for `make typecheck` and
-  `make doc-check` to cover it.
+  as every JavaScript file is, and listed in `tsconfig.json` so that
+  `make typecheck` and `make doc-check` cover it: one line in
+  infrastructure and security's file, under an exception the owner
+  granted for this pull request ("Grant the exception", 2026-11-09).
 - **Only #174's commits** came onto the questions-1 session's branch; #88's
   stay on hold.
 
