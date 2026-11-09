@@ -1,9 +1,15 @@
-# Submission records, version 4: a fill-in answer (#160, Q11)
+# Submission records, version 4: a fill-in-the-blank answer (#160, Q11)
 
 Status: **decided** (users, 2026-11-08; the owner chose D1 to D5 as
 recommended, and D6 after questions 2's review, 2026-11-08). Nothing built: it waits for questions' side
 of #160 (B7). Where this disagrees with `readme.html`,
 `readme.html` wins: it describes what's built.
+
+**Renamed** (owner, 2026-11-09, #160): the kind is `"fill-in-the-blank"`,
+not `"fill-in"`, in code and in stored records alike, so a version 4
+record's `kind` is `"fill-in-the-blank"`. Nothing else here changed. The
+merged decision files this plan names keep the old word, as merged
+decision files aren't edited.
 
 #160 (questions 2's fill-in-the-blank proposal) leaves Q11 to users: what
 a saved Submit (or Skip) keeps for a question whose `kind` isn't
@@ -12,7 +18,7 @@ a saved Submit (or Skip) keeps for a question whose `kind` isn't
 
 ## What's decided already (#160, owner, 2026-11-08)
 
-- **Q3**: a question's `kind` field; absent means `"code"`. A fill-in
+- **Q3**: a question's `kind` field; absent means `"code"`. A fill-in-the-blank
   question has `template` and `blank` (and `maxLength`, Q8), and its
   languages are its template's keys, so the (question, language) pair
   model stays. Its judge is a file beside it,
@@ -20,12 +26,12 @@ a saved Submit (or Skip) keeps for a question whose `kind` isn't
 - **Q5**: each kind defines its own answer, e.g. `{ "blank": "'" }`. A
   `"code"` question's answer **stays `code`**, in requests and records.
 - **Q9**: a wrong form is `Wrong Answer` plus the judge's message; a
-  fill-in result leaves out `passed` and `total`.
+  fill-in-the-blank result leaves out `passed` and `total`.
 - **Q6b, Q10**: a judge returns `{ pass, message?, hints? }`; only the
   server turns `pass` into `Accepted` or `Wrong Answer`.
 - **Q9a**: a judge that throws records nothing. So there's no record for
   that case.
-- **Q6.4**: a fill-in record's hash covers its judge file too
+- **Q6.4**: a fill-in-the-blank record's hash covers its judge file too
   (`questions/<slug>.judge.js`, Q6). Today `questionSha256` hashes only
   the `.json` file's bytes (`routes.js:124`), and nothing compares it:
   it's a trace for whoever looks into a Submit later.
@@ -42,14 +48,14 @@ a saved Submit (or Skip) keeps for a question whose `kind` isn't
 
 Who reads them, and what each needs:
 
-| Reader | Reads | Fill-in needs |
+| Reader | Reads | Fill-in-the-blank needs |
 |---|---|---|
 | Consistency check 6, `consistency.js:34-40, 123-132` | `submittedAt`, `question`, `language`, `status`, `skipped` | nothing: `status` is `Accepted` or `Wrong Answer` (Q9) |
 | `make recalculate-queue`, `recalculate.js:121` | `status`, `skipped` (through `passFor`) | nothing, as above |
 | `readSubmission`, `users.js:142` | parses the JSON; checks no field and no version | nothing |
 | The Submissions list, `routes.js:573` (`toSubmissionSummary`) | `status`, `passed`, `total`, `runtimeMs`, `elapsedMs`, `skipped` | the kind, so the page knows how to show the line |
-| The Submissions tab, `problem-page.js:1879-1880` | `${s.passed}/${s.total}`, `${s.runtimeMs} ms` with **no check** | a check: today a fill-in line would read "Wrong Answer · null/null" |
-| "Load into editor", `problem-page.js:1989-2010` | `record.code` into the editor | the fill-in page puts `answer.blank` back in the box instead |
+| The Submissions tab, `problem-page.js:1879-1880` | `${s.passed}/${s.total}`, `${s.runtimeMs} ms` with **no check** | a check: today a fill-in-the-blank line would read "Wrong Answer · null/null" |
+| "Load into editor", `problem-page.js:1989-2010` | `record.code` into the editor | the fill-in-the-blank page puts `answer.blank` back in the box instead |
 | The Learning/Applying tab rule, `problem-page.js:1811` | `skipped` only | nothing |
 
 No reader checks `schemaVersion`. It records when a field appeared, for
@@ -60,22 +66,22 @@ people and for code that wants to know.
 A version 4 record is version 3 with these changes. Version 1 to 3
 records stay as they are: nothing is rewritten.
 
-1. **`kind`**, always written: `"code"` or `"fill-in"` (D2).
+1. **`kind`**, always written: `"code"` or `"fill-in-the-blank"` (D2).
 2. **The answer**: for `"code"`, `code` as today (Q5). For any other
    kind, **`answer`**: the kind's answer object as the server validated
    it, only the kind's own fields (D1, as changed by #160's Q12), e.g. `{ "blank": "\\'" }`, and **no `code`** (D1).
 3. **`judgeMode`** only for `"code"`, where it means something.
-4. **What a fill-in judge doesn't produce is `null`**: `passed`,
+4. **What a fill-in-the-blank judge doesn't produce is `null`**: `passed`,
    `total`, `runtimeMs`, `stdout` and `stderr`; `results` is `[]`. A
    Skip already does this, so readers handle it (D4).
 5. **`message` and `hints`**, when the judge gives them (D3): so the
-   Submissions tab can show, later, why a fill-in answer failed.
-6. **A Skip of a fill-in question** keeps what the box held as
+   Submissions tab can show, later, why a fill-in-the-blank answer failed.
+6. **A Skip of a fill-in-the-blank question** keeps what the box held as
    `answer`, as a Skip of a code question keeps the editor's text.
-7. **`judgeSha256`** for a fill-in record: the SHA-256 of its judge file,
+7. **`judgeSha256`** for a fill-in-the-blank record: the SHA-256 of its judge file,
    beside `questionSha256`, which stays the `.json` file's alone (D6).
 
-An example, a failed fill-in Submit:
+An example, a failed fill-in-the-blank Submit:
 
 ```json
 {
@@ -85,7 +91,7 @@ An example, a failed fill-in Submit:
   "questionSha256": "…",
   "judgeSha256": "…",
   "language": "python",
-  "kind": "fill-in",
+  "kind": "fill-in-the-blank",
   "answer": { "blank": "\\'" },
   "status": "Wrong Answer",
   "message": "Your answer would technically work, but is not what we asked for. …",
@@ -110,7 +116,7 @@ A code Submit in version 4 differs from version 3 only in
   - **Changed** (owner, 2026-11-08, #160's Q12, after questions 2's and
     infrastructure and security's reviews): the answer is kept **as the
     server validated it**. An answer with any field but its kind's own
-    (for fill-in, anything but `blank`) is refused before the judge is
+    (for fill-in-the-blank, anything but `blank`) is refused before the judge is
     called, as is a `blank` that isn't a string (`typeof`) or is longer
     than `maxLength` (Q8, capped at 100 by Q15). Nothing is recorded for
     a refused answer. A valid answer is the same object the request sent.
@@ -126,10 +132,10 @@ A code Submit in version 4 differs from version 3 only in
   - (b) Only for kinds other than `"code"`. Shorter, but a reader has to
     know that absent means code, as with `skipped`.
 - **D3. The judge's `message` and `hints`.** Decided: (a).
-  - (a) **Kept** (recommended): the learner can see later why a fill-in
+  - (a) **Kept** (recommended): the learner can see later why a fill-in-the-blank
     answer failed, as a code answer's `stderr` shows why it failed.
   - (b) Not kept: the verdict only.
-- **D4. Fields a fill-in judge doesn't produce.** Decided: (a).
+- **D4. Fields a fill-in-the-blank judge doesn't produce.** Decided: (a).
   - (a) **`null`, as for a Skip** (recommended): every record has the
     same fields, and readers already handle `null` there.
   - (b) Left out. Smaller files, but readers must handle both `null`
@@ -159,14 +165,14 @@ A code Submit in version 4 differs from version 3 only in
 ## What users builds, once decided and once questions' side is in
 
 - `routes.js`: `submissionRecord` writes version 4 by kind, with
-  `judgeSha256` for fill-in (the judge file read and hashed with the
+  `judgeSha256` for fill-in-the-blank (the judge file read and hashed with the
   question, as `loadProblem` does for the `.json`);
   `toSubmissionSummary` passes `kind` (and `message`, under D3(a)).
 - `users.js`: the `SubmissionRecord` type, with `code` optional and
   `kind`, `answer`, `message`, `hints` added.
 - `problem-page.js`: the Submissions tab shows counts and time only when
   they're numbers (the result line already checks, `:1605-1607`), and the
-  message under D3(a); "load" puts a fill-in answer back in the box, and
+  message under D3(a); "load" puts a fill-in-the-blank answer back in the box, and
   refuses a record whose kind isn't the question's.
 - `readme.html`, "Where data lives"; `routes.test.js` for both kinds.
 
@@ -177,9 +183,9 @@ A code Submit in version 4 differs from version 3 only in
 - **Deploying it changes what's stored on disk**, so the guarded deploy
   stops for infrastructure and security first (`docs/deploy-vps.md`,
   "Updating: the guarded deploy", step 1).
-- **Going back to an older server after fill-in records exist** (a
+- **Going back to an older server after fill-in-the-blank records exist** (a
   guess, not tried): its Submissions tab would show "null/null" for them,
   and loading one into the editor would find no `code`. No queue or
   check is affected, since `status` is a normal verdict. An older server
-  can't show a fill-in question at all, since questions' format check
+  can't show a fill-in-the-blank question at all, since questions' format check
   refuses unknown kinds.
