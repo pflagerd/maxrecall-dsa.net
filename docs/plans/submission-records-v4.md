@@ -7,7 +7,7 @@ decides D1 to D5 below. Where this disagrees with `readme.html`,
 #160 (questions 2's fill-in-the-blank proposal) leaves Q11 to users: what
 a saved Submit (or Skip) keeps for a question whose `kind` isn't
 `"code"`. This plan answers it. Facts were read from `master` at
-`8e6b795` unless marked as a guess.
+`cf90d5d` unless marked as a guess.
 
 ## What's decided already (#160, owner, 2026-11-08)
 
