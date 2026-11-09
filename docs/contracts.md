@@ -48,11 +48,13 @@ Provider: infrastructure and security (`judge/sandbox.js`,
 
 ## 2. Judging, for the server and the sandbox test
 
-Provider: questions (`judge/runner.js`). Used by: users (`routes.js`;
+Provider: questions (`judge/runner.js`; `judge/fill-in-the-blank.js`
+for fill-in-the-blank questions). Used by: users (`routes.js`;
 `routes.test.js`, through a real `node server.js`); infrastructure and
 security (`judge/sandbox-selftest.js`).
 
-- **What crosses**: `runSubmission`; for the sandbox test also
+- **What crosses**: `runSubmission`; `judgeFillInTheBlank` (from
+  `judge/fill-in-the-blank.js`, since PR 197); for the sandbox test also
   `TIMEOUT_MS` and `CPP_COMPILE_TIMEOUT_MS`. (`server.js`'s start-up log
   uses `describeSandbox`, `MAX_RUNNING` and `MAX_WAITING`, but since the
   split both sides of that are infrastructure and security's.)
@@ -102,6 +104,15 @@ security (`judge/sandbox-selftest.js`).
       only `blank`; #160's Q12, owner, 2026-11-08). Anything else is
       refused before questions' judging is called, and nothing is
       recorded for it. Questions' judging may rely on all of this.
+    - **`judgeFillInTheBlank(question, answer, language)`** is what
+      users' routes call (users' request, 2026-11-09). It's
+      **synchronous**, and returns `{ status, message?, hints? }` (its
+      `FillInTheBlankResult`). For a judge that fails it throws
+      `JudgeFailedError`, code `'JUDGE_FAILED'`, having **logged the
+      details itself**, so users logs nothing more for that code. For a
+      question that isn't fill-in-the-blank, or an answer the route
+      should have refused, it throws a `TypeError`, a caller's mistake,
+      which users answers as a plain 500.
     - **The result's `status`** is `'Accepted'` or `'Wrong Answer'`,
       mapped from the judge's `pass` in one place in questions' code; no
       judge names a status. It adds `message` and `hints`, the judge's,
@@ -138,7 +149,8 @@ questions as fixtures, below).
 
 - **What crosses**: `QUESTIONS_DIR`, `isQuestionFile`, `questionInfos`,
   `RENAMES_FILE`, `readRenamesText`, `kindOf`,
-  `fillInTheBlankMaxLength`; and the files themselves.
+  `fillInTheBlankMaxLength`, `REPO_QUESTIONS_DIR` (PR 198); and the
+  files themselves.
 - **Relied on**:
   - A question's slug is its file name without `.json` (spaced-repetition
     plan, D1). Learners' `order.json` and `backlog.json` store slugs, so
@@ -253,8 +265,14 @@ questions as fixtures, below).
     Submit, Skip) and `hello-world`, so an edit to either between a
     refactor's two snapshots shows as a difference that isn't the
     refactor's. Fixture questions of the tests' own would free the real
-    bank; that needs a way to point `QUESTIONS_DIR` elsewhere (questions'
-    `question-files.js`, and users' tests): not proposed yet.
+    bank. **The way now exists** (PR 198; owner, 2026-11-09, option (A)):
+    `MAXRECALL_QUESTIONS_DIR`, read once by `question-files.js`, moves
+    `QUESTIONS_DIR` (and so where judge files load from) to a test folder.
+    `REPO_QUESTIONS_DIR` always names the repository's `questions/`.
+    `make test`'s `questions.test.js` and `make rename-question`/
+    `delete-question` ignore or refuse the variable, and the live service
+    must never set it (infrastructure and security). Users' tests moving
+    to their own fixtures is users' work, not yet done.
 
 ## 5. A learner's files, for deleting and renaming questions
 
@@ -295,7 +313,8 @@ Provider: infrastructure and security (`paths.js`). Used by: users
 (`routes.js`, for `loadProblem`; `users.js`); questions (loading a
 fill-in-the-blank question's judge file, #160, being built: only by a known
 fill-in-the-blank slug, through `resolveInside`, since a `require` of a chosen path
-runs code). And the other way: users
+runs code; "inside" is inside `QUESTIONS_DIR`, which
+`MAXRECALL_QUESTIONS_DIR` may move to a test folder, PR 198). And the other way: users
 (`users.js`) provides `EMAIL_PATTERN` to `auth.js`, and `OWNER_EMAIL` and
 `USERS_DIR` to `server.js` (infrastructure and security).
 
