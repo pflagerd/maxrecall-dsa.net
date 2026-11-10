@@ -1,0 +1,22 @@
+{
+  "slug": "single-quotes-make-a-string",
+  "created": "2026-11-10T20:46:25Z",
+  "title": "Single Quotes Make a String Too",
+  "difficulty": "Fundamentals",
+  "topics": ["String"],
+  "sources": [],
+  "alreadyLearned": ["hello-world"],
+  "kind": "fill-in-the-blank",
+  "learning": {
+    "python": "<p>In Hello World you wrote a string between double quotes: <code>\"Hello World!\"</code>. Python lets you write a string between single quotes as well:</p><div class=\"example\"><pre>print('Good morning.')   # prints: Good morning.</pre></div><p>Both ways make the same string: <code>'Good morning.'</code> and <code>\"Good morning.\"</code> are equal. The quotes mark where the string starts and ends, and aren't part of it.</p><p>A string ends with the same kind of quote it starts with. One that starts with <code>'</code> goes on until the next <code>'</code>.</p><p>See <a href=\"https://docs.python.org/3/tutorial/introduction.html\" target=\"_blank\" rel=\"noopener\">An Informal Introduction to Python</a> in the Python documentation.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=hello-world\" target=\"_blank\" rel=\"noopener\">Hello World!</a>: printing text with <code>print()</code>.</li></ul>"
+  },
+  "description": {
+    "python": "<p>Fill in the blank so the program prints <code>Hello World!</code></p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers how.</p>"
+  },
+  "template": {
+    "python": "print('Hello World!___)\n"
+  },
+  "blank": "___",
+  "maxLength": 3,
+  "initialWidth": 1
+}
