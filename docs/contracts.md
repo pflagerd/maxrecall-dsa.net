@@ -205,7 +205,7 @@ questions as fixtures, below).
       `template` (e.g. `"___"`); `make test` checks that it occurs exactly
       once in each (owner, 2026-11-08, #160 step 3). `make test` refuses
       an unknown kind, and another kind's fields.
-      **`initialWidth`** (owner, 2026-11-10; PR 237, being built): how
+      **`initialWidth`** (owner, 2026-11-10; built that day, PR 239): how
       many characters wide the blank's box starts, and the narrowest it
       gets; a whole number from 1 to the blank's `maxLength`. Every
       fill-in-the-blank question gives one, with no default: `make test`
