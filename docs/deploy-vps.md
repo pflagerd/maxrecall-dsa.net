@@ -419,6 +419,20 @@ printed the value (`exit 0`); the same with
 As systemd.exec(5), v255, says: `UnsetEnvironment=` "is applied as final
 step … it may undo assignments from any configuration source". The
 one-off test's commands were here until then (`git show 9cb0fe8:docs/deploy-vps.md`).
+**The test left a failed unit behind**, and the system `degraded`
+(`systemctl is-system-running`): its second unit exits 1 by design, and
+systemd keeps a failed transient unit loaded until it's reset. The
+operator found it and cleared it at 17:19:15 UTC, with the owner's yes
+(`systemctl reset-failed run-u69.service`; its handoff
+`docs/session-handoff/vps-operator/20261110T091916-0800.md`). The flaw
+was in the procedure as written. **If the test is ever used again**, add
+`--collect` to both `systemd-run` commands ("Unload unit after it ran,
+even when failed": `systemd-run --help`, systemd 255, the VPS's
+version; the manual is
+[systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)),
+or follow
+them with `systemctl reset-failed <unit>`; and check `systemctl
+is-system-running` after any procedure, not only before.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
@@ -445,7 +459,9 @@ survey stops there, as it should: `routes.js` now writes
 `9cb0fe8` on 2026-11-10 at 17:06 UTC, stopping at step 1 and going on
 under this ruling (its handoff
 `docs/session-handoff/vps-operator/20261110T090714-0800.md`). Version 4
-records: 0 before, 0 straight after. **Still to do**: the count below,
+records: 0 before, 0 straight after, and still 0 at about 19:03 UTC
+(the operator's message to core that day: nobody had submitted or
+skipped since the deploy). **Still to do**: the count below,
 once someone has submitted or skipped. The one learner there has a
 chosen backlog, so the new question was not added (`0 added`).
 
