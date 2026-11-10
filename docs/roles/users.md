@@ -1,68 +1,13 @@
-# Role: users
+# Role: users (merged into core, 2026-11-10)
 
-## Mission
-Look after the learner: what they see and do in the app, and the state
-kept for them. That's the problem list and the problem page, a learner's
-profile, their queue and backlog (spaced repetition), their Submit
-records, and the scripts that set up and adjust a learner.
+This role no longer exists. On 2026-11-10 the owner merged it, with the
+infrastructure and security role, into one role named **core**:
+`docs/roles/core.md`. Everything this file listed under "Owns" is in
+core's list, under "The learner".
 
-## Owns (files/directories the role owns)
-- docs/session-handoff/users/
-- routes.js: every feature route (an Express Router that server.js
-  mounts after the gate; docs/contracts.md, contract 9). The other roles
-  ask here for route changes.
-- A learner's files: users.js, profile.js, order.js, learner.js, and
-  their tests (users.test.js, profile.test.js, order.test.js,
-  learner.test.js)
-- Spaced repetition: advance.js, introduce.js, recalculate.js,
-  consistency.js, and their tests (advance.test.js, introduce.test.js,
-  recalculate.test.js, consistency.test.js)
-- Scripts: scripts/backlog.js, scripts/learner-create.js,
-  scripts/recalculate-queue.js, scripts/consistency-check.js
-- The characterization check (owner, 2026-11-06, #106): routes.test.js
-  (in make test) and scripts/characterize.js (by hand, before and after
-  a refactor meant to change nothing). Both also exercise server.js and
-  auth.js, infrastructure and security's (docs/contracts.md, 7 and 9)
-- The learner's pages: index.html, problems-list.js, problem.html,
-  problem-page.js, timer.js, style.css; and timer.test.js, timer.js's
-  tests (#110)
-- docs/how-to-add-a-new-user.html (adding a user or tester, start to
-  finish)
-- docs/how-to-put-a-question-directly-into-my-queue-by-slug.html
-  (queueing a question of the learner's choice, by its slug: #81)
-- Plans: docs/plans/spaced-repetition.md, docs/plans/multi-user-step-1.md,
-  docs/plans/elapsed-timer.md, docs/plans/question-bank-page.md (#133),
-  docs/plans/submission-records-v4.md (#168)
-- Each question kind's public view (#160; owner, 2026-11-08; being
-  built): the allow-list of fields the browser is sent, in routes.js,
-  within docs/contracts.md contract 4's never-sent fields
-- The format of users/<email>/ (gitignored, on each machine)
-
-## May read, must not edit
-- Everything the infrastructure-and-security and questions roles own, in
-  particular server.js (the sign-in layer: ask there to add a page or
-  file to STATIC_FILES), auth.js and the judge's sandbox (infrastructure
-  and security), judge/runner.js, question-files.js, questions/*.json and
-  bubbles.js (questions)
-- Makefile and package.json (infrastructure and security): ask for a new
-  `make` target there
-- docs/roles/**, other roles' handoffs, and the handoffs from before roles
-  (docs/session-handoff/*.md)
-- TODO, THOUGHTS (the human's notes)
-
-## Shared files (propose changes; owner approves/merges them)
-- readme.html: owner is the human (with the architect supporting the human)
-- CLAUDE.md: owner is the human (with the architect supporting the human)
-- docs/decisions/: any role adds a file, one per decision; none edits
-  another's, and none is edited once merged (readme.html, "Maintaining
-  this file")
-
-## Out of scope
-- Anything touching the code runner or hidden test cases
-- Signing in, invites, the VPS, nginx and the sandbox
-- What a question says or tests
-
-## Before ending a session
-- Write docs/session-handoff/users/<timestamp>.md
-- List any cross-boundary requests in it
-- Commit and push
+- A session told "Role: users" asks the owner which role it is
+  (`CLAUDE.md`, "Roles": the role isn't in the table).
+- `docs/session-handoff/users/` is history. Core's first session reads
+  its newest file; core writes in `docs/session-handoff/core/`.
+- This file as it was: `git show 57d906e:docs/roles/users.md`.
+- Decision: `docs/decisions/20261110T104808-0800-core-role.md`.

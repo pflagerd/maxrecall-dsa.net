@@ -125,13 +125,12 @@ judge/, is server code, under these rules:
   (docs/roles/architect.md, "Reviews").
 
 ## May read, must not edit
-- Everything the infrastructure-and-security and users roles own, in
-  particular the judge's sandbox and queue (judge/sandbox.js,
-  judge/seccomp/, judge/cgroups.js, judge/sandbox-selftest.js,
-  judge/queue.js: infrastructure and security), routes.js and order.js
-  (users)
-- Makefile and package.json (infrastructure and security): ask for a new
-  `make` target there
+- Everything the core role owns (docs/roles/core.md; until 2026-11-10
+  the users and the infrastructure and security roles), in particular
+  the judge's sandbox and queue (judge/sandbox.js, judge/seccomp/,
+  judge/cgroups.js, judge/sandbox-selftest.js, judge/queue.js),
+  routes.js and order.js
+- Makefile and package.json (core): ask for a new `make` target there
 - docs/roles/** (except docs/roles/questions/, above), other roles'
   handoffs, and the handoffs from before roles (docs/session-handoff/*.md)
 - TODO, THOUGHTS (the human's notes)

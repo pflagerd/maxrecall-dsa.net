@@ -7,6 +7,18 @@ agreement or the human's approval.
 
 ## How to read and use this file
 
+- **Two roles became one on 2026-11-10** (owner): users, and
+  infrastructure and security, are now **core** (`docs/roles/core.md`).
+  Each contract's Provider and Used by lines name core. Inside a
+  contract, "users" and "infrastructure and security" still appear:
+  read each as core. They are left because they say which side of core
+  a thing is on (the learner's files, or the site's), and because a
+  dated note names the role that existed on its date. Contracts 7, 9
+  and 11 were between those two roles: 9 and 11 are now inside core,
+  and 7 is still between core and questions. They are kept, as contract
+  8 was, because what each side relies on is still true of the code,
+  and a change to the sign-in side is one the architect reviews
+  (`docs/roles/core.md`, "Sensitive paths").
 - **Provider**: the role whose files define it. **Used by**: the roles
   whose files rely on it.
 - **What crosses** names things, not their types. Each function's
@@ -28,7 +40,7 @@ agreement or the human's approval.
 
 ## 1. The judge's sandbox and queue
 
-Provider: infrastructure and security (`judge/sandbox.js`,
+Provider: core (`judge/sandbox.js`,
 `judge/cgroups.js`, `judge/queue.js`). Used by: questions
 (`judge/runner.js`).
 
@@ -49,9 +61,9 @@ Provider: infrastructure and security (`judge/sandbox.js`,
 ## 2. Judging, for the server and the sandbox test
 
 Provider: questions (`judge/runner.js`; `judge/fill-in-the-blank.js`
-for fill-in-the-blank questions). Used by: users (`routes.js`;
-`routes.test.js`, through a real `node server.js`); infrastructure and
-security (`judge/sandbox-selftest.js`).
+for fill-in-the-blank questions). Used by: core (`routes.js`;
+`routes.test.js`, through a real `node server.js`;
+`judge/sandbox-selftest.js`).
 
 - **What crosses**: `runSubmission`; `judgeFillInTheBlank` (from
   `judge/fill-in-the-blank.js`, since PR 197) and `judgeSha256Of` (PR
@@ -143,7 +155,7 @@ security (`judge/sandbox-selftest.js`).
 
 ## 3. The Test button's rules
 
-Provider: questions (`playtest.js`). Used by: users (`routes.js`, which
+Provider: questions (`playtest.js`). Used by: core (`routes.js`, which
 has the route).
 
 - **What crosses**: `canTestQuestions`, `revealHidden`, `markRevealed`.
@@ -153,7 +165,7 @@ has the route).
 
 ## 4. The question bank
 
-Provider: questions (`question-files.js`, `questions/**`). Used by: users
+Provider: questions (`question-files.js`, `questions/**`). Used by: core
 (`routes.js`, `scripts/backlog.js`, `scripts/learner-create.js`,
 `scripts/recalculate-queue.js`, `scripts/consistency-check.js`;
 `routes.test.js` and `scripts/characterize.js`, which use three real
@@ -291,7 +303,7 @@ questions as fixtures, below).
 
 ## 5. A learner's files, for deleting and renaming questions
 
-Provider: users (`users.js`, `order.js`, `consistency.js`). Used by:
+Provider: core (`users.js`, `order.js`, `consistency.js`). Used by:
 questions (`scripts/question-admin.js`).
 
 - **What crosses**: `listUsers`, `readUserFile`, `writeUserFile`;
@@ -304,7 +316,7 @@ questions (`scripts/question-admin.js`).
 
 ## 6. Helpers for admin scripts
 
-Provider: questions (`scripts/question-admin.js`). Used by: users
+Provider: questions (`scripts/question-admin.js`). Used by: core
 (`scripts/backlog.js`, `scripts/learner-create.js`,
 `scripts/recalculate-queue.js`).
 
@@ -324,14 +336,15 @@ Provider: questions (`scripts/question-admin.js`). Used by: users
 
 ## 7. Paths, and who the users are
 
-Provider: infrastructure and security (`paths.js`). Used by: users
-(`routes.js`, for `loadProblem`; `users.js`); questions (loading a
-fill-in-the-blank question's judge file, #160, built 2026-11-09: only by a known
+Provider: core (`paths.js`). Used by: questions, and core itself
+(`routes.js`, for `loadProblem`; `users.js`). Questions' use: loading a
+fill-in-the-blank question's judge file (#160, built 2026-11-09), only by a known
 fill-in-the-blank slug, through `resolveInside`, since a `require` of a chosen path
 runs code; "inside" is inside `QUESTIONS_DIR`, which
-`MAXRECALL_QUESTIONS_DIR` may move to a test folder, PR 198). And the other way: users
-(`users.js`) provides `EMAIL_PATTERN` to `auth.js`, and `OWNER_EMAIL` and
-`USERS_DIR` to `server.js` (infrastructure and security).
+`MAXRECALL_QUESTIONS_DIR` may move to a test folder (PR 198). Inside
+core since 2026-11-10 (until then between users and infrastructure and
+security): `users.js` provides `EMAIL_PATTERN` to `auth.js`, and
+`OWNER_EMAIL` and `USERS_DIR` to `server.js`.
 
 - **What crosses**: from `paths.js`, `resolveInside`; from `users.js`,
   `EMAIL_PATTERN`, `OWNER_EMAIL`, `USERS_DIR`; from `auth.js`,
@@ -364,7 +377,7 @@ this is no longer between roles. Kept, not renumbered, since other
 documents name contracts by number; what follows is what that role
 relies on within its own files.
 
-Provider and user: infrastructure and security (`server.js`;
+Provider and user: core (`server.js`;
 `login-page.js`, `account.js`, `deploy/nginx-maxrecallcode.conf`,
 `deploy/maxrecallcode.service`).
 
@@ -385,9 +398,17 @@ Provider and user: infrastructure and security (`server.js`;
 
 ## 9. The router behind the gate
 
-Provider: infrastructure and security (`server.js`, the sign-in layer).
-Used by: users (`routes.js`, the feature routes). And the other way:
-users provides `router` and `start` to `server.js`.
+**Inside core since 2026-11-10** (until then between infrastructure and
+security, `server.js`, and users, `routes.js`). Kept, like contract 8:
+the two files still rely on each other exactly as below, and
+`server.js` is a sensitive path, so the architect reviews a change to
+its side (`docs/roles/core.md`, "Sensitive paths"). Below, "users" is
+the `routes.js` side and "infrastructure and security" the `server.js`
+side.
+
+Provider: core (`server.js`, the sign-in layer). Used by: core
+(`routes.js`, the feature routes). And the other way: `routes.js`
+provides `router` and `start` to `server.js`.
 
 Since the split (#76, `docs/plans/server-split.md`), `server.js` holds
 only the sign-in layer and is infrastructure and security's. Before it,
@@ -453,7 +474,7 @@ infrastructure and security. That review is what #76 itself had.
 
 ## 10. The topic and source bubbles
 
-Provider: questions (`bubbles.js`, `labels.json`). Used by: users
+Provider: questions (`bubbles.js`, `labels.json`). Used by: core
 (`index.html`, `problems-list.js`, `problem.html`, `problem-page.js`).
 
 - **What crosses**: two global functions, since `bubbles.js` is a plain
@@ -477,7 +498,10 @@ Provider: questions (`bubbles.js`, `labels.json`). Used by: users
 
 ## 11. The signed-in header
 
-Provider: infrastructure and security (`account.js`). Used by: users
+**Inside core since 2026-11-10** (until then between infrastructure and
+security and users). Kept, like contract 8.
+
+Provider: core (`account.js`). Used by: core
 (`index.html`, `problem.html`).
 
 - **What crosses**: the element with `id="account"`, which each page
