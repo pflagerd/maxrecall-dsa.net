@@ -227,12 +227,10 @@ Not decided; settle them with the owner and move them up as rules.
   default, and `make test` refuses a fill-in-the-blank question without
   it (owner, 2026-11-10). The box grows past it as the learner types, up
   to `maxLength`, and shrinks back to it, never below.
-- **Check the page uses it** before a question whose answer isn't one
-  character: the format has the field first, and the page (core's) reads
-  it once core's part of
-  `docs/plans/fill-in-the-blank-widths-and-several-blanks.md`, Part 1,
-  is merged. Until then every box starts one character wide. Several
-  blanks in one question are that plan's Part 2, not built.
+- **The page uses it** (core's PR 239, 2026-11-10). Several blanks in
+  one question are
+  `docs/plans/fill-in-the-blank-widths-and-several-blanks.md`'s Part 2,
+  not built: the owner said to wait until such a question is wanted.
 
 ## Changes to this file
 

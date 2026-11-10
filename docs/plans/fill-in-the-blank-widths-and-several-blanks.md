@@ -1,8 +1,8 @@
 # Fill-in-the-blank: each blank's starting width, and several blanks in one question
 
-Status: **Part 1 decided, and questions' share of it built** (questions,
-questions-2 session, 2026-11-10); core's share and contract 4 are asked
-for. **Part 2 waits** until the owner wants a question with several
+Status: **Part 1 built and merged** (2026-11-10: questions' share PR
+237, core's PR 239, which carried both, and contract 4 in the
+architect's PR 238). **Part 2 waits** until the owner wants a question with several
 blanks. See "Decided" below. Where this disagrees with `readme.html`,
 `readme.html` wins: it describes what's built.
 
@@ -19,17 +19,17 @@ Answering "For the owner to decide", at the end:
 3. **Part 1 is built now, on its own**, as recommended.
 4. **Part 2**: "Wait until I want such a question."
 
-**Part 1, where it stands:**
+**Part 1, as built:**
 
-- Questions (built): `initialWidth` in `question-files.js`
+- Questions: `initialWidth` in `question-files.js`
   (`checkFillInTheBlank`, `KIND_FIELDS`, the `QuestionFile` type), its
   tests in `questions.test.js`, `"initialWidth": 1` in
   `single-quote-in-double-quotes.json`, `readme.html` section 5, the
   how-to page, the guide's section 7.
-- Core (asked): send `initialWidth` to the browser (`routes.js`'s
-  allow-list), and make the box `max(initialWidth, text length)`
+- Core (PR 239): sends `initialWidth` to the browser (`routes.js`'s
+  allow-list), and makes the box `max(initialWidth, text length)`
   characters wide (`problem-page.js`, `fitBlankToText`).
-- The architect (asked): contract 4's list of the kind's fields, and
+- The architect (PR 238): contract 4's list of the kind's fields, and
   that `initialWidth` may be sent.
 
 ## The owner's words (2026-11-10, questions-2's session)
