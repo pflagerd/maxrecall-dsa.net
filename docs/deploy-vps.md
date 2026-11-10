@@ -162,8 +162,15 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
 - Call it `<deployed>`. It fetches nothing.
 
 Then, **in any checkout fetched since the merge** (Kubuntu, a cloud
-session; on the VPS, a `git fetch` in root's checkout needs the owner's
-yes until #119, `docs/roles/vps-operator.md`). The operator may ask a
+session, or on the VPS). **On the VPS the operator may fetch without
+asking** (owner, 2026-11-10,
+`docs/decisions/20261110T091158-0800-vps-operator-may-fetch.md`): a
+plain `git fetch origin master` in root's checkout, or a fetch that
+uses no credential into a scratch repository, as the operator did on
+2026-11-10. A fetch changes `origin/master` and no file; step 4's guard
+fetches again anyway. Until that day a fetch there needed the owner's
+yes; `docs/roles/vps-operator.md` (the architect's) says which rule the
+operator follows. The operator may ask a
 cloud session for this survey (`CLAUDE.md`, "Requests between
 sessions"), giving it `<deployed>`. `<commit>` is the commit
 to deploy, usually the tip of `master`:
@@ -396,29 +403,16 @@ test -e /srv/maxrecall/data/users/TEST-USERS && echo "PRESENT: stop" || echo abs
 - `test -e`: whether the file exists. **Expect `absent`.** That file
   marks a users folder as test data; the live one must never have it.
 
-**Once, at the first deploy whose unit file has
-`UnsetEnvironment=MAXRECALL_QUESTIONS_DIR`** (a throwaway unit, so a
-change: the owner's yes), test that systemd removes the variable even
-when the unit sets it:
-
-```bash
-systemd-run --wait --pipe --quiet -p Environment=MAXRECALL_QUESTIONS_DIR=/tmp/test-bank /usr/bin/printenv MAXRECALL_QUESTIONS_DIR; echo "exit $?"
-```
-```bash
-systemd-run --wait --pipe --quiet -p Environment=MAXRECALL_QUESTIONS_DIR=/tmp/test-bank -p UnsetEnvironment=MAXRECALL_QUESTIONS_DIR /usr/bin/printenv MAXRECALL_QUESTIONS_DIR; echo "exit $?"
-```
-- `systemd-run` starts a temporary unit with the properties `-p`
-  gives; `--wait --pipe` waits for it and connects its output here
-  ([systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)).
-  `printenv NAME` prints the variable and exits 0, or prints nothing and
-  exits 1 if it isn't set.
-- **Expect** the first to print `/tmp/test-bank` and `exit 0` (the
-  control: the variable does arrive without `UnsetEnvironment=`), and
-  the second to print only `exit 1` (removed, though `Environment=` set
-  it). systemd.exec(5), v255: `UnsetEnvironment=` "is applied as final
-  step … it may undo assignments from any configuration source". Not
-  testable in a cloud session, whose systemd isn't running. Record the
-  result; then this paragraph can go.
+**That systemd removes the variable even when a unit sets it** was
+tested once on the VPS, at the first deploy with this unit file
+(`9cb0fe8`, 2026-11-10 17:07 UTC; the operator's handoff
+`docs/session-handoff/vps-operator/20261110T090714-0800.md`): a
+throwaway unit with `Environment=MAXRECALL_QUESTIONS_DIR=/tmp/test-bank`
+printed the value (`exit 0`); the same with
+`UnsetEnvironment=MAXRECALL_QUESTIONS_DIR` printed nothing (`exit 1`).
+As systemd.exec(5), v255, says: `UnsetEnvironment=` "is applied as final
+step … it may undo assignments from any configuration source". The
+one-off test's commands were here until then (`git show 9cb0fe8:docs/deploy-vps.md`).
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
@@ -439,8 +433,15 @@ Written 2026-11-10 (infrastructure and security; Issue 160, B8 step
 takes in PR 209 (`fd135e1`, users' records version 4). From `b9a5bef`,
 what the VPS ran when this was written, that's the next one. Step 1's
 survey stops there, as it should: `routes.js` now writes
-`schemaVersion: 4`. This is the ruling that stop asks for. Once that
-deploy is recorded, this section is history.
+`schemaVersion: 4`. This is the ruling that stop asks for.
+
+**Used, and now history**: the VPS operator deployed `b9a5bef` →
+`9cb0fe8` on 2026-11-10 at 17:06 UTC, stopping at step 1 and going on
+under this ruling (its handoff
+`docs/session-handoff/vps-operator/20261110T090714-0800.md`). Version 4
+records: 0 before, 0 straight after. **Still to do**: the count below,
+once someone has submitted or skipped. The one learner there has a
+chosen backlog, so the new question was not added (`0 added`).
 
 **The ruling: deploy as usual. No extra step, nothing to run with the
 server stopped, nothing to convert.** Why:
@@ -2362,14 +2363,44 @@ fixed in a new pull request.
 Written 2026-11-09 (infrastructure and security), for the owner's
 choice that day: **disable `networking.service`, together with the
 kernel reboot** (option B of four: leave, disable, remove ifupdown, edit
-its hook). **Not yet run.** Three changes, then one reboot that tests
-them all:
+its hook). **Run 2026-11-09**: steps 1 to 3 by the VPS operator,
+23:22 to 23:41 UTC (its handoff
+`docs/session-handoff/vps-operator/20261109T154059-0800.md`); the
+reboot at 23:46:19 UTC. **Step 6's checks are reported in part**, by
+the next operator session, 17 hours later
+(`20261110T090714-0800.md`): kernel `6.8.0-149-generic`,
+`networking.service` `disabled`, no failed units, no
+`/var/run/reboot-required`; and, from that day's deploy checks, the app
+`active` with `Sandbox: bubblewrap 0.9.0 works`, and `login.html` `200`
+from outside. **Not reported**: `networkctl list` and `lo`'s addresses,
+`ufw status`, nginx's own state (its `200` implies it runs), and who
+watched the console at the reboot. What follows is as written before
+the run.
+
+**Found in the run** (the operator's notes):
+- **183 packages upgraded and 26 new**, not 178: the list refresh added
+  some. Exit 0, no `.dpkg-dist` files, `dpkg --audit` clean. The app
+  was not restarted by the upgrade.
+- **`systemctl disable networking.service` also ran
+  `systemd-sysv-install disable networking`**, since the unit has a SysV
+  script too, leaving `K01networking` links in `/etc/rc*.d/`. Harmless;
+  `systemctl enable` undoes both. Step 3 doesn't mention it.
+- **`grub-install: warning: EFI variables cannot be set on this
+  system`**, from `grub-efi-amd64-signed`: harmless here, since the VPS
+  boots by BIOS with `grub-pc` on `/dev/sda`, its only disk
+  (infrastructure and security's handoff `20261109T170546-0800.md`).
+  The reboot onto `-149` bears that out.
+- **Step 1's dependency check was wrong as first written**
+  (`list-dependencies --reverse` expands targets); the operator stopped
+  at it, and PR 201 corrected it before the run.
+
+Three changes, then one reboot that tests them all:
 
 1. **All the waiting updates**, not only the kernel (owner,
    2026-11-09) (178 on 11-09, the VPS operator's handoff
    `docs/session-handoff/vps-operator/20261108T192142-0800.md`), among
-   them the kernel `6.8.0-149`. The machine runs `-147`. `-149` isn't
-   installed yet, so it needs `apt`, then a reboot. Security updates
+   them the kernel `6.8.0-149`. The machine ran `-147` then. `-149`
+   wasn't installed yet, so it needed `apt`, then a reboot. Security updates
    already install themselves daily (`unattended-upgrades`,
    `docs/plans/limited-live.md`, 2026-11-05); these are mostly
    ordinary `noble-updates` fixes. Keeping the kernel patched is the
