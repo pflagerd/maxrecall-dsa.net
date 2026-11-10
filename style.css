@@ -642,8 +642,14 @@ button.elapsed-timer.frozen {
   overflow: auto;
 }
 
-/* Width is set by problem-page.js from the question's maxLength, in ch. */
+/* Width is set by problem-page.js from the question's maxLength, in ch.
+   content-box, unlike the rest of the page (the `*` rule at the top): the
+   width is then the room for text alone, exactly maxLength characters of
+   this monospace font, with the padding outside it. As border-box, a box
+   maxLength ch wide lost its padding's 0.3ch and scrolled its last
+   character. */
 .fill-in-template .fill-in-blank {
+  box-sizing: content-box;
   font: inherit;
   color: var(--text);
   background: rgba(56, 189, 248, 0.1);

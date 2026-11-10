@@ -502,7 +502,8 @@ function answerFields(text) {
  * Draws a fill-in-the-blank question's template as fixed code text with an
  * input box at the blank (#160, B3; owner, 2026-11-09), in place of the
  * code editor. Built with text nodes, never HTML. The box takes at most
- * maxLength characters and is about that wide; Enter checks the answer.
+ * maxLength characters and has room for exactly that many (owner,
+ * 2026-11-10); Enter checks the answer.
  *
  * @param {string} language - The language whose template to show.
  * @param {string} text - What the box starts with.
@@ -518,7 +519,9 @@ function renderTemplate(language, text) {
   box.type = 'text';
   box.className = 'fill-in-blank';
   box.maxLength = question.maxLength ?? 10;
-  box.style.width = `${box.maxLength + 1}ch`;
+  // The room for text: style.css makes this box content-box, so its padding
+  // is added outside this width, not taken from it.
+  box.style.width = `${box.maxLength}ch`;
   box.value = text;
   box.setAttribute('aria-label', 'Your answer: the missing text');
   // Phones' keyboards otherwise capitalize, correct and suggest. Whether
