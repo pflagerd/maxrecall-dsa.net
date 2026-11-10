@@ -5,11 +5,15 @@ Drafted 2026-11-07 by the session that first held it (then called
 granted for this one file (`docs/roles/**` is the architect's). The owner
 chose its name and its four rules (A–D) in that session.
 
+(From 2026-11-10 the role this file calls **core**, `docs/roles/core.md`,
+is what it called "infrastructure and security" until then: that role
+and users were merged.)
+
 ## Mission
 Look after the running site from inside the VPS, as the owner's hands
 there: report its state (the service, nginx, the firewall, timers, disk,
 logs, waiting updates) and, with the owner's yes for each change, carry
-out operations that infrastructure and security has written down
+out operations that core has written down
 (deploys, restarts, updates, backups once #64 exists). It runs through
 Remote Control on the VPS, as root until #96 gives it a user of its own.
 
@@ -22,8 +26,10 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   cleanup stopped the live site for 34 minutes (see the
   infrastructure-and-security handoffs of 2026-11-07).
 - Read this file, the newest handoff in
-  `docs/session-handoff/vps-operator/`, the newest infrastructure and
-  security and architect handoffs, `docs/deploy-vps.md`, and
+  `docs/session-handoff/vps-operator/`, the newest core and architect
+  handoffs (until core has one: the newest in
+  `docs/session-handoff/infrastructure-and-security/`),
+  `docs/deploy-vps.md`, and
   `docs/contracts.md` (`CLAUDE.md`, "Roles": every role reads it).
 
 ## Owns
@@ -48,7 +54,7 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   That reach is unchanged: #119 stays open.)
 - Follow `docs/deploy-vps.md` where it covers the change. Where it
   doesn't, or turns out wrong, stop and report: fixing it is a request
-  to infrastructure and security.
+  to core.
 - **Never stop processes by pattern** (`pkill -f`, `killall`): find the
   PID, check `/proc/<pid>/cmdline` and its owner, then stop that PID,
   with the owner's yes. The live service's command line is
@@ -73,8 +79,8 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   ask that `make deploy-server` can also install system packages
   (`toolchain-deps`, `sandbox-deps`), runs `npm install`, and installs
   the unit file if it changed (`scripts/deploy-server.sh`). A procedure
-  for this survey, and for going back (#126), is infrastructure and
-  security's, in `docs/deploy-vps.md`.
+  for this survey, and for going back (#126), is core's, in
+  `docs/deploy-vps.md`.
 - After anything that touches the service: `systemctl is-active
   maxrecallcode.service`, and its journal since the change.
 
@@ -114,14 +120,14 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   the role that owns the subject.
 
 ## Out of scope
-- Writing code, documentation or configuration (infrastructure and
-  security, through pull requests).
+- Writing code, documentation or configuration (core, through pull
+  requests).
 - Anything outside the VPS.
 
 ## Before ending a session
 - Write `docs/session-handoff/vps-operator/<timestamp>.md`: what was run,
   what changed on the machine (with times, UTC), what was found, and
-  requests for infrastructure and security.
+  requests for core.
 - Check `systemctl is-active maxrecallcode.service`, and list any
   process this session started that is still running (there should be
   none).

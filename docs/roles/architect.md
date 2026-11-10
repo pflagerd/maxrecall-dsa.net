@@ -48,6 +48,19 @@ the overall picture. Act as the human's lieutenant; the human decides.
   says so in the pull request. The owner approves in the pull request.
   Reviewing moves no ownership: the files stay questions', and the
   architect doesn't edit them.
+- **Core's sensitive paths** (owner, 2026-11-10): the architect reviews
+  every pull request that touches server.js, auth.js, paths.js, the
+  sandbox (judge/sandbox.js, judge/seccomp/**, judge/cgroups.js),
+  deploy/**, scripts/deploy-server.sh or .github/workflows/, before the
+  owner merges it, and says in the pull request what it checked and
+  found (`docs/roles/core.md`, "Sensitive paths"). Core asks by
+  `send_message`, naming the pull request; the architect also checks
+  every core pull request's files against the list at each poll, and
+  reviews without being asked. Such a pull request stays a draft until
+  the review is in it. Why: until that day sign-in, the sandbox and the
+  deploy scripts were one role's and the feature code another's; one
+  role owns both now, and this review stands in for that boundary. As
+  for judge files, reviewing moves no ownership.
 
 ## Exceptions: editing another role's files (owner, 2026-11-06)
 The architect may ask the owner for an exception to change a file
