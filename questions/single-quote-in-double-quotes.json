@@ -1,0 +1,20 @@
+{
+  "slug": "single-quote-in-double-quotes",
+  "created": "2026-11-09T23:50:44Z",
+  "title": "A Single Quote Inside Double Quotes",
+  "difficulty": "Fundamentals",
+  "topics": ["String"],
+  "sources": [],
+  "alreadyLearned": ["hello-world"],
+  "kind": "fill-in-the-blank",
+  "learning": {
+    "python": "<p>In Hello World you wrote a string between double quotes: <code>\"Hello World!\"</code>. A single quote, <code>'</code>, can go inside a double-quoted string just as it is:</p><div class=\"example\"><pre>print(\"Don't stop.\")   # prints: Don't stop.</pre></div><p>A double-quoted string ends at its closing <code>\"</code>, so a <code>'</code> inside it is just another character.</p><p>You may also see <code>\\'</code>, a backslash before the quote. Inside double quotes it prints the same <code>'</code>, but it isn't needed there, and it isn't what this question asks for.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=hello-world\" target=\"_blank\" rel=\"noopener\">Hello World!</a>: printing text with <code>print()</code>.</li></ul>"
+  },
+  "description": {
+    "python": "<p>Fill in the blank so the program prints a single quote between the parentheses.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers how.</p>"
+  },
+  "template": {
+    "python": "print(\"One way to print a single quote (___) is to put it in a double quoted string like this one.\")\n"
+  },
+  "blank": "___"
+}
