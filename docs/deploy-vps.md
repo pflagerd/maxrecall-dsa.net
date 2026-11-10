@@ -461,8 +461,16 @@ under this ruling (its handoff
 `docs/session-handoff/vps-operator/20261110T090714-0800.md`). Version 4
 records: 0 before, 0 straight after, and still 0 at about 19:03 UTC
 (the operator's message to core that day: nobody had submitted or
-skipped since the deploy). **Still to do**: the count below,
-once someone has submitted or skipped. The one learner there has a
+skipped since the deploy). **The count, done**: **1** at about 19:57
+UTC, after the next deploy (`d286e76`, 19:54 UTC) and the owner's
+Submit of `single-quote-in-double-quotes` at 19:55:53. That record has
+`schemaVersion: 4`, `kind: "fill-in-the-blank"`, Python, `Accepted`,
+with `answer` and `judgeSha256`; the server's start-up consistency
+check at that deploy found nothing (the operator's handoff
+`docs/session-handoff/vps-operator/20261110T115818-0800.md`). So one
+Submit, one version 4 record, as expected: nothing is left to do under
+this ruling. The question entered the owner's queue by that Submit, not
+by `make backlog-add`. The one learner there has a
 chosen backlog, so the new question was not added (`0 added`).
 
 **The ruling: deploy as usual. No extra step, nothing to run with the
