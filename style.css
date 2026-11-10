@@ -627,6 +627,59 @@ button.elapsed-timer.frozen {
   background: rgba(56, 189, 248, 0.25);
 }
 
+/* A fill-in-the-blank question (#160): its template as fixed code, in the
+   editor's place and looks, with an input box at the blank. */
+#editor-host .fill-in-template {
+  margin: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+
+/* Width is set by problem-page.js from the question's maxLength, in ch. */
+.fill-in-template .fill-in-blank {
+  font: inherit;
+  color: var(--text);
+  background: rgba(56, 189, 248, 0.1);
+  border: none;
+  border-bottom: 2px solid var(--accent);
+  padding: 0 0.15ch;
+  margin: 0 0.1ch;
+}
+
+.fill-in-template .fill-in-blank:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* A fill-in-the-blank judge's message and hints, in the Results tab. */
+.judge-message {
+  margin: 0.5rem 0;
+}
+
+.judge-hints {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
+/* In a Submissions row: what was typed, and the judge's message. */
+.submission-answer,
+.submission-message {
+  margin-top: 0.2rem;
+  font-size: 0.85em;
+  color: #94a3b8;
+}
+
+.submission-answer code {
+  color: var(--text);
+}
+
 .console-panel {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 0.5rem;

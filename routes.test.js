@@ -796,7 +796,7 @@ test('submissions: filtered by question and language, and refusals', async () =>
   const all = await as(LEARNER, 'GET', '/api/submissions?question=two-sum&language=python');
   assert.equal(all.status, 200);
   assert.equal(all.json.length, 3, 'the two Submits and the Skip');
-  assert.ok(all.json.every((/** @type {{ kind: string, message?: string }} */ s) => s.kind === 'code' && !('message' in s)), 'each summary says its kind (records v4)');
+  assert.ok(all.json.every((/** @type {{ kind: string, message?: string }} */ s) => s.kind === 'code' && !('message' in s) && !('answer' in s)), 'each summary says its kind (records v4); no answer for code');
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=hello-world')).json.length, 0);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?language=klingon')).status, 400);
   assert.equal((await as(LEARNER, 'GET', '/api/submissions?question=a&question=b')).status, 400);
@@ -1134,6 +1134,7 @@ describe(
       const summaries = (await toBank('GET', '/api/submissions?question=zz-quote&language=python')).json;
       assert.deepEqual(summaries.map((/** @type {{ kind: string, status: string, message: string, passed: null }} */ s) => [s.kind, s.status, s.message, s.passed]),
         [['fill-in-the-blank', 'Accepted', 'Yes: a single quote.', null], ['fill-in-the-blank', 'Wrong Answer', 'Not a single quote.', null]]);
+      assert.deepEqual(summaries.map((/** @type {{ answer: { blank: string } }} */ s) => s.answer), [{ blank: "'" }, { blank: '"' }], 'what was typed, for the Submissions tab');
     });
 
     test('Skip: saves what the box held, and moves the queue as a fail', async () => {

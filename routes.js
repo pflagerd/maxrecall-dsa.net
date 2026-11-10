@@ -102,6 +102,8 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @property {number | null} elapsedMs - null if the record doesn't have it.
  * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8); absent for a
  *   Submit.
+ * @property {{ blank: string }} [answer] - A fill-in-the-blank record's answer
+ *   (owner, 2026-11-09: the Submissions tab shows what was typed).
  * @property {string} [message] - A fill-in-the-blank judge's message, when
  *   it gave one (records v4, D3).
  */
@@ -872,13 +874,16 @@ router.post(
  * @param {SavedSubmission} record - A saved Submit.
  * @returns {SubmissionSummary} Its summary.
  */
-function toSubmissionSummary({ id, submittedAt, question, language, kind, status, passed, total, runtimeMs, elapsedMs, skipped, message }) {
+function toSubmissionSummary({ id, submittedAt, question, language, kind, status, passed, total, runtimeMs, elapsedMs, skipped, answer, message }) {
   return {
     id, submittedAt, question, language,
     // Records before version 4 have no kind: they're all code questions'.
     kind: kind ?? 'code',
     status, passed, total, runtimeMs, elapsedMs: elapsedMs ?? null,
     ...(skipped === 'yes' && { skipped }),
+    // A fill-in-the-blank answer: what was typed, for the Submissions tab
+    // (owner, 2026-11-09). A code record's code stays out of summaries.
+    ...(answer !== undefined && { answer }),
     // The judge's message, for the Submissions tab (records v4, D3).
     ...(message !== undefined && { message }),
   };

@@ -402,9 +402,8 @@ descriptionPaneEl.addEventListener(
  * fields this page uses are listed.
  *
  * @typedef {object} PublicProblem
- * @property {string} kind - "code", or another kind, which this page
- *   doesn't show yet (showUnsupportedKind); the fields below are a code
- *   question's (#160).
+ * @property {string} kind - "code" or "fill-in-the-blank" (#160); any
+ *   other, this page doesn't show (showUnsupportedKind).
  * @property {string} slug
  * @property {string} title
  * @property {string} difficulty - "Fundamentals", "Easy", "Medium" or "Hard".
@@ -414,14 +413,142 @@ descriptionPaneEl.addEventListener(
  * @property {Record<string, string>} description - HTML, by language.
  * @property {Record<string, Example[]>} [examples] - By language.
  * @property {Record<string, string[]>} [constraints] - HTML items, by language.
- * @property {Record<string, string>} starterCode - By language; the
- *   languages this question can be answered in.
+ * @property {Record<string, string>} [starterCode] - A code question's: by
+ *   language, the languages it can be answered in.
+ * @property {Record<string, string>} [template] - A fill-in-the-blank
+ *   question's: the code shown, with the blank, by language; its
+ *   languages are its keys.
+ * @property {string} [blank] - Fill-in-the-blank: the blank's marker in
+ *   each template (once in each), e.g. "___".
+ * @property {number} [maxLength] - Fill-in-the-blank: the most characters
+ *   the blank takes, in UTF-16 units (the server fills in the default).
  */
 
 /** The question shown; null until it has loaded. @type {PublicProblem | null} */
 let problem = null;
-/** The CodeMirror editor; null until the first language is loaded. @type {CodeMirror.Editor | null} */
+/** The CodeMirror editor, for a code question; null until the first language is loaded. @type {CodeMirror.Editor | null} */
 let editor = null;
+/** A fill-in-the-blank question's input box; null until the first language is loaded. @type {HTMLInputElement | null} */
+let blankInput = null;
+
+/**
+ * Whether the question shown is fill-in-the-blank (#160): the template
+ * with an input box in place of the code editor.
+ *
+ * @returns {boolean} True for a fill-in-the-blank question.
+ */
+function isFillInTheBlank() {
+  return problem !== null && problem.kind === 'fill-in-the-blank';
+}
+
+/**
+ * The question's text for each language it can be answered in: a code
+ * question's starter code, a fill-in-the-blank question's template. Its
+ * keys are the question's languages, for either kind.
+ *
+ * @param {PublicProblem} question - The question.
+ * @returns {Record<string, string>} By language.
+ */
+function answerTemplates(question) {
+  return (question.kind === 'fill-in-the-blank' ? question.template : question.starterCode) ?? {};
+}
+
+/**
+ * What the answer area starts with in a language: a code question's
+ * starter code, or an empty box.
+ *
+ * @param {string} language - The language.
+ * @returns {string} The text.
+ */
+function startingText(language) {
+  return isFillInTheBlank() ? '' : /** @type {PublicProblem} */ (problem).starterCode?.[language] ?? '';
+}
+
+/**
+ * What the answer area holds now: the editor's code, or the box's text.
+ * Called only once a language is shown, so one of them exists.
+ *
+ * @returns {string} The text.
+ */
+function answerText() {
+  return isFillInTheBlank() ? /** @type {HTMLInputElement} */ (blankInput).value : /** @type {CodeMirror.Editor} */ (editor).getValue();
+}
+
+/**
+ * Puts text in the answer area: the editor (indentation normalized, as
+ * always) or the box.
+ *
+ * @param {string} text - The text.
+ * @returns {void}
+ */
+function setAnswerText(text) {
+  if (isFillInTheBlank()) /** @type {HTMLInputElement} */ (blankInput).value = text;
+  else /** @type {CodeMirror.Editor} */ (editor).setValue(normalizeIndentation(text));
+}
+
+/**
+ * The answer's part of a Run, Submit or Skip request, by kind: { code } for
+ * a code question, { answer: { blank } } for a fill-in-the-blank one
+ * (owner, 2026-11-09).
+ *
+ * @param {string} text - The answer area's text.
+ * @returns {{ code: string } | { answer: { blank: string } }} The fields.
+ */
+function answerFields(text) {
+  return isFillInTheBlank() ? { answer: { blank: text } } : { code: text };
+}
+
+/**
+ * Draws a fill-in-the-blank question's template as fixed code text with an
+ * input box at the blank (#160, B3; owner, 2026-11-09), in place of the
+ * code editor. Built with text nodes, never HTML. The box takes at most
+ * maxLength characters and is about that wide; Enter checks the answer.
+ *
+ * @param {string} language - The language whose template to show.
+ * @param {string} text - What the box starts with.
+ * @returns {void}
+ */
+function renderTemplate(language, text) {
+  const question = /** @type {PublicProblem} */ (problem);
+  const template = answerTemplates(question)[language] ?? '';
+  const marker = question.blank ?? '___';
+  // The format check makes sure the marker is there exactly once.
+  const at = template.indexOf(marker);
+  const box = document.createElement('input');
+  box.type = 'text';
+  box.className = 'fill-in-blank';
+  box.maxLength = question.maxLength ?? 10;
+  box.style.width = `${box.maxLength + 1}ch`;
+  box.value = text;
+  box.setAttribute('aria-label', 'Your answer: the missing text');
+  // Phones' keyboards otherwise capitalize, correct and suggest. Whether
+  // these also stop smart punctuation (' turned into ’) isn't known; the
+  // judge explains a curly quote either way (#160, B3).
+  box.setAttribute('autocomplete', 'off');
+  box.setAttribute('autocapitalize', 'off');
+  box.setAttribute('autocorrect', 'off');
+  box.spellcheck = false;
+  box.addEventListener(
+    'keydown',
+    /**
+     * Enter checks the answer, as the Check button does (owner, 2026-11-09).
+     *
+     * @param {KeyboardEvent} event - The key.
+     * @returns {void}
+     */
+    (event) => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+      if (!runBtn.disabled) execute('run', runBtn);
+    },
+  );
+  const pre = document.createElement('pre');
+  pre.className = 'fill-in-template';
+  if (at === -1) pre.append(template, box);
+  else pre.append(template.slice(0, at), box, template.slice(at + marker.length));
+  editorHostEl.replaceChildren(pre);
+  blankInput = box;
+}
 /** The language shown, e.g. "python"; null until the first is loaded. @type {string | null} */
 let currentLanguage = null;
 
@@ -487,6 +614,8 @@ const LANGUAGE_LABELS = { javascript: 'JavaScript', python: 'Python', cpp: 'C++'
 /** Next's state by language, for languages submitted, saved and passed. @type {Record<string, NextState>} */
 const nextByLanguage = {};
 const SUBMIT_TITLE = submitBtn.title;
+/** Submit's tooltip for a fill-in-the-blank question (#160). @type {string} */
+const FILL_IN_THE_BLANK_SUBMIT_TITLE = 'Check your answer and record it';
 const SUBMIT_LABEL = /** @type {string} */ (submitBtn.textContent);
 /** How long Next ignores clicks after it appears, in milliseconds (D7). @type {number} */
 const NEXT_GUARD_MS = 1000;
@@ -509,7 +638,7 @@ function updateSubmitButton() {
   skipBtn.disabled = judging;
   if (!state) {
     submitBtn.textContent = SUBMIT_LABEL;
-    submitBtn.title = SUBMIT_TITLE;
+    submitBtn.title = isFillInTheBlank() ? FILL_IN_THE_BLANK_SUBMIT_TITLE : SUBMIT_TITLE;
     submitBtn.disabled = judging;
     return;
   }
@@ -595,7 +724,7 @@ let skipping = false;
 async function skip() {
   // Skip is wired up only after the first language is shown (init).
   const language = /** @type {string} */ (currentLanguage);
-  const body = { language, code: /** @type {CodeMirror.Editor} */ (editor).getValue(), elapsedMs: Math.round(clockFor(language).elapsedMs()) };
+  const body = { language, ...answerFields(answerText()), elapsedMs: Math.round(clockFor(language).elapsedMs()) };
   skipping = true;
   updateSubmitButton();
   try {
@@ -1007,7 +1136,7 @@ function renderLanguageSelectOptions(available) {
  */
 function pickInitialLanguage(problem) {
   const candidates = [profile.defaultLanguage, ...profile.languages];
-  return candidates.find((l) => problem.starterCode[l]) || profile.languages[0];
+  return candidates.find((l) => answerTemplates(problem)[l]) || profile.languages[0];
 }
 
 /**
@@ -1027,7 +1156,7 @@ function languageFromAddress(problem) {
   if (!name) why = `"${addressLanguage}" isn't a language here.`;
   else if (!profile.allowedLanguages.includes(addressLanguage)) why = `${name} isn't one of the languages you can use.`;
   else if (!profile.languages.includes(addressLanguage)) why = `${name} is turned off in your languages.`;
-  else if (!problem.starterCode[addressLanguage]) why = `This question can't be answered in ${name}.`;
+  else if (!answerTemplates(problem)[addressLanguage]) why = `This question can't be answered in ${name}.`;
   else return addressLanguage;
   alert(`The page address asks for ${name || addressLanguage}. ${why} The question opens in your usual language instead.`);
   return null;
@@ -1154,7 +1283,7 @@ languageCheckboxes.forEach(
           // problem was checked just above; the checker can't see that inside this callback.
           const fallback = KNOWN_LANGUAGES.find((l) =>
             l !== lang
-            && /** @type {PublicProblem} */ (problem).starterCode[l]
+            && answerTemplates(/** @type {PublicProblem} */ (problem))[l]
             && languageCheckboxes.some((cb) => cb.dataset.lang === l && cb.checked)
           );
           if (!fallback || !(await switchLanguage(fallback))) {
@@ -1351,9 +1480,9 @@ function renderHeader(labels) {
 function renderLanguageContent(language) {
   descriptionEl.innerHTML = /** @type {PublicProblem} */ (problem).description[language] ?? '';
 
-  // Read as before: a question with no examples (or constraints) at all
-  // would throw here, so every question has both.
-  examplesEl.innerHTML = (/** @type {Record<string, Example[]>} */ (/** @type {PublicProblem} */ (problem).examples)[language] || [])
+  // A fill-in-the-blank question has no examples or constraints (#160),
+  // so either may be missing; setUpFillInTheBlank hides their headings.
+  examplesEl.innerHTML = ((/** @type {PublicProblem} */ (problem).examples ?? {})[language] || [])
     .map(
       (ex, i) => `
       <div class="example">
@@ -1365,7 +1494,7 @@ function renderLanguageContent(language) {
     )
     .join('');
 
-  constraintsEl.innerHTML = (/** @type {Record<string, string[]>} */ (/** @type {PublicProblem} */ (problem).constraints)[language] || []).map((c) => `<li>${c}</li>`).join('');
+  constraintsEl.innerHTML = ((/** @type {PublicProblem} */ (problem).constraints ?? {})[language] || []).map((c) => `<li>${c}</li>`).join('');
   renderMath(constraintsEl);
 
   // Learning content is optional per problem — most don't have it yet, so
@@ -1384,10 +1513,11 @@ function renderLanguageContent(language) {
 /**
  * Empties the console, with a status line.
  *
- * @param {string} [status='Run your code to see results.'] - The text shown.
+ * @param {string} [status] - The text shown; by default, an invitation to
+ *   Run (or, for a fill-in-the-blank question, to Check).
  * @returns {void}
  */
-function clearConsoleOutput(status = 'Run your code to see results.') {
+function clearConsoleOutput(status = isFillInTheBlank() ? 'Check your answer to see results.' : 'Run your code to see results.') {
   consoleStatusEl.textContent = status;
   consoleStatusEl.className = '';
   consoleResultsListEl.innerHTML = '';
@@ -1424,9 +1554,12 @@ function restoreConsoleState(language) {
  * @returns {void}
  */
 function loadLanguage(language) {
-  const code = codeByLanguage[language] ?? /** @type {PublicProblem} */ (problem).starterCode[language] ?? '';
+  const code = codeByLanguage[language] ?? startingText(language);
 
-  if (!editor) {
+  if (isFillInTheBlank()) {
+    // The template with its box, in place of the editor (#160).
+    renderTemplate(language, code);
+  } else if (!editor) {
     editor = CodeMirror(/** @type {HTMLElement} */ (document.getElementById('editor-host')), {
       value: normalizeIndentation(code),
       lineNumbers: true,
@@ -1587,6 +1720,10 @@ function renderTestCase(r, { showErrorIfHidden = false } = {}) {
  * @property {string} [stdout]
  * @property {string} [stderr]
  * @property {TestResult[]} [results]
+ * @property {string} [message] - A fill-in-the-blank judge's message, if it
+ *   gave one (#160); shown as text.
+ * @property {string[]} [hints] - A fill-in-the-blank judge's hints, if it
+ *   gave some; shown as text.
  * @property {'yes' | 'no'} [pass] - Submit only: whether it passed, as the
  *   queue counts it (order.js's passFor: only Accepted is "yes").
  * @property {boolean} [saved] - Submit only: whether the record was saved.
@@ -1617,6 +1754,20 @@ function renderResults(result) {
   // textContent, not innerHTML — this is raw program output, not markup.
   consoleStdoutEl.textContent = result.stdout || '';
   consoleStderrEl.textContent = result.stderr || '';
+
+  // A fill-in-the-blank judge's message and hints (#160): shown as text,
+  // never as HTML (contract 2). A code result has neither.
+  if (result.message !== undefined || result.hints !== undefined) {
+    const nodes = [];
+    if (result.message !== undefined) nodes.push(makeEl('p', result.message, 'judge-message'));
+    if (result.hints !== undefined && result.hints.length) {
+      const list = makeEl('ul', undefined, 'judge-hints');
+      for (const hint of result.hints) list.append(makeEl('li', hint));
+      nodes.push(list);
+    }
+    consoleResultsListEl.replaceChildren(...nodes);
+    return;
+  }
 
   const results = result.results || [];
 
@@ -1681,7 +1832,7 @@ async function execute(endpoint, button) {
     const res = await fetch(`/api/questions/${slug}/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ language: languageSelect.value, code: /** @type {CodeMirror.Editor} */ (editor).getValue(), ...(isSubmit && { elapsedMs }) }),
+      body: JSON.stringify({ language: languageSelect.value, ...answerFields(answerText()), ...(isSubmit && { elapsedMs }) }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
@@ -1777,13 +1928,38 @@ function showInSubmissionsPanel(...nodes) {
  * @property {string} question
  * @property {string} language
  * @property {string | null} status - null for a Skip.
+ * @property {string} kind - "code" or "fill-in-the-blank" (records v4).
  * @property {number | null} passed - null for a Skip, and for a
- *   fill-in-the-blank answer (records v4, D4; none saved yet).
+ *   fill-in-the-blank answer (records v4, D4).
  * @property {number | null} total - null as passed is.
  * @property {number | null} runtimeMs - null as passed is.
  * @property {number | null} elapsedMs - null for submissions before the timer.
  * @property {'yes'} [skipped] - "yes" for a Skip (step 8; D8).
+ * @property {{ blank: string }} [answer] - A fill-in-the-blank record's answer.
+ * @property {string} [message] - A fill-in-the-blank judge's message.
  */
+
+/**
+ * A Submissions row's Result cell: "Skipped", or the verdict with the
+ * counts when there are some. A fill-in-the-blank record adds what was
+ * typed and the judge's message, each on a line of its own (owner,
+ * 2026-11-09). All text, never HTML.
+ *
+ * @param {SubmissionSummary} s - The submission's summary.
+ * @returns {HTMLTableCellElement} The cell.
+ */
+function resultCell(s) {
+  const cell = s.skipped
+    ? makeEl('td', 'Skipped', 'status-fail')
+    : makeEl('td', `${s.status}${typeof s.passed === 'number' ? ` · ${s.passed}/${s.total}` : ''}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail');
+  if (s.answer) {
+    const typed = makeEl('div', 'Typed: ', 'submission-answer');
+    typed.append(s.answer.blank === '' ? makeEl('em', '(nothing)') : makeEl('code', s.answer.blank));
+    cell.append(typed);
+  }
+  if (s.message !== undefined) cell.append(makeEl('div', s.message, 'submission-message'));
+  return cell;
+}
 
 /**
  * @param {string} language - The language.
@@ -1834,7 +2010,7 @@ async function showLanguage(language) {
   summaries.catch(() => {}); // still awaited below; this only stops an "unhandled" warning
   const tab = await tabForLanguage(language, summaries);
   if (call !== latestShowLanguage) return false;
-  if (editor && currentLanguage) codeByLanguage[currentLanguage] = editor.getValue();
+  if ((editor || blankInput) && currentLanguage) codeByLanguage[currentLanguage] = answerText();
   loadLanguage(language);
   setDescriptionTab(tab);
   refreshSubmissions(summaries, language);
@@ -1883,9 +2059,7 @@ async function refreshSubmissions(summariesPromise = fetchSubmissionSummaries(/*
       // Counts and runtime show only when they're numbers, as renderResults
       // checks: a fill-in-the-blank record has none (records v4, D4), and
       // would otherwise read "Wrong Answer · null/null" and "null ms".
-      s.skipped
-        ? makeEl('td', 'Skipped', 'status-fail')
-        : makeEl('td', `${s.status}${typeof s.passed === 'number' ? ` · ${s.passed}/${s.total}` : ''}`, s.status === 'Accepted' ? 'status-pass' : 'status-fail'),
+      resultCell(s),
       makeEl('td', !s.skipped && typeof s.runtimeMs === 'number' ? `${s.runtimeMs} ms` : '—')
     );
     // How long you took (issue #20); older submissions didn't record it.
@@ -1941,7 +2115,10 @@ function setAddressParam(name, value) {
  * @property {string} id
  * @property {string} question
  * @property {string} language
- * @property {string} code
+ * @property {string} [kind] - "code" or "fill-in-the-blank"; absent (code)
+ *   before records version 4.
+ * @property {string} [code] - A code question's answer.
+ * @property {{ blank: string }} [answer] - A fill-in-the-blank answer.
  */
 
 /**
@@ -1964,6 +2141,9 @@ async function fetchSubmission(id) {
  */
 function whyNotLoadable(record) {
   if (record.question !== slug) return `That submission is for a different question (${record.question}).`;
+  // A record keeps the kind it was answered as (records v4, D2): one from
+  // before the question changed kind can't be put in this page's answer area.
+  if ((record.kind ?? 'code') !== /** @type {PublicProblem} */ (problem).kind) return 'That submission was for this question as a different kind of question, so it can\'t be loaded here.';
   if (![...languageSelect.options].some((o) => o.value === record.language)) {
     const label = LANGUAGE_LABELS[record.language] || record.language;
     return `${label} is turned off in the language menu. Turn it on to load this submission.`;
@@ -1971,16 +2151,29 @@ function whyNotLoadable(record) {
   return null;
 }
 
+/**
+ * A saved submission's answer, as the answer area holds it: a code
+ * record's code, or a fill-in-the-blank record's blank.
+ *
+ * @param {SubmissionRecord} record - The submission.
+ * @returns {string} The text.
+ */
+function recordText(record) {
+  return record.answer?.blank ?? record.code ?? '';
+}
+
 // Switches to the submission's language (without making it the default),
-// puts its code in the editor, and records it in the page address.
+// puts its answer in the editor or the box, and records it in the page
+// address.
 /**
  * @param {SubmissionRecord} record - The submission.
  * @returns {Promise<void>}
  */
 async function applySubmission(record) {
   await switchLanguage(record.language, { chosenByUser: false });
-  // The editor exists once a language has been shown, which switchLanguage just did.
-  /** @type {CodeMirror.Editor} */ (editor).setValue(normalizeIndentation(record.code));
+  // The editor or box exists once a language has been shown, which
+  // switchLanguage just did.
+  setAnswerText(recordText(record));
   setSubmissionInAddress(record.id);
   if (submissionsNotice) {
     submissionsNotice = null;
@@ -2010,9 +2203,10 @@ async function loadSubmissionIntoEditor(id) {
   }
   const label = LANGUAGE_LABELS[record.language] || record.language;
   // The Submissions tab only exists once the question and a language are shown.
-  const starter = /** @type {PublicProblem} */ (problem).starterCode[record.language] ?? '';
-  const current = record.language === currentLanguage ? /** @type {CodeMirror.Editor} */ (editor).getValue() : codeByLanguage[record.language] ?? starter;
-  if (current !== starter && current !== record.code && !confirm(`Replace your current ${label} code with this submission's code?`)) {
+  const starter = startingText(record.language);
+  const current = record.language === currentLanguage ? answerText() : codeByLanguage[record.language] ?? starter;
+  const what = isFillInTheBlank() ? 'answer' : 'code';
+  if (current !== starter && current !== recordText(record) && !confirm(`Replace your current ${label} ${what} with this submission's ${what}?`)) {
     return;
   }
   await applySubmission(record);
@@ -2047,11 +2241,35 @@ async function openSubmissionFromAddress() {
 }
 
 /**
+ * Readies the page for a fill-in-the-blank question (#160; owner,
+ * 2026-11-09), once, before its first language is shown: Run is called
+ * Check; Test is hidden (the server refuses it for this kind: there are no
+ * hidden cases to show); the stdout and stderr tabs are hidden, since
+ * nothing runs; and so are the Applying tab's Examples and Constraints,
+ * which this kind doesn't have.
+ *
+ * @returns {void}
+ */
+function setUpFillInTheBlank() {
+  runBtn.textContent = 'Check';
+  runBtn.title = 'Check your answer (nothing is recorded)';
+  submitBtn.title = FILL_IN_THE_BLANK_SUBMIT_TITLE;
+  testBtn.hidden = true;
+  for (const tab of document.querySelectorAll('.console-tabs [data-tab="stdout"], .console-tabs [data-tab="stderr"]')) {
+    /** @type {HTMLElement} */ (tab).hidden = true;
+  }
+  for (const el of descriptionTabPanels.applying.querySelectorAll('h3')) /** @type {HTMLElement} */ (el).hidden = true;
+  examplesEl.hidden = true;
+  constraintsEl.hidden = true;
+  clearConsoleOutput();
+}
+
+/**
  * Says that this page can't show the question, in place of its tabs and
  * the editor, and turns off the language list and the buttons: for a kind
- * of question it has no page for (#160, Q4: "a page that meets a kind it
- * doesn't know says so, rather than showing a broken editor"). That's
- * every kind but "code" until the fill-in-the-blank page is built. The
+ * of question it has no page for, any but "code" and "fill-in-the-blank"
+ * (#160, Q4: "a page that meets a kind it
+ * doesn't know says so, rather than showing a broken editor"). The
  * header (title, difficulty, bubbles) is still shown. No timer starts and
  * nothing is recorded, since no language is ever shown.
  *
@@ -2099,12 +2317,14 @@ async function init() {
   await profilePromise;
 
   renderHeader(await labelsPromise);
-  // Only a code question has an editor so far (#160, Q4).
+  // A code question has the editor; a fill-in-the-blank one, its template
+  // and a box (#160); any other kind, a message (Q4).
   const { kind } = /** @type {PublicProblem} */ (problem);
-  if (kind !== 'code') {
+  if (kind !== 'code' && kind !== 'fill-in-the-blank') {
     showUnsupportedKind(kind);
     return;
   }
+  if (kind === 'fill-in-the-blank') setUpFillInTheBlank();
   // Opening the question in its initial language applies the same
   // per-language rules as switching to one (showLanguage).
   // ?language= first, if it can be used (step 7, detail 7).
