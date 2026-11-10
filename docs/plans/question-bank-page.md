@@ -43,7 +43,9 @@ Issue #133 (owner, 2026-11-07):
 Routed to users by the architect (`docs/session-handoff/architect/
 20261107T182846-0800.md`): the page, its route in `routes.js`, reading the
 queue and backlog; propose the design first. Serving a new page is
-infrastructure and security's (`STATIC_FILES` in `server.js`, contract 9).
+a change to `STATIC_FILES` in `server.js` (contract 9): core's own file
+since 2026-11-10 and a sensitive path, which the architect reviews; when
+this was written, infrastructure and security's.
 
 ## What exists already (read from the code at `8389109`)
 
@@ -97,8 +99,9 @@ Each has options, trade-offs and a recommendation.
 - **(a) A new page**, e.g. `bank.html` with its own `bank.js`. What the
   issue says ("a page"); keeps the learner's list simple; a natural place
   for owner tools later (a teacher's view, adding to the backlog). Costs:
-  two new files that infrastructure and security must add to
-  `STATIC_FILES` (contract 9), a cross-role request; and the list's
+  two new files to add to
+  `STATIC_FILES` (contract 9), a cross-role request when this was
+  written (to infrastructure and security; inside core since 2026-11-10); and the list's
   row-building code (`questionCells`, `addRow`, `difficultyClass` in
   `problems-list.js`, which runs itself when loaded) either copied or
   moved into a script both pages load (a third new file).
@@ -210,7 +213,8 @@ issue.
   owner's turned-off language still shows its pair.
 - **Docs**: `readme.html` (API, Front end, Decisions), this plan's status.
 - **Other roles**: none, with Q1 (b) and Q2 (b). With Q1 (a),
-  infrastructure and security adds the new files to `STATIC_FILES`
+  the new files are added to `STATIC_FILES` (then infrastructure and
+  security's; core's since 2026-11-10)
   (contract 9), and `docs/contracts.md` doesn't otherwise change.
 - **This file** is new: a request to the architect to add it to users'
   list in `docs/roles/users.md`, beside the other plans.

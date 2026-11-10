@@ -188,7 +188,7 @@ A code Submit in version 4 differs from version 3 only in
 - **A new kind adds one `answer` shape**, not a new record version,
   unless it needs fields of its own.
 - **Deploying it changes what's stored on disk**, so the guarded deploy
-  stops for infrastructure and security first (`docs/deploy-vps.md`,
+  stops for core first (`docs/deploy-vps.md`,
   "Updating: the guarded deploy", step 1).
 - **Going back to an older server after fill-in-the-blank records exist**
   is safe for the data. Tried 2026-11-10 in a cloud session, without the

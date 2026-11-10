@@ -9,6 +9,13 @@ Written 2026-10-29; sign-in added 2026-10-30. This is option A from the
 only to port 3000. Until §13 is done, nothing is exposed to
 the internet.
 
+**Who writes this guide.** Core (`docs/roles/core.md`) since 2026-11-10;
+until then the infrastructure and security role, which that day became
+part of core. Where a step says to ask or tell core, that's who. A dated
+note ("Written 2026-11-09 (infrastructure and security)") and a path
+under `docs/session-handoff/infrastructure-and-security/` keep the old
+name: they say who wrote it then.
+
 It listens on two ports, both on `127.0.0.1`:
 
 - **3001, the trusted port.** The SSH tunnel connects here. Every request is
@@ -187,7 +194,7 @@ git diff --stat <deployed> <commit>
 - **Read every handoff in that range in full** (`docs/session-handoff/`)
   before asking the owner: one may bear on the deploy (owner,
   2026-11-07, in the operator's `20261107T210036-0800.md`).
-- **Stop, and ask infrastructure and security first**, if `--stat`
+- **Stop, and ask core first**, if `--stat`
   shows:
   - **a renamed unit file** under `deploy/` (a rename shows with `=>`):
     it needs a procedure of its own, like §16;
@@ -355,8 +362,7 @@ git rev-parse <commit>
 ```
 - The second runs in root's checkout. **Expect the same id twice.**
 - **If they differ**, commits the owner didn't approve are live (with
-  `DEPLOY_EXPECT`, a bug in the script: report it to infrastructure and
-  security). List them in the service's
+  `DEPLOY_EXPECT`, a bug in the script: report it to core). List them in the service's
   checkout:
   `runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-dsa.net log --oneline <commit>..HEAD`.
   Tell the owner, who either says yes to them now or has them taken
@@ -395,7 +401,7 @@ tr '\0' '\n' < /proc/$(systemctl show -p MainPID --value maxrecallcode.service)/
   Environment` wouldn't do: it lists only the unit's own `Environment=`
   lines, not what else the process got.)
 - **Expect `0`.** Anything else: stop and tell the owner and
-  infrastructure and security.
+  core.
 
 ```bash
 test -e /srv/maxrecall/data/users/TEST-USERS && echo "PRESENT: stop" || echo absent
@@ -2000,8 +2006,7 @@ ls -l /root/.ssh/
 
 ### 10. Record it
 
-The operator's handoff (or the owner's note, for infrastructure and
-security) says what was run and when (UTC), step 4's greeting, step 6's
+The operator's handoff (or the owner's note, for core) says what was run and when (UTC), step 4's greeting, step 6's
 output, step 8's refusal, and whether a real push has worked since. It
 also lists anything GitHub showed differently from the expectations
 above, so this section can be corrected. Then #119 can be closed.
@@ -2107,12 +2112,12 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
     the start of a long path cut to `...` to fit the terminal):
     **stop.** Steps 5 to 7 name one unit, and going back across a rename
     means swapping two. For #123's rename, §16's undo does it; for any
-    other, infrastructure and security writes the steps first.
+    other, core writes the steps first.
   - **A change to what's stored on disk** (anything the readme's "Where
     data lives" describes, such as a `schemaVersion`, or a rename of the
     files under `users/` or `auth/`): **stop.** Files the newer version
     wrote may not be readable by the older one. Going back then needs
-    infrastructure and security first, not this procedure.
+    core first, not this procedure.
     **Ruled on already, and not a stop**: records version 4 (PR 209,
     `fd135e1`), where the older server was tried on the newer one's
     files ("Ruled on: the first deploy of records version 4", under
@@ -2636,7 +2641,7 @@ dpkg --audit; find /etc -name '*.dpkg-dist' -mmin -120; ls /var/run/reboot-requi
 ```
 - **Read-only.** `dpkg --audit` prints nothing if every package is
   fully installed. The `find` lists new config files left beside ours in
-  the last two hours: **record them**, for infrastructure and security to
+  the last two hours: **record them**, for core to
   compare (step 2's flags kept ours). The `ls` should show
   `/var/run/reboot-required`.
 - Anything from `dpkg --audit`: stop and report it before rebooting.
@@ -2744,7 +2749,7 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
 
 In the handoff of whoever ran it: steps 1–6's results, what step 2
 installed (`/var/log/apt/history.log`, the last entry), and the
-`.dpkg-dist` files. Then infrastructure and security updates this
+`.dpkg-dist` files. Then core updates this
 section's "Not yet run", `readme.html` (Environments, the VPS; Known
 gaps, #22) and `docs/plans/limited-live.md` (D4, the kernel).
 
@@ -2761,7 +2766,7 @@ gaps, #22) and `docs/plans/limited-live.md` (D4, the kernel).
   and a hidden menu (`GRUB_TIMEOUT=0`, step 1) may need a key held
   during boot (a guess: Esc or Shift; not checked on this VPS). Boot
   `-147` once from there, then stop and report: making it the default
-  is a change for infrastructure and security to write.
+  is a change for core to write.
 - **A package**: as step 2's undo, one at a time, only if a specific
   package is found to be the problem.
 
@@ -2908,6 +2913,6 @@ In the handoff of whoever ran it: steps 1–4's results. **After the next
 package upgrade** (§17 step 2, or `unattended-upgrades`), check that
 step 4's first command still shows the units `disabled`: Debian's
 packaging is meant to keep an admin's `disable` across upgrades (an
-expectation, not checked on this VPS). Then infrastructure and security
+expectation, not checked on this VPS). Then core
 updates this section's "Not yet run" and `readme.html` (Environments,
 the VPS).
