@@ -205,6 +205,17 @@ questions as fixtures, below).
       `template` (e.g. `"___"`); `make test` checks that it occurs exactly
       once in each (owner, 2026-11-08, #160 step 3). `make test` refuses
       an unknown kind, and another kind's fields.
+      **`initialWidth`** (owner, 2026-11-10; PR 237, being built): how
+      many characters wide the blank's box starts, and the narrowest it
+      gets; a whole number from 1 to the blank's `maxLength`. Every
+      fill-in-the-blank question gives one, with no default: `make test`
+      refuses a file without it (a box's width hints at the answer's
+      length, so each question chooses it). **It may be sent to the
+      browser**: the page needs it to draw the box, and it says nothing
+      the box's width on the page doesn't. Core's page draws the box
+      `max(initialWidth, the text's length)` characters wide, so it
+      relies on the field being there for this kind and within those
+      limits.
     - Every kind declares its languages (a fill-in-the-blank question's are its
       `template`'s keys), so users' `{ question, language }` pairs hold.
     - **A fill-in-the-blank question's judge is a file beside it**,
