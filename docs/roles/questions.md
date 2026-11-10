@@ -19,7 +19,7 @@ template for writing one.
   check)
 - How answers are judged: judge/runner.js, judge/cpp/**, judge/java/**,
   judge/line-numbers-test.js
-- Fill-in-the-blank judging (#160; decided 2026-11-08, being built): each fill-in-the-blank
+- Fill-in-the-blank judging (#160; decided 2026-11-08, built 2026-11-09): each fill-in-the-blank
   question's judge, questions/<slug>.judge.js (under questions/**), and
   the code this role adds to judge/ for it: judge/fill-in-the-blank.js (the
   dispatch by kind, loading a judge, `JudgeFailedError`, the shared
