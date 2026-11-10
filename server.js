@@ -11,7 +11,8 @@ try {
   if (/** @type {NodeJS.ErrnoException} */ (err).code !== 'ENOENT') throw err;
 }
 
-// The feature routes, users' (docs/plans/server-split.md): mounted below,
+// The feature routes (docs/plans/server-split.md; a separate role's, users',
+// until 2026-11-10, and core's since, as this file is): mounted below,
 // after the gate. Required first, so the modules load in the order they did
 // when the routes were in this file.
 const { router, start } = require('./routes');
