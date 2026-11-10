@@ -482,8 +482,12 @@ function answerText() {
  * @returns {void}
  */
 function setAnswerText(text) {
-  if (isFillInTheBlank()) /** @type {HTMLInputElement} */ (blankInput).value = text;
-  else /** @type {CodeMirror.Editor} */ (editor).setValue(normalizeIndentation(text));
+  if (isFillInTheBlank()) {
+    const box = /** @type {HTMLInputElement} */ (blankInput);
+    box.value = text;
+    // Setting value from code fires no input event, so fit it here too.
+    fitBlankToText(box);
+  } else /** @type {CodeMirror.Editor} */ (editor).setValue(normalizeIndentation(text));
 }
 
 /**
@@ -499,11 +503,32 @@ function answerFields(text) {
 }
 
 /**
+ * Makes a fill-in-the-blank box as wide as its text: one character wide
+ * when empty or holding one, then a character wider for each one more, and
+ * narrower again as they're deleted (owner, 2026-11-10). maxLength, which
+ * the box enforces itself, is the most it grows to.
+ *
+ * The width is in ch, the width of the font's "0", which is one character
+ * only because the template's font is monospace. A character that font
+ * lacks (a curly quote from a phone's keyboard, say) is drawn from another
+ * font and may be wider or narrower than its ch; the box then scrolls or
+ * leaves a gap by that difference. .length counts UTF-16 units, as
+ * maxLength does, so a character outside the Basic Multilingual Plane gets
+ * two.
+ *
+ * @param {HTMLInputElement} box - The box.
+ * @returns {void}
+ */
+function fitBlankToText(box) {
+  box.style.width = `${Math.max(1, box.value.length)}ch`;
+}
+
+/**
  * Draws a fill-in-the-blank question's template as fixed code text with an
  * input box at the blank (#160, B3; owner, 2026-11-09), in place of the
  * code editor. Built with text nodes, never HTML. The box takes at most
- * maxLength characters and has room for exactly that many (owner,
- * 2026-11-10); Enter checks the answer.
+ * maxLength characters and is as wide as its text, one character at
+ * least (fitBlankToText; owner, 2026-11-10); Enter checks the answer.
  *
  * @param {string} language - The language whose template to show.
  * @param {string} text - What the box starts with.
@@ -519,10 +544,21 @@ function renderTemplate(language, text) {
   box.type = 'text';
   box.className = 'fill-in-blank';
   box.maxLength = question.maxLength ?? 10;
-  // The room for text: style.css makes this box content-box, so its padding
-  // is added outside this width, not taken from it.
-  box.style.width = `${box.maxLength}ch`;
   box.value = text;
+  // The width is the room for text: style.css makes this box content-box,
+  // so its padding is added outside the width, not taken from it.
+  fitBlankToText(box);
+  box.addEventListener(
+    'input',
+    /**
+     * The box follows its text as it's typed, pasted or deleted.
+     *
+     * @returns {void}
+     */
+    () => {
+      fitBlankToText(box);
+    },
+  );
   box.setAttribute('aria-label', 'Your answer: the missing text');
   // Phones' keyboards otherwise capitalize, correct and suggest. Whether
   // these also stop smart punctuation (' turned into ’) isn't known; the
