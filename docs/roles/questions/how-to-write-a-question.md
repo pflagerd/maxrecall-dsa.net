@@ -214,6 +214,21 @@ Not decided; settle them with the owner and move them up as rules.
   `to-uppercase-lowercase.json` uses both (Python `.join(parts)`, Java
   `StringBuilder`): look at it then.
 
+## 7. Fill-in-the-blank questions
+
+- **Ask the owner how wide each blank starts** (owner, 2026-11-10: "A
+  future question should ask about the initial width(s). There could be
+  multiple blanks."). A box's width is a hint about the answer's length,
+  so it's the owner's choice, question by question, blank by blank. For
+  `single-quote-in-double-quotes` the owner wants one character, so that
+  a single-character answer is implied.
+- **Today the page can't yet do otherwise**: every box starts one
+  character wide (`problem-page.js`, `fitBlankToText`), which the owner
+  calls incorrect as a rule. A per-blank width, and several blanks in one
+  question, are proposed in
+  `docs/plans/fill-in-the-blank-widths-and-several-blanks.md`; until its
+  Part 1 is built, a question whose answer isn't one character waits.
+
 ## Changes to this file
 
 - 2026-11-05: first draft (owner's request), from Double Each
@@ -224,3 +239,5 @@ Not decided; settle them with the owner and move them up as rules.
 - 2026-11-06: the `author-question` skill exists; it links here.
 - 2026-11-08: section 1, the rule for a question's difficulty, with
   Fundamentals below Easy (#93, the owner's decision).
+- 2026-11-10: section 7, fill-in-the-blank questions: ask the owner
+  each blank's starting width (the owner's rule).
