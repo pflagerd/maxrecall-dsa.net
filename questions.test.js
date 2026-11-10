@@ -184,12 +184,15 @@ function validFillInTheBlank() {
     description: { python: '<p>Fill in the blank.</p>' },
     template: { python: 'print("A quote (___) here.")\n' },
     blank: '___',
+    initialWidth: 1,
   };
 }
 
 test('a valid fill-in-the-blank question passes, with or without maxLength', () => {
   assert.deepEqual(checkQuestion(validFillInTheBlank(), 'sample.json'), []);
   assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), maxLength: 100 }, 'sample.json'), [], 'maxLength at the cap');
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), initialWidth: 10 }, 'sample.json'), [], 'initialWidth at the default maxLength');
+  assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), maxLength: 3, initialWidth: 3 }, 'sample.json'), [], 'initialWidth at its own maxLength');
   assert.deepEqual(checkQuestion({ ...validFillInTheBlank(), learning: { python: '<p>Read this.</p>' } }, 'sample.json'), []);
   assert.deepEqual(checkQuestion({ ...valid(), kind: 'code' }, 'sample.json'), [], 'kind "code" may be written out');
 });
@@ -320,6 +323,13 @@ const BROKEN = [
   ['maxLength over the cap (#160, Q15)', withChange(validFillInTheBlank(), 'maxLength', 101), /maxLength must be a whole number from 1 to 100/],
   ['maxLength 0', withChange(validFillInTheBlank(), 'maxLength', 0), /maxLength must be a whole number from 1 to 100/],
   ['maxLength not a whole number', withChange(validFillInTheBlank(), 'maxLength', 2.5), /maxLength must be a whole number/],
+  ['no initialWidth (owner, 2026-11-10: no default)', withChange(validFillInTheBlank(), 'initialWidth', DELETE), /initialWidth is missing: .* from 1 to 10 \(its maxLength\); ask the owner/],
+  ['initialWidth 0', withChange(validFillInTheBlank(), 'initialWidth', 0), /initialWidth must be a whole number from 1 to 10/],
+  ['initialWidth over the default maxLength', withChange(validFillInTheBlank(), 'initialWidth', 11), /initialWidth must be a whole number from 1 to 10 \(its maxLength\)/],
+  ['initialWidth over the question\'s own maxLength', { ...validFillInTheBlank(), maxLength: 3, initialWidth: 4 }, /initialWidth must be a whole number from 1 to 3 \(its maxLength\)/],
+  ['initialWidth not a whole number', withChange(validFillInTheBlank(), 'initialWidth', 1.5), /initialWidth must be a whole number/],
+  ['initialWidth as text', withChange(validFillInTheBlank(), 'initialWidth', '1'), /initialWidth must be a whole number/],
+  ['a code question with initialWidth', withChange(valid(), 'initialWidth', 1), /initialWidth is only for kind "fill-in-the-blank"/],
 ];
 
 for (const [what, question, pattern] of BROKEN) {

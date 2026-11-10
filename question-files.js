@@ -67,6 +67,9 @@ function isQuestionFile(name) {
  *   blank, which appears exactly once in each template, e.g. "___".
  * @property {number} [maxLength] - The most characters a "fill-in-the-blank"
  *   question's blank takes; read through fillInTheBlankMaxLength().
+ * @property {number} [initialWidth] - How many characters wide a
+ *   "fill-in-the-blank" question's box starts, and the narrowest it gets:
+ *   1 to its maxLength. Every such question has one (owner, 2026-11-10).
  */
 
 /**
@@ -190,7 +193,7 @@ const COMMON_FIELDS = Object.freeze(['slug', 'created', 'title', 'difficulty', '
  */
 const KIND_FIELDS = Object.freeze({
   code: Object.freeze(['judgeMode', 'examples', 'constraints', 'starterCode', 'functionName', 'signature', 'testCases']),
-  'fill-in-the-blank': Object.freeze(['template', 'blank', 'maxLength']),
+  'fill-in-the-blank': Object.freeze(['template', 'blank', 'maxLength', 'initialWidth']),
 });
 /** Every field any kind of question may have. @type {readonly string[]} */
 const QUESTION_FIELDS = Object.freeze([...COMMON_FIELDS, ...QUESTION_KINDS.flatMap((kind) => KIND_FIELDS[kind])]);
@@ -415,7 +418,10 @@ function checkQuestion(question, fileName, slugs) {
  * `blank`, the marker, one line of text; each language's template holding
  * it exactly once, so the page knows where the input box goes; and
  * `maxLength`, if given, a whole number from 1 to MAX_LENGTH_CAP (#160,
- * Q15), so no one file can lift the limit users' routes check.
+ * Q15), so no one file can lift the limit users' routes check; and
+ * `initialWidth`, a whole number from 1 to the blank's maxLength, which
+ * every fill-in-the-blank question must give: a box's width hints at the
+ * answer's length, so there's no default (owner, 2026-11-10).
  * checkQuestion has already checked that each template is text.
  *
  * @param {Record<string, any>} q - The question file's contents, a plain
@@ -439,6 +445,15 @@ function checkFillInTheBlank(q, languages) {
   }
   if (q.maxLength !== undefined && !(Number.isInteger(q.maxLength) && q.maxLength >= 1 && q.maxLength <= MAX_LENGTH_CAP)) {
     problems.push(`maxLength must be a whole number from 1 to ${MAX_LENGTH_CAP} (or left out, meaning ${DEFAULT_MAX_LENGTH})`);
+  } else {
+    // Checked against maxLength only when that is itself valid, so one
+    // mistake gives one problem.
+    const most = fillInTheBlankMaxLength(q);
+    if (q.initialWidth === undefined) {
+      problems.push(`initialWidth is missing: how many characters wide the box starts, a whole number from 1 to ${most} (its maxLength); ask the owner (docs/roles/questions/how-to-write-a-question.md, section 7)`);
+    } else if (!(Number.isInteger(q.initialWidth) && q.initialWidth >= 1 && q.initialWidth <= most)) {
+      problems.push(`initialWidth must be a whole number from 1 to ${most} (its maxLength)`);
+    }
   }
   return problems;
 }
