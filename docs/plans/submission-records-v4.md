@@ -190,9 +190,23 @@ A code Submit in version 4 differs from version 3 only in
 - **Deploying it changes what's stored on disk**, so the guarded deploy
   stops for infrastructure and security first (`docs/deploy-vps.md`,
   "Updating: the guarded deploy", step 1).
-- **Going back to an older server after fill-in-the-blank records exist** (a
-  guess, not tried): its Submissions tab would show "null/null" for them,
-  and loading one into the editor would find no `code`. No queue or
-  check is affected, since `status` is a normal verdict. An older server
-  can't show a fill-in-the-blank question at all, since questions' format check
-  refuses unknown kinds.
+- **Going back to an older server after fill-in-the-blank records exist**
+  is safe for the data. Tried 2026-11-10 in a cloud session, without the
+  sandbox or systemd (`docs/deploy-vps.md`, "Ruled on: the first deploy
+  of records version 4", "Going back across this deploy", which has the
+  detail and what the test didn't cover):
+  - The old server starts and works. Its start-up log has one warning
+    for each learner with the new question in a queue or backlog ("no
+    such question"); the pair is kept, shown on no list, and never
+    offered as next.
+  - It reads version 4 records without complaint. `GET /api/submissions`
+    lists a fill-in-the-blank one with `passed`, `total` and `runtimeMs`
+    `null`, but no page asks for it: the question's own page is a 404
+    there.
+  - Its own new records are version 3 again, beside the version 4 ones.
+    Back on the new server both read, and the consistency check found
+    nothing.
+
+  (Until 2026-11-10 this bullet was a guess, not tried: that the old
+  server's Submissions tab would show "null/null" for such a record and
+  that loading one would find no `code`. No page there reaches one.)
