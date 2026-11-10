@@ -8,15 +8,16 @@
 //
 // Server code (docs/roles/questions.md, "Judge files"): it keeps R1 (only
 // its own names, called built-ins, no property writes), and it's quick
-// (Q7): a few comparisons on at most 10 characters.
+// (Q7): a few comparisons on at most 3 characters.
 
 /**
  * Judges one answer: whether the blank holds a single quote, written as it
  * is, with no backslash. The question is in Python only, so the language
  * it's answered in isn't needed.
  *
- * @param {string} blank - What the learner typed in the blank, at most 10
- *   characters (the route checks that first, contract 2).
+ * @param {string} blank - What the learner typed in the blank, at most 3
+ *   characters, the question's maxLength (the route checks that first,
+ *   contract 2).
  * @returns {{ pass: boolean, message?: string }} The verdict, and for a
  *   fail, what went wrong, as text.
  */
