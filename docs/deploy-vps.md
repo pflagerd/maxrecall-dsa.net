@@ -2366,15 +2366,19 @@ kernel reboot** (option B of four: leave, disable, remove ifupdown, edit
 its hook). **Run 2026-11-09**: steps 1 to 3 by the VPS operator,
 23:22 to 23:41 UTC (its handoff
 `docs/session-handoff/vps-operator/20261109T154059-0800.md`); the
-reboot at 23:46:19 UTC. **Step 6's checks are reported in part**, by
-the next operator session, 17 hours later
+reboot at 23:46:19 UTC. **Step 6's checks are reported, all but one**,
+by the next operator session, 17 hours later
 (`20261110T090714-0800.md`): kernel `6.8.0-149-generic`,
 `networking.service` `disabled`, no failed units, no
 `/var/run/reboot-required`; and, from that day's deploy checks, the app
 `active` with `Sandbox: bubblewrap 0.9.0 works`, and `login.html` `200`
-from outside. **Not reported**: `networkctl list` and `lo`'s addresses,
-`ufw status`, nginx's own state (its `200` implies it runs), and who
-watched the console at the reboot. What follows is as written before
+from outside. And in its addendum (`20261110T091916-0800.md`, 2026-11-10
+about 17:18 UTC): `networkctl list` gives `lo` `carrier` `unmanaged`,
+`eth0` `routable` `configured` and `virbr0` `no-carrier` `unmanaged`
+(libvirt's; §18 not run); `lo` has `127.0.0.1/8` and `::1/128`; `ufw`
+is `active`, allowing 22, 80 and 443, IPv4 and IPv6; nginx is `active`.
+**Not reported**: a fresh login from Kubuntu (step 6's first check), and
+who watched the console at the reboot. What follows is as written before
 the run.
 
 **Found in the run** (the operator's notes):
