@@ -2799,7 +2799,34 @@ gaps, #22) and `docs/plans/limited-live.md` (D4, the kernel).
 Written 2026-11-09 (infrastructure and security), for the owner's
 choice that day: **disable libvirt but keep its packages** (option B of
 three: leave, disable, remove). It isn't used now, but may be later.
-**Not yet run.** No reboot needed.
+No reboot needed. **Run 2026-11-10 at 20:20 UTC** by the VPS operator,
+with the owner's yes for steps 2 and 3 (its handoff
+`docs/session-handoff/vps-operator/20261110T122102-0800.md`, which has
+every step's output). What follows is as written before the run.
+
+**Found in the run** (the operator's notes):
+- **It did what it was for**: no `libvirtd`, `dnsmasq`, `virtlogd` or
+  `virtlockd` process; `virbr0` gone; firewall lines naming the bridge
+  or `192.168.122` went from 19 to 0; every libvirt unit file
+  `disabled`. `ufw` and the app (`active`, the same `MainPID`,
+  `NRestarts=0`) exactly as before; system `running`.
+- **Step 3 prints a warning for each of `libvirtd`, `virtlogd` and
+  `virtlockd`**: "Disabling '…service', but its triggering units are
+  still active". Expected: the one command names each service before
+  its sockets, and stops the sockets too. Step 3 doesn't mention it.
+- **`virt-guest-shutdown.target` stays `loaded active`**, where step 4
+  expects every unit inactive. A target runs no process. Expected to be
+  inactive after the next boot: the operator's guess, not checked.
+- **The `LIBVIRT_*` chains stay**, 28 lines, as step 4 guessed: empty
+  chains and the jumps into them, which filter nothing. Expected to go
+  at the next boot: also a guess.
+- **`login.html` was checked from the VPS** (`200`), not from Kubuntu
+  as step 4 asks.
+
+**Still to do**: after the next package upgrade (the first chance is
+`unattended-upgrades` on 2026-11-11 at 06:19 UTC), step 5's check that
+the units are still `disabled`; and after the next reboot, whether the
+target and the `LIBVIRT_*` chains are gone.
 
 **What's there** (the VPS operator's eight read-only checks, 11-09
 ~22:35 UTC, sent to this role; recorded in
