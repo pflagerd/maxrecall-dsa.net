@@ -35,7 +35,8 @@ template for writing one.
   docs/plans/error-line-numbers.md,
   docs/plans/fundamentals-learned-links-concept-checks.md (#145),
   docs/plans/unit-test-questions.md and its prototype,
-  docs/plans/prototypes/unit-test-questions-python/** (#174, PR 210)
+  docs/plans/prototypes/unit-test-questions-python/** (#174, PR 210),
+  docs/plans/fill-in-the-blank-widths-and-several-blanks.md (PR 233)
 
 ## Judge files: server code (owner, 2026-11-08, #160)
 A judge runs in the server process, with the server's access (learners'
