@@ -2,7 +2,7 @@
 
 2026-11-10 (UTC) · decided by the owner · written by core
 
-**Decided** (owner, 2026-11-10 about 20:10 UTC, in core's session):
+**Decided** (owner, 2026-11-10 about 20:02 UTC, in core's session):
 "The box should shrink on deletion as you implemented."
 
 **What it settles.** `problem-page.js`'s `fitBlankToText` (PR 231) makes
