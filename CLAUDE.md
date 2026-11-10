@@ -142,11 +142,13 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   `master` first; if it moved, merge it in and check again before
   pushing. Everything else, including any other file in the same
   session, goes through a pull request the human merges.
-- A pull request's title ends with the role that opens it, in
-  parentheses, named as in the table below: e.g. "Contract 4: three
-  fixture questions (architect)", "… (core)"
-  (owner, 2026-11-07). GitHub's merge commit carries the title, so
-  `git log` shows whose each merged change was.
+- A pull request's title, and an issue's, ends with who opens it, in
+  parentheses: the role, named as in the table below, e.g. "Contract 4:
+  three fixture questions (architect)", "… (core)" (owner, 2026-11-07);
+  or, from a numbered session, that session's name, e.g.
+  "… (questions-1)", not "… (questions)" (owner, 2026-11-10; "Several
+  sessions of one role", below). GitHub's merge commit carries a pull
+  request's title, so `git log` shows whose each merged change was.
 - A cloud session opens its pull request as a draft (its system prompt
   says so, from 2026-11-10) and marks it ready once its checks pass,
   telling the owner: GitHub won't merge a draft. A pull request held
@@ -247,7 +249,8 @@ A role may have more than one session on a day.
   e.g. `maxrecallcode.net:261109:questions-1` and `… questions-2`, for
   every role (a second core session is `core-2`; owner, 2026-11-09).
   In writing, a numbered session is named the same way: "questions-2",
-  not "questions 2". A role with one session keeps the plain title.
+  not "questions 2"; so too at the end of its pull requests' and issues'
+  titles ("Roles", above). A role with one session keeps the plain title.
   (Sessions and handoffs before 2026-11-09 wrote "questions 1",
   "questions 2"; they stay as written.)
 - **Each says what work is its**, in its handoff and, when that work is
