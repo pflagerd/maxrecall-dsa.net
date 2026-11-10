@@ -93,7 +93,7 @@ security (`judge/sandbox-selftest.js`).
     probes inconclusive: G7 and G6d can no longer report ESCAPED, and
     G9 counts no Accepted judgings. (Infrastructure and security found the four
     places the first version of this item missed.)
-  - **Fill-in-the-blank questions** (#160; decided 2026-11-08, being built). What
+  - **Fill-in-the-blank questions** (#160; decided 2026-11-08, built 2026-11-09). What
     users rely on when the question's `kind` is `"fill-in-the-blank"`:
     - **The answer** is the kind's own object, `{ blank }`; a `"code"`
       question's answer stays `code`, unchanged.
@@ -173,7 +173,7 @@ questions as fixtures, below).
     `alreadyLearned` and the languages of `starterCode`, which
     `questionInfos()` passes on.
   - **`kind`, what type of question it is** (#160; decided 2026-11-08,
-    being built): `"code"` (every question so far) or `"fill-in-the-blank"`.
+    built 2026-11-09): `"code"` (every question so far) or `"fill-in-the-blank"`.
     - An absent `kind` means `"code"`, filled in by one function in
       `question-files.js` that every reader calls, so no file needs
       editing and no record's `questionSha256` changes. That function
@@ -283,7 +283,10 @@ questions as fixtures, below).
     `REPO_QUESTIONS_DIR` always names the repository's `questions/`.
     `make test`'s `questions.test.js` and `make rename-question`/
     `delete-question` ignore or refuse the variable, and the live service
-    must never set it (infrastructure and security). Users' tests moving
+    never sees it: its unit unsets it
+    (`UnsetEnvironment=MAXRECALL_QUESTIONS_DIR`,
+    `deploy/maxrecallcode.service:56`), and `docs/deploy-vps.md` checks
+    that after each deploy (infrastructure and security, PR 217). Users' tests moving
     to their own fixtures is users' work, not yet done.
 
 ## 5. A learner's files, for deleting and renaming questions
@@ -323,7 +326,7 @@ Provider: questions (`scripts/question-admin.js`). Used by: users
 
 Provider: infrastructure and security (`paths.js`). Used by: users
 (`routes.js`, for `loadProblem`; `users.js`); questions (loading a
-fill-in-the-blank question's judge file, #160, being built: only by a known
+fill-in-the-blank question's judge file, #160, built 2026-11-09: only by a known
 fill-in-the-blank slug, through `resolveInside`, since a `require` of a chosen path
 runs code; "inside" is inside `QUESTIONS_DIR`, which
 `MAXRECALL_QUESTIONS_DIR` may move to a test folder, PR 198). And the other way: users

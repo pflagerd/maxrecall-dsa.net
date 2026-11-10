@@ -271,7 +271,7 @@ tab, and math is rendered with KaTeX. <span class="src">Source: <code>questions/
   <li><strong>program</strong>: the learner writes a whole program that reads stdin and
   writes stdout. Each test case is a separate process. Output is compared after
   trimming leading/trailing whitespace.</li>
-  <li><strong>fill-in-the-blank</strong> (#160, a question <code>kind</code>, not a mode; built 2026-11-08, not yet used): nothing is run. The learner types a few characters into a blank, and the question's own judge, <code>questions/&lt;slug&gt;.judge.js</code>, reads them in the server and returns <code>{ pass, message?, hints? }</code>, which <code>judge/fill-in-the-blank.js</code> checks and turns into <code>Accepted</code> or <code>Wrong Answer</code>. A judge that fails gives <code>'JUDGE_FAILED'</code>, and nothing is recorded. <span class="src">Source: <code>judge/fill-in-the-blank.js</code>.</span></li>
+  <li><strong>fill-in-the-blank</strong> (#160, a question <code>kind</code>, not a mode; built 2026-11-09; the first question, <code>single-quote-in-double-quotes</code>, since PR 212): nothing is run. The learner types a few characters into a blank, and the question's own judge, <code>questions/&lt;slug&gt;.judge.js</code>, reads them in the server and returns <code>{ pass, message?, hints? }</code>, which <code>judge/fill-in-the-blank.js</code> checks and turns into <code>Accepted</code> or <code>Wrong Answer</code>. A judge that fails gives <code>'JUDGE_FAILED'</code>, and nothing is recorded. <span class="src">Source: <code>judge/fill-in-the-blank.js</code>.</span></li>
 </ul>
 <h3>Languages, toolchains and limits</h3>
 <table>
