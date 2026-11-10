@@ -422,6 +422,9 @@ descriptionPaneEl.addEventListener(
  *   each template (once in each), e.g. "___".
  * @property {number} [maxLength] - Fill-in-the-blank: the most characters
  *   the blank takes, in UTF-16 units (the server fills in the default).
+ * @property {number} [initialWidth] - Fill-in-the-blank: how many
+ *   characters wide the box starts, and the narrowest it gets; 1 to
+ *   maxLength (the format requires it of every such question).
  */
 
 /** The question shown; null until it has loaded. @type {PublicProblem | null} */
@@ -503,10 +506,18 @@ function answerFields(text) {
 }
 
 /**
- * Makes a fill-in-the-blank box as wide as its text: one character wide
- * when empty or holding one, then a character wider for each one more, and
- * narrower again as they're deleted (owner, 2026-11-10). maxLength, which
- * the box enforces itself, is the most it grows to.
+ * Makes a fill-in-the-blank box as wide as its text, and never narrower
+ * than the question's initialWidth (owner, 2026-11-10: each question says
+ * how wide its box starts, since the width hints at the answer's length).
+ * So it starts initialWidth characters wide, grows a character for each
+ * one typed beyond that, and shrinks back as they're deleted, to
+ * initialWidth and no further. maxLength, which the box enforces itself,
+ * is the most it grows to.
+ *
+ * The question's initialWidth is read from `problem`. The format requires
+ * it, so the 1 used when it's missing or isn't a whole number of 1 or more
+ * is only for a server older than the field, or a question file the format
+ * check would refuse.
  *
  * The width is in ch, the width of the font's "0", which is one character
  * only because the template's font is monospace. A character that font
@@ -520,15 +531,18 @@ function answerFields(text) {
  * @returns {void}
  */
 function fitBlankToText(box) {
-  box.style.width = `${Math.max(1, box.value.length)}ch`;
+  const given = problem?.initialWidth;
+  const narrowest = typeof given === 'number' && Number.isInteger(given) && given >= 1 ? given : 1;
+  box.style.width = `${Math.max(narrowest, box.value.length)}ch`;
 }
 
 /**
  * Draws a fill-in-the-blank question's template as fixed code text with an
  * input box at the blank (#160, B3; owner, 2026-11-09), in place of the
  * code editor. Built with text nodes, never HTML. The box takes at most
- * maxLength characters and is as wide as its text, one character at
- * least (fitBlankToText; owner, 2026-11-10); Enter checks the answer.
+ * maxLength characters and is as wide as its text, the question's
+ * initialWidth at least (fitBlankToText; owner, 2026-11-10); Enter checks
+ * the answer.
  *
  * @param {string} language - The language whose template to show.
  * @param {string} text - What the box starts with.
