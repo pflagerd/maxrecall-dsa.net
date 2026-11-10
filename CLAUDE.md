@@ -186,13 +186,10 @@ that, **one session polls and tells the others**:
   do, and acts only as its own rules allow. Its answer is in its
   transcript, which the architect reads (`list_events`); it may have no
   `send_message` to answer with (the users session hadn't, 2026-11-08).
-- **Not the VPS operator**: no news messages to it. It acts only on a
-  request, from the owner or a role, and reads what's new when it
-  starts or when a request names it; a wake for news would cost a
-  re-read and change nothing it does. A request (below) may go to it.
-  (Until 2026-11-10 the reason was that each check there needed a
-  `git fetch`, which needed the owner's yes; a fetch no longer does,
-  `docs/roles/vps-operator.md`.)
+- **The VPS operator too** (owner, 2026-11-10): news goes to its
+  session as to any other role's. (Until that day none did: each check
+  there needed a `git fetch`, which needed the owner's yes; a fetch no
+  longer does, `docs/roles/vps-operator.md`.)
 - **Why one poller**: each wake re-reads the session's whole
   conversation. Measured 2026-11-08: about $0.16 per wake (list price)
   for a session of about 340,000 tokens, so every session polling would
