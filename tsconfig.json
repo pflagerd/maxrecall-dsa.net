@@ -53,7 +53,8 @@
     "scripts/learner-create.js",
     "playtest.js",
     "playtest.test.js",
-    "timer.test.js"
+    "timer.test.js",
+    "docs/plans/prototypes/unit-test-questions-python/run.js"
   ],
   "include": [
     "questions/*.judge.js"
