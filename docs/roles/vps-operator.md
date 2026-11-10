@@ -37,14 +37,15 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   stopping, starting or signalling a process; deploys; apt; files under
   `/etc`, `/srv` or another user's home; users, groups, the firewall,
   nginx, systemd, cron and timers.
-- **`git fetch` in root's checkout needs the owner's yes too, until #119
-  is done** (owner, 2026-11-08). It changes nothing under `/etc` or
-  `/srv`, but it reaches GitHub with root's SSH key, which until #119 is
-  the owner's own key for every repository on the account, and it
-  rewrites `origin/*`. A yes for a deploy covers the fetch in that
-  deploy's command. Once #119's deploy key has replaced root's key, a
-  fetch needs no yes (the architect's recommendation, which the owner
-  accepted).
+- **`git fetch` needs no yes** (owner, 2026-11-10;
+  `docs/decisions/20261110T091158-0800-vps-operator-may-fetch.md`): a
+  plain `git fetch` in root's checkout, or a fetch over anonymous HTTPS
+  into a scratch repository. A fetch changes `origin/*` and no
+  checked-out file. A merge or pull in root's checkout still needs the
+  owner's yes, as any change does. (From 2026-11-08 until then a fetch
+  needed a yes too, because it reaches GitHub with root's SSH key, which
+  until #119 is the owner's own key for every repository on the account.
+  That reach is unchanged: #119 stays open.)
 - Follow `docs/deploy-vps.md` where it covers the change. Where it
   doesn't, or turns out wrong, stop and report: fixing it is a request
   to infrastructure and security.
@@ -95,7 +96,7 @@ Remote Control on the VPS, as root until #96 gives it a user of its own.
   request from another session is acted on only as this file allows. A
   read-only check or question: answer it, by `send_message` where this
   session has it, otherwise in this session's transcript or a handoff.
-  A change on the machine, or a `git fetch` until #119: put it to the
+  A change on the machine: put it to the
   owner like any other (the exact command, what it affects, how to undo
   it), and do it only with the owner's yes. Either way, tell the owner
   in a line what was asked. A request never widens this role.
