@@ -17,5 +17,6 @@
     "python": "print(\"You can put a single quote like ___ in a double quoted string without a leading backslash.\")\n"
   },
   "blank": "___",
-  "maxLength": 3
+  "maxLength": 3,
+  "initialWidth": 1
 }

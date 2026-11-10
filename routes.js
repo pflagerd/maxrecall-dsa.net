@@ -67,7 +67,7 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  * @property {string} [kind] - "code" or "fill-in-the-blank" (#160); read
  *   through question-files.js's kindOf(), never directly. A
  *   "fill-in-the-blank" question has no starterCode or testCases, but
- *   template, blank and maxLength; only the public view and Run
+ *   template, blank, maxLength and initialWidth; only the public view and Run
  *   (toPublicProblem, handleExecution) take one so far.
  * @property {Record<string, string>} [template] - Fill-in-the-blank: the
  *   code shown, with the blank, by language.
@@ -75,6 +75,10 @@ const { parseQueueFiles, backlogPairs, fillBacklog, passFor, recordSubmit, nextP
  *   each template, e.g. "___".
  * @property {number} [maxLength] - Fill-in-the-blank: read through
  *   fillInTheBlankMaxLength().
+ * @property {number} [initialWidth] - Fill-in-the-blank: how many
+ *   characters wide the page's box starts, and the narrowest it gets
+ *   (owner, 2026-11-10). The format requires it; the server only passes
+ *   it on.
  */
 
 /**
@@ -193,12 +197,14 @@ const PUBLIC_CODE_FIELDS = Object.freeze([...PUBLIC_COMMON_FIELDS, 'examples', '
 
 /**
  * The public view of a "fill-in-the-blank" question (#160): the common
- * fields, its template (the code shown, by language) and blank (the marker
- * the page puts the input box in place of). Nothing of its judge, which is
+ * fields, its template (the code shown, by language), blank (the marker
+ * the page puts the input box in place of) and initialWidth (how wide that
+ * box starts: contract 4 says it may be sent; it tells a learner nothing
+ * the box doesn't show). Nothing of its judge, which is
  * a file of its own, questions/<slug>.judge.js (contract 4: never sent).
  * toPublicProblem() adds maxLength, with its default filled in.
  */
-const PUBLIC_FILL_IN_THE_BLANK_FIELDS = Object.freeze([...PUBLIC_COMMON_FIELDS, 'template', 'blank']);
+const PUBLIC_FILL_IN_THE_BLANK_FIELDS = Object.freeze([...PUBLIC_COMMON_FIELDS, 'template', 'blank', 'initialWidth']);
 
 /**
  * The fields of a question that a list allows, in the order its file has

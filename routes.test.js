@@ -605,12 +605,13 @@ test('questions: the public view sends only allowed fields, in the file\'s order
 const FILL_IN_THE_BLANK = Object.freeze({
   slug: 'f', title: 'F', difficulty: 'Fundamentals', topics: [], sources: [], created: '2026-11-09T00:00:00Z',
   kind: 'fill-in-the-blank', description: { python: '<p>Fill it in.</p>' },
-  template: { python: 'print("It___s")' }, blank: '___', secret: 'not for the browser',
+  template: { python: 'print("It___s")' }, blank: '___', initialWidth: 1, secret: 'not for the browser',
 });
 
-test('questions: a fill-in-the-blank question\'s public view: its template and blank, maxLength with its default (#160)', () => {
+test('questions: a fill-in-the-blank question\'s public view: its template, blank and initialWidth, maxLength with its default (#160)', () => {
   const sent = toPublicProblem(/** @type {import('./routes').Problem} */ (/** @type {unknown} */ (FILL_IN_THE_BLANK)));
-  assert.deepEqual(Object.keys(sent), ['slug', 'title', 'difficulty', 'topics', 'sources', 'description', 'template', 'blank', 'kind', 'maxLength']);
+  assert.deepEqual(Object.keys(sent), ['slug', 'title', 'difficulty', 'topics', 'sources', 'description', 'template', 'blank', 'initialWidth', 'kind', 'maxLength']);
+  assert.equal(sent.initialWidth, 1, 'as the file gives it');
   assert.equal(sent.kind, 'fill-in-the-blank');
   assert.equal(sent.maxLength, 10, 'the default, from fillInTheBlankMaxLength');
   const given = toPublicProblem(/** @type {import('./routes').Problem} */ (/** @type {unknown} */ ({ ...FILL_IN_THE_BLANK, maxLength: 3 })));
@@ -976,7 +977,7 @@ describe(
     /** A fill-in-the-blank question, as the format allows (checked below). */
     const QUOTE = {
       slug: 'zz-quote', created: '2026-11-09T00:00:00Z', title: 'ZZ quote', difficulty: 'Fundamentals', topics: ['strings'], sources: ['test'],
-      kind: 'fill-in-the-blank', description: { python: '<p>Fill in the blank.</p>' }, template: { python: 'print("It___s")' }, blank: '___', maxLength: 3,
+      kind: 'fill-in-the-blank', description: { python: '<p>Fill in the blank.</p>' }, template: { python: 'print("It___s")' }, blank: '___', maxLength: 3, initialWidth: 2,
     };
     // Judges as questions' R1 asks (docs/roles/questions.md): strict, own
     // names only, synchronous.
@@ -1040,13 +1041,14 @@ describe(
       assert.deepEqual(listed, ['zz-broken', 'zz-quiz', 'zz-quote']);
     });
 
-    test('the public view: kind, template, blank and maxLength; nothing of the judge', async () => {
+    test('the public view: kind, template, blank, maxLength and initialWidth; nothing of the judge', async () => {
       const one = await toBank('GET', '/api/questions/zz-quote');
       assert.equal(one.status, 200);
       assert.equal(one.json.kind, 'fill-in-the-blank');
       assert.deepEqual(one.json.template, QUOTE.template);
       assert.equal(one.json.blank, '___');
       assert.equal(one.json.maxLength, 3);
+      assert.equal(one.json.initialWidth, 2, 'the page starts the box this wide');
       assert.doesNotMatch(one.body.toString(), /judge|single quote/i, 'nothing of the judge file');
       const quiz = await toBank('GET', '/api/questions/zz-quiz');
       assert.deepEqual(Object.keys(quiz.json).sort(), ['description', 'difficulty', 'kind', 'slug', 'sources', 'title', 'topics']);
