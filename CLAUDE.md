@@ -146,6 +146,11 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   fixture questions (architect)", "… (infrastructure and security)"
   (owner, 2026-11-07). GitHub's merge commit carries the title, so
   `git log` shows whose each merged change was.
+- A cloud session opens its pull request as a draft (its system prompt
+  says so, from 2026-11-10) and marks it ready once its checks pass,
+  telling the owner: GitHub won't merge a draft. A pull request held
+  back on purpose stays a draft, and its description says why (owner,
+  2026-11-10).
 
 | Role      | Role file                 |
 |-----------|---------------------------|
@@ -181,10 +186,13 @@ that, **one session polls and tells the others**:
   do, and acts only as its own rules allow. Its answer is in its
   transcript, which the architect reads (`list_events`); it may have no
   `send_message` to answer with (the users session hadn't, 2026-11-08).
-- **Not the VPS operator, until #119 is done**: no news messages to it,
-  since each check there would need a `git fetch`, which needs the
-  owner's yes until then (`docs/roles/vps-operator.md`). A request
-  (below) may go to it.
+- **Not the VPS operator**: no news messages to it. It acts only on a
+  request, from the owner or a role, and reads what's new when it
+  starts or when a request names it; a wake for news would cost a
+  re-read and change nothing it does. A request (below) may go to it.
+  (Until 2026-11-10 the reason was that each check there needed a
+  `git fetch`, which needed the owner's yes; a fetch no longer does,
+  `docs/roles/vps-operator.md`.)
 - **Why one poller**: each wake re-reads the session's whole
   conversation. Measured 2026-11-08: about $0.16 per wake (list price)
   for a session of about 340,000 tokens, so every session polling would
@@ -219,9 +227,9 @@ other role's files, a review, an answer, an operation on the VPS.
 - **Answers** go back by `send_message` where the receiver has it;
   otherwise they are in its transcript (`list_events`) or its handoff.
 - **The VPS operator too**: it may receive requests, and acts on them
-  as `docs/roles/vps-operator.md` says. A read-only check it does; a
-  change on the machine, or a `git fetch` until #119, still needs the
-  owner's yes for that change.
+  as `docs/roles/vps-operator.md` says. A read-only check, or a
+  `git fetch`, it does; a change on the machine still needs the owner's
+  yes for that change.
 - **Cost**: each message wakes the receiving session, which re-reads its
   whole conversation (about $0.16 for a 340,000-token session, as
   above), so send one request per need, not a stream of small ones.
