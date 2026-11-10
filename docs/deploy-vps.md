@@ -367,6 +367,57 @@ journalctl -u maxrecallcode.service --since "5 min ago" --no-pager | grep -v 'Qu
   listener on 127.0.0.1:3001 only`. `grep -v 'Queues:'` leaves out the
   lines that name learners.
 
+**Never a test question bank** (owner, 2026-11-10 UTC; #160, #198).
+`MAXRECALL_QUESTIONS_DIR` moves where questions, and their judges (code
+the server runs), are read from. The server refuses it unless the users
+folder holds a `TEST-USERS` file (`users.js`, `testBankRefusal`), and the
+unit file removes it (`UnsetEnvironment=`). These two lines show both
+hold for the live service:
+
+```bash
+tr '\0' '\n' < /proc/$(systemctl show -p MainPID --value maxrecallcode.service)/environ | grep -c '^MAXRECALL_QUESTIONS_DIR='
+```
+- `/proc/<pid>/environ` is the environment the running server was
+  started with, its variables separated by NUL bytes
+  ([proc(5)](https://man7.org/linux/man-pages/man5/proc.5.html), `/proc/pid/environ`);
+  `systemctl show -p MainPID --value` gives the server's PID; `tr '\0'
+  '\n'` puts one variable per line; `grep -c` **counts** the matching
+  lines and prints nothing else of the environment. (`systemctl show -p
+  Environment` wouldn't do: it lists only the unit's own `Environment=`
+  lines, not what else the process got.)
+- **Expect `0`.** Anything else: stop and tell the owner and
+  infrastructure and security.
+
+```bash
+test -e /srv/maxrecall/data/users/TEST-USERS && echo "PRESENT: stop" || echo absent
+```
+- `test -e`: whether the file exists. **Expect `absent`.** That file
+  marks a users folder as test data; the live one must never have it.
+
+**Once, at the first deploy whose unit file has
+`UnsetEnvironment=MAXRECALL_QUESTIONS_DIR`** (a throwaway unit, so a
+change: the owner's yes), test that systemd removes the variable even
+when the unit sets it:
+
+```bash
+systemd-run --wait --pipe --quiet -p Environment=MAXRECALL_QUESTIONS_DIR=/tmp/test-bank /usr/bin/printenv MAXRECALL_QUESTIONS_DIR; echo "exit $?"
+```
+```bash
+systemd-run --wait --pipe --quiet -p Environment=MAXRECALL_QUESTIONS_DIR=/tmp/test-bank -p UnsetEnvironment=MAXRECALL_QUESTIONS_DIR /usr/bin/printenv MAXRECALL_QUESTIONS_DIR; echo "exit $?"
+```
+- `systemd-run` starts a temporary unit with the properties `-p`
+  gives; `--wait --pipe` waits for it and connects its output here
+  ([systemd-run(1)](https://www.freedesktop.org/software/systemd/man/latest/systemd-run.html)).
+  `printenv NAME` prints the variable and exits 0, or prints nothing and
+  exits 1 if it isn't set.
+- **Expect** the first to print `/tmp/test-bank` and `exit 0` (the
+  control: the variable does arrive without `UnsetEnvironment=`), and
+  the second to print only `exit 1` (removed, though `Environment=` set
+  it). systemd.exec(5), v255: `UnsetEnvironment=` "is applied as final
+  step … it may undo assignments from any configuration source". Not
+  testable in a cloud session, whose systemd isn't running. Record the
+  result; then this paragraph can go.
+
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
 ```

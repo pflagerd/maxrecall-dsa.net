@@ -47,6 +47,13 @@ Environment=NODE_ENV=production
 # limited-live.md, step 1). Until 2026-11-04 an EnvironmentFile here,
 # /etc/maxrecall-dsa/test.env, gave the server MAXRECALL_PASSWORD; that file
 # can be deleted.
+# Never a test question bank (#160, #198): MAXRECALL_QUESTIONS_DIR moves
+# where questions and their judges, code the server runs, are read from.
+# UnsetEnvironment= is applied last, so it removes the variable whatever set
+# it (a drop-in's Environment=, `systemctl set-environment`): systemd.exec(5),
+# v255. users.js's testBankRefusal is the other guard. Checked after each
+# deploy: docs/deploy-vps.md, the guarded deploy, step 5.
+UnsetEnvironment=MAXRECALL_QUESTIONS_DIR
 
 # --- Containment -----------------------------------------------------------
 # An outer layer around the judge's own sandbox (bubblewrap, judge/
