@@ -107,18 +107,19 @@ Teaching them what you're doing comes first. Speed comes second.
 
 The maxrecall-dsa repo is worked on by several Claude sessions, each with one role.
 
-- Your role is stated in the first message of your session ("Role: users").
+- Your role is stated in the first message of your session ("Role: core").
   If no role is stated, or the one stated isn't in the table below, ask
   the owner which it is before making any changes; don't pick the nearest
   one yourself. (On 2026-11-06 "infrastructure-and-security-remote" was
-  taken for infrastructure and security; that session was on the VPS.)
+  taken for infrastructure and security, a role until 2026-11-10; that
+  session was on the VPS.)
 - Before starting work, read your role file, `docs/roles/<role>.md`, the most
   recent `docs/session-handoff/<role>/*.md`, and the most recent
   `docs/session-handoff/architect/*.md` (the architect's "state of the
   project" summary), and `docs/contracts.md` (where your role's files
   depend on another role's, and what each side relies on). `<role>` is
   your role's file name in the table below, without `.md`, e.g.
-  `infrastructure-and-security`.
+  `vps-operator`.
 - Never edit files outside your role's ownership list, except the shared
   files below, or under an exception the owner grants for one change
   (your role file says whether and how your role may ask). If you need
@@ -143,7 +144,7 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
   session, goes through a pull request the human merges.
 - A pull request's title ends with the role that opens it, in
   parentheses, named as in the table below: e.g. "Contract 4: three
-  fixture questions (architect)", "… (infrastructure and security)"
+  fixture questions (architect)", "… (core)"
   (owner, 2026-11-07). GitHub's merge commit carries the title, so
   `git log` shows whose each merged change was.
 - A cloud session opens its pull request as a draft (its system prompt
@@ -155,10 +156,17 @@ The maxrecall-dsa repo is worked on by several Claude sessions, each with one ro
 | Role      | Role file                 |
 |-----------|---------------------------|
 | architect | `docs/roles/architect.md` |
-| infrastructure and security  | `docs/roles/infrastructure-and-security.md`  |
-| users     | `docs/roles/users.md`     |
+| core      | `docs/roles/core.md`      |
 | questions | `docs/roles/questions.md` |
 | VPS operator | `docs/roles/vps-operator.md` |
+
+**Core** (owner, 2026-11-10) is what were two roles until that day,
+users and infrastructure and security: their role files are stubs that
+point to `docs/roles/core.md`, and neither is a role a session can be
+given. The architect reviews every core pull request that touches a
+sensitive path (sign-in, the sandbox, the deploy files, GitHub Actions)
+before the owner merges it; core asks by `send_message`
+(`docs/roles/core.md`, "Sensitive paths").
 
 ### Updates while idle (owner, 2026-11-08)
 
@@ -237,7 +245,7 @@ A role may have more than one session on a day.
 
 - **Titles are numbered**: `maxrecallcode.net:<YYMMDD>:<role>-<n>`,
   e.g. `maxrecallcode.net:261109:questions-1` and `… questions-2`, for
-  every role (a second users session is `users-2`; owner, 2026-11-09).
+  every role (a second core session is `core-2`; owner, 2026-11-09).
   In writing, a numbered session is named the same way: "questions-2",
   not "questions 2". A role with one session keeps the plain title.
   (Sessions and handoffs before 2026-11-09 wrote "questions 1",
