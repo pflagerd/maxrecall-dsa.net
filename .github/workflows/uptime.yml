@@ -4,7 +4,9 @@
 # turns on Actions notifications, then disables and re-enables this
 # workflow once so they're that person).
 #
-# Owner: infrastructure and security (docs/roles/infrastructure-and-security.md).
+# Owner: core (docs/roles/core.md); until 2026-11-10, the infrastructure and
+# security role, which wrote it. A sensitive path: the architect reviews a
+# pull request that changes this file.
 # Design: docs/session-handoff/infrastructure-and-security/20261106T173312-0800.md, 4b.
 # Syntax: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
 
