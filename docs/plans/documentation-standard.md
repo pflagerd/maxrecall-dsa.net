@@ -16,7 +16,10 @@ From the owner's review of pull request #27, and since 2026-11-03 in
   ([JSDoc](https://jsdoc.app/tags-param),
   [TypeScript's JSDoc support](https://www.typescriptlang.org/docs/handbook/jsdoc-supported-types.html)).
 - A documented file is listed in `tsconfig.json`, and `make typecheck`
-  (pull request #28) must pass.
+  (pull request #28) must pass. "Listed" means by name in `"files"`,
+  or, for a fill-in-the-blank question's judge file, by the pattern
+  `"include": ["questions/*.judge.js"]` (#175, 2026-11-08), so a new
+  judge file is covered without an edit.
 
 ## Decisions (owner, 2026-11-03)
 
