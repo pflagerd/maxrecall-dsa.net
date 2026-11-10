@@ -186,7 +186,9 @@ git diff --stat <deployed> <commit>
     it needs a procedure of its own, like §16;
   - **a change to what's stored on disk** (anything the readme's "Where
     data lives" describes, such as a `schemaVersion`, or a rename of the
-    files under `users/` or `auth/`);
+    files under `users/` or `auth/`). **Records version 4 (PR 209,
+    `fd135e1`) is ruled on already**: "Ruled on: the first deploy of
+    records version 4", below. Any other still stops;
   - **a renamed or deleted question** (`questions/<name>.json` with
     `=>`, or with only `-` signs): learners' files then need §8's step,
     with the server stopped, and `make deploy-server` doesn't do it. A
@@ -429,6 +431,93 @@ curl -s -o /dev/null -w '%{http_code}\n' https://maxrecallcode.net/login.html
 **6. Record it** in the operator's handoff: `<deployed>` and `<commit>`,
 what step 1's `--stat` listed, each change with its time (UTC), and
 step 5's results. **To undo**: §15.
+
+### Ruled on: the first deploy of records version 4 (Issue 160) [VPS]
+
+Written 2026-11-10 (infrastructure and security; Issue 160, B8 step
+2(b)). **For one deploy only**: the first whose range, `<deployed>..<commit>`,
+takes in PR 209 (`fd135e1`, users' records version 4). From `b9a5bef`,
+what the VPS ran when this was written, that's the next one. Step 1's
+survey stops there, as it should: `routes.js` now writes
+`schemaVersion: 4`. This is the ruling that stop asks for. Once that
+deploy is recorded, this section is history.
+
+**The ruling: deploy as usual. No extra step, nothing to run with the
+server stopped, nothing to convert.** Why:
+
+- **Nothing already stored is rewritten.** Version 1 to 3 records stay
+  as they are (`docs/plans/submission-records-v4.md`); the new server
+  reads them, and lists each as `kind: "code"`.
+- **Only new records differ.** Every Submit or Skip saved after the
+  deploy is version 4: a code question's is version 3 plus
+  `"schemaVersion": 4` and `"kind": "code"`; a fill-in-the-blank
+  question's has `answer`, `judgeSha256` and no `code` (`readme.html`,
+  "Where data lives").
+- **`profile.json`, `order.json`, `backlog.json` and `auth/` keep their
+  formats.** `order.js`, `profile.js` and `auth.js` aren't in step 1's
+  `--stat`; `users.js` is, but its code changes only by an added
+  function, `testBankRefusal` (`git diff b9a5bef a68dc7a -- users.js`).
+- **One write at start, as with any new question**: the server adds
+  `single-quote-in-double-quotes` (Python) to the backlog of each
+  learner whose profile has `"backlog": "all"` (the start-up line
+  `Queues: <email>: … (1 added)`). A learner with a chosen backlog gets
+  it only through `make backlog-add` (§10, §11), users' procedure.
+
+**The survey's other checks still apply** to this deploy, all of them:
+the handoffs in the range, the commits without a pull request, the list
+of judge-code pull requests (this range is where judge code first goes
+live), and `make test` at `<commit>`. So do step 5's, with its one-off
+`systemd-run` test, since this deploy also brings the unit file with
+`UnsetEnvironment=`.
+
+**After the deploy, one more check [read-only]**, only once someone has
+submitted or skipped since (the owner trying the new question will do):
+
+```bash
+grep -l -r --include='*.json' '"schemaVersion": 4' /srv/maxrecall/data/users/*/submissions | wc -l
+```
+- `grep -l`: print only the names of files that match, not their
+  contents; `-r`: every file under the folders named; `--include='*.json'`:
+  only files with that ending
+  ([grep(1)](https://man7.org/linux/man-pages/man1/grep.1.html)).
+  `wc -l` counts the names, so no learner's email or answer is printed.
+- **Expect `0` before the deploy**, and the number of Submits and Skips
+  made since after it. Record both.
+
+**Going back across this deploy** (§15). §15 B's step 2 stops at a
+`schemaVersion` in the diff; for this one, **going back is safe for the
+data, and §15 applies as written.** Tried 2026-11-10 in a cloud session:
+the new server (`a68dc7a`) wrote version 4 records for a code question
+and for the fill-in-the-blank one (a wrong answer, a right one, a Skip)
+into a throwaway users folder; then the old server (`b9a5bef`) was
+started on that folder; then the new one again.
+
+- **The old server starts and works.** Its start-up log gains one
+  warning per learner who has the new question in a queue or backlog:
+  `warning order.json queue[3]: single-quote-in-double-quotes: no such
+  question (deleted, or not on this branch?); kept, and skipped when
+  choosing what's next`. Expect it; it isn't an error.
+- **The pair is kept, not lost**: the old server leaves it in the file,
+  shows it on no list, and never offers it as next. Seven Submits on the
+  old server moved other pairs around it and left it alone.
+- **Version 4 records are read without complaint.** A code question's
+  shows as before. A fill-in-the-blank one is listed by `GET
+  /api/submissions` with `passed`, `total` and `runtimeMs` `null`, but no
+  page asks for it: the question's own page is a 404 on the old server.
+- **The old server's new records are version 3 again**, beside the
+  version 4 ones. Back on the new server, both read, and the
+  consistency check found nothing.
+- **Reverting only PR 212** (the question and its judge; §15 A) leaves
+  the new code without the question: the same warning, the pair kept,
+  the fill-in-the-blank records still listed. Tried the same way, with
+  the two files removed from a checkout of `a68dc7a`.
+- **§15 B's step 5 is needed**: the range changes
+  `deploy/maxrecallcode.service`.
+- **What the test didn't cover**: it ran without the sandbox
+  (`MAXRECALL_UNSANDBOXED=1`; the cloud session had no bubblewrap that
+  day), with one learner, a backlog of `"all"`, and no systemd. None of
+  those is on the path that reads or writes a record, as far as I can
+  tell: a reading of `routes.js` and `users.js`, not a test.
 
 The sections below are what it does, step by step, with each command
 explained.
@@ -2023,6 +2112,10 @@ runuser -u maxrecall -- env HOME=/srv/maxrecall git -C /srv/maxrecall/maxrecall-
     files under `users/` or `auth/`): **stop.** Files the newer version
     wrote may not be readable by the older one. Going back then needs
     infrastructure and security first, not this procedure.
+    **Ruled on already, and not a stop**: records version 4 (PR 209,
+    `fd135e1`), where the older server was tried on the newer one's
+    files ("Ruled on: the first deploy of records version 4", under
+    "Updating: the guarded deploy").
 
 **3. Move the checkout back [change].**
 
