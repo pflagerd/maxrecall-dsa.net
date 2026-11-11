@@ -1,0 +1,22 @@
+{
+  "slug": "double-quote-in-single-quotes",
+  "created": "2026-11-10T21:07:24Z",
+  "title": "A Double Quote Inside Single Quotes",
+  "difficulty": "Fundamentals",
+  "topics": ["String"],
+  "sources": [],
+  "alreadyLearned": ["single-quotes-make-a-string", "single-quote-in-double-quotes"],
+  "kind": "fill-in-the-blank",
+  "learning": {
+    "python": "<p>You've put a single quote inside a double-quoted string, and written a string between single quotes (see <em>Learned earlier</em> at the bottom of this page). The two fit together: a double quote, <code>\"</code>, can go inside a single-quoted string just as it is:</p><div class=\"example\"><pre>print('She said \"hi\".')   # prints: She said \"hi\".</pre></div><p>A single-quoted string ends at its closing <code>'</code>, so a <code>\"</code> inside it is just another character.</p><p>You may also see <code>\\\"</code>, a backslash before the quote. Inside single quotes it prints the same <code>\"</code>, but it isn't needed there.</p><h3>Learned earlier</h3><p>This question builds on:</p><ul><li><a href=\"/problem.html?slug=single-quotes-make-a-string\" target=\"_blank\" rel=\"noopener\">Single Quotes Make a String Too</a>: writing a string between single quotes.</li><li><a href=\"/problem.html?slug=single-quote-in-double-quotes\" target=\"_blank\" rel=\"noopener\">A Single Quote Inside Double Quotes</a>: one kind of quote inside a string written with the other kind.</li></ul>"
+  },
+  "description": {
+    "python": "<p>Fill in the blank so the program prints a double quote where the blank is.</p><p>New to this? The <button type=\"button\" class=\"tab-ref-link\" data-tab=\"learning\">Learning</button> tab covers how.</p>"
+  },
+  "template": {
+    "python": "print('You can put a double quote like ___ in a single quoted string without a leading backslash.')\n"
+  },
+  "blank": "___",
+  "maxLength": 2,
+  "initialWidth": 1
+}
